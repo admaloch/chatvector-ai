@@ -1,16 +1,31 @@
 from fastapi import FastAPI, UploadFile, File
 from pypdf import PdfReader
-from langchain_text_splitters import RecursiveCharacterTextSplitter  # <-- Changed import
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 import supabase
 import os
 import io
+import requests  # <-- ADD THIS
+import json      # <-- ADD THIS
 
 app = FastAPI()
 
-# Test route to verify server is working
 @app.get("/")
 def read_root():
     return {"message": "DocTalk AI Backend is Liverrr!"}
+
+# Ollama configuration - ADD THIS
+OLLAMA_URL = "http://localhost:11434"
+
+# Embedding function - ADD THIS
+def get_embedding(text: str) -> list:
+    """Get embedding vector from Ollama"""
+    payload = {
+        "model": "nomic-embed-text", 
+        "prompt": text
+    }
+    response = requests.post(f"{OLLAMA_URL}/api/embeddings", json=payload)
+    response.raise_for_status()
+    return response.json()["embedding"]
 
 # The core PDF processing pipeline
 @app.post("/upload")
@@ -36,13 +51,19 @@ async def upload_pdf(file: UploadFile = File(...)):
     chunks = text_splitter.split_text(pdf_text)
     
     print(f"✂️ Split into {len(chunks)} chunks")
-    print(f"First chunk: {chunks[0][:100]}...")
+    
+    # 4. Generate embeddings for first 2 chunks (for testing) - ADD THIS SECTION
+    print("🧠 Generating embeddings...")
+    for i, chunk in enumerate(chunks[:2]):  # Test with just 2 chunks first
+        embedding = get_embedding(chunk)
+        print(f"   Chunk {i+1}: Generated embedding with {len(embedding)} dimensions")
+        print(f"   First 5 values: {embedding[:5]}...")
     
     return {
         "filename": file.filename,
         "text_length": len(pdf_text),
         "chunk_count": len(chunks),
-        "first_chunk_preview": chunks[0][:100] + "..."
+        "embedding_test": f"Generated embeddings for first 2 chunks - each has {len(embedding)} dimensions"  # UPDATE THIS
     }
 
 if __name__ == "__main__":
