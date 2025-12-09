@@ -8,6 +8,8 @@ from supabase import create_client, Client  # <-- Make sure this is imported
 import google.generativeai as genai
 import os
 import io
+import time
+import asyncio
 import requests  
 import json     
 
@@ -34,18 +36,29 @@ def test_db():
         return {"error": str(e)}
 
 
-def get_embedding(text: str) -> list:
+async def get_embedding(text: str) -> list:
     """Get embedding vector using Google's embedding model"""
-    try:
-        result = genai.embed_content(
-            model="models/embedding-001",
-            content=text
-            # No task_type needed - works for both documents and queries
-        )
-        return result['embedding']
-    except Exception as e:
-        print(f"Error getting embedding: {e}")
-        return [0.0] * 768
+    for attempt in range(3): # Retry up to 3 times on failure
+        try: 
+            result = genai.embed_content(
+                model="models/embedding-001",  # Example embedding model
+                content=text 
+                # No task_type needed - works for both documents and queries
+            )
+            return result['embedding']
+        except Exception as e:
+            error_msg = str(e)
+            if "429" in error_msg or "quota" in error_msg and attempt < 2:
+                wait_time = (attempt + 1) * 10
+                print(f"Rate limit exceeded, retrying... (attempt {attempt + 1})")
+              
+                await asyncio.sleep(wait_time)  # Exponential backoff
+            else:
+                print(f"Error getting embedding: {e}")
+                return [0.0] * 768 # Return a zero vector on failure
+        
+    print("Failed to get embedding after retries")
+    return [0.0] * 768 # Return a zero vector on failure
 
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
@@ -94,7 +107,12 @@ async def upload_pdf(file: UploadFile = File(...)):
     print(" Generating embeddings and storing chunks...")
     stored_chunks = 0
     for i, chunk in enumerate(chunks):
-        embedding = get_embedding(chunk)
+        if i > 0:
+            await asyncio.sleep(2)  # To avoid rate limits
+        embedding = await get_embedding(chunk)
+        if not any(embedding): # Check for zero vector indicating an error
+            print(f"  Skipping chunk {i+1} due to embedding error")
+            continue
         
         chunk_data = {
             "document_id": document_id,
@@ -103,6 +121,11 @@ async def upload_pdf(file: UploadFile = File(...)):
         }
         supabase.table("document_chunks").insert(chunk_data).execute()
         stored_chunks += 1
+
+        if embedding :
+            print(f" stored chunk {i+1}/{len(chunks)}")
+        else:
+            print(f" failed to store chunk {i+1}/{len(chunks)}")
         
         # print preview of first 2 chunks
         if i < 2:
@@ -125,7 +148,7 @@ async def chat_with_document(question: str, document_id: str):
     print(f"querying document: {document_id}")
     
     # 1. embed the question
-    question_embedding = get_embedding(question)
+    question_embedding = await get_embedding(question)
     print(f"🧠 Question embedded with {len(question_embedding)} dimensions")
     
     # 2. locate similar chunks using vector search
