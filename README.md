@@ -1,4 +1,5 @@
-# ChatVector-AI  
+# ChatVector-AI
+
 ### Open-Source Backend-First RAG Engine for Document Intelligence
 
 ChatVector-AI is an open-source Retrieval-Augmented Generation (RAG) engine for ingesting, indexing, and querying unstructured documents such as PDFs and text files.
@@ -26,8 +27,8 @@ Think of it as an engine developers can use to build document-aware applications
   - [Data Layer](#data-layer)
   - [Reference Frontend (Non-Core)](#reference-frontend-non-core)
 - [Quick Start: Run in 5 Minutes](#-quick-start-run-in-5-minutes)
-  - [Backend Setup](#-backend-setup)
-  - [Frontend Setup](#-frontend-setup)
+  - [Backend Setup](#backend-setup)
+  - [Frontend-demo Setup](#frontend-layer-non-core)
 - [Contributing](#-contributing)
 - [License](#-license)
 
@@ -35,12 +36,12 @@ Think of it as an engine developers can use to build document-aware applications
 
 ## 🔗 Quick Links
 
-* **🚀 View Open [Issues](https://github.com/chatvector-ai/chatvector-ai/issues) & [Project Board](https://github.com/orgs/chatvector-ai/projects/2)**
-* [🎥 Demo Video](https://www.loom.com/share/b7be8b165031450aad650144a71c1a10)
-* [🎥 Setup Video](https://www.loom.com/share/8635d7e0a5a64953a4bf028360b74e25) — get running in ~10 minutes
-* **[📘 Contributing Guide](CONTRIBUTING.md)** — **[Video](https://www.loom.com/share/c41bdbff541f47d49efcb48920cba382)**
-* **[💬 Discussions](https://github.com/chatvector-ai/chatvector-ai/discussions)** — say hello
-* **[📘 Development Notes](DEVELOPMENT.md)** — maintainer notes & reminders
+- **🚀 View Open [Issues](https://github.com/chatvector-ai/chatvector-ai/issues) & [Project Board](https://github.com/orgs/chatvector-ai/projects/2)**
+- [🎥 Demo Video](https://www.loom.com/share/b7be8b165031450aad650144a71c1a10)
+- [🎥 Setup Video](https://www.loom.com/share/8635d7e0a5a64953a4bf028360b74e25) — get running in ~10 minutes
+- **[📘 Contributing Guide](CONTRIBUTING.md)** — **[Video](https://www.loom.com/share/c41bdbff541f47d49efcb48920cba382)**
+- **[💬 Discussions](https://github.com/chatvector-ai/chatvector-ai/discussions)** — say hello
+- **[📘 Development Notes](DEVELOPMENT.md)** — maintainer notes & reminders
 
 ---
 
@@ -48,11 +49,11 @@ Think of it as an engine developers can use to build document-aware applications
 
 ChatVector-AI provides a **clean, extensible backend foundation for RAG-based document intelligence**. It handles the full lifecycle of document Q&A:
 
-* Document ingestion (PDF, text)
-* Text extraction and chunking
-* Vector embedding and storage
-* Semantic retrieval
-* LLM-powered answer generation
+- Document ingestion (PDF, text)
+- Text extraction and chunking
+- Vector embedding and storage
+- Semantic retrieval
+- LLM-powered answer generation
 
 The goal is to offer a **developer-focused RAG engine** that can be embedded into other applications, tools, or products — not a polished end-user SaaS.
 
@@ -62,10 +63,10 @@ The goal is to offer a **developer-focused RAG engine** that can be embedded int
 
 ChatVector-AI is designed for:
 
-* **Developers** building document intelligence tools or internal knowledge systems
-* **Backend engineers** who want a solid RAG foundation without heavy abstractions
-* **AI/ML practitioners** experimenting with chunking, retrieval, and prompt strategies
-* **Open-source contributors** interested in retrieval systems, embeddings, and LLM orchestration
+- **Developers** building document intelligence tools or internal knowledge systems
+- **Backend engineers** who want a solid RAG foundation without heavy abstractions
+- **AI/ML practitioners** experimenting with chunking, retrieval, and prompt strategies
+- **Open-source contributors** interested in retrieval systems, embeddings, and LLM orchestration
 
 ---
 
@@ -77,20 +78,20 @@ The core RAG backend is **complete and functional**.
 
 **What works today:**
 
-* ✅ PDF text extraction
-* ✅ Basic chunking pipeline
-* ✅ Vector embeddings
-* ✅ Semantic search (pgvector)
-* ✅ LLM-powered answers
-* ✅ Supabase integration
+- ✅ PDF text extraction
+- ✅ Basic chunking pipeline
+- ✅ Vector embeddings
+- ✅ Semantic search (pgvector)
+- ✅ LLM-powered answers
+- ✅ Supabase integration
 
 **Backend improvements in progress:**
 
-* 🚧 Advanced chunking strategies
-* 🚧 Error handling & logging
-* 🚧 API rate limiting
-* 🚧 Performance optimization
-* 🚧 Authentication & access control
+- 🚧 Advanced chunking strategies
+- 🚧 Error handling & logging
+- 🚧 API rate limiting
+- 🚧 Performance optimization
+- 🚧 Authentication & access control
 
 Frontend Demo: A lightweight UI for testing the backend API. Not production-ready.
 
@@ -100,34 +101,34 @@ Frontend Demo: A lightweight UI for testing the backend API. Not production-read
 
 ### Backend Layer (Core)
 
-* **FastAPI** — modern Python API framework with automatic OpenAPI docs
-* **Uvicorn** — high-performance ASGI server
-* **Design goals:** clarity, extensibility, and debuggability
+- **FastAPI** — modern Python API framework with automatic OpenAPI docs
+- **Uvicorn** — high-performance ASGI server
+- **Design goals:** clarity, extensibility, and debuggability
 
 ### AI & Retrieval Layer
 
-* **LangChain** — RAG orchestration
-* **Google AI Studio (Gemini)** — LLM + embeddings
-* **Features:** chunking, semantic retrieval, prompt construction
+- **LangChain** — RAG orchestration
+- **Google AI Studio (Gemini)** — LLM + embeddings
+- **Features:** chunking, semantic retrieval, prompt construction
 
 ### Data Layer
 
-* **Supabase** — PostgreSQL backend
-* **pgvector** — native vector similarity search
-* **Storage:** document metadata and embeddings
+- **Supabase** — PostgreSQL backend
+- **pgvector** — native vector similarity search
+- **Storage:** document metadata and embeddings
 
 ### Reference Frontend (Non-Core)
 
-* **Next.js + TypeScript**
-* Exists solely to demonstrate backend usage
-* Not production-ready
-* Subject to breaking changes
+- **Next.js + TypeScript**
+- Exists solely to demonstrate backend usage
+- Not production-ready
+- Subject to breaking changes
 
 ---
 
 ## 🎯 Quick Start: Run in 5 Minutes
 
-## 🖥️ Backend Setup
+## Backend Setup
 
 <h4>Prerequisites</h4>
 <ul>
@@ -171,12 +172,12 @@ LOG_USE_UTC=false
 # Replace each placeholder with the actual values from Step #2
 
 # 4. Create and activate virtual environment
-# On Mac/Linux: 
+# On Mac/Linux:
 python3 -m venv venv   #create env
 source venv/bin/activate  #activate env
 
 # On Windows: venv\Scripts\activate
-python -m venv venv   #create env 
+python -m venv venv   #create env
 venv\Scripts\activate  #activate env
 
 # 5. Install dependencies
@@ -268,7 +269,10 @@ uvicorn backend.main:app --reload --port 8000
   </li>
 </ul>
 
-## 🖥️ Frontend Setup
+---
+
+## Frontend Layer (Non-Core)
+
 Note: The frontend serves as the web presence for the OSS, and as a testing demo -- but is not central to the actual OSS.
 
 <h4>Prerequisites</h4>
@@ -299,12 +303,12 @@ The frontend will run on http://localhost:3000
 
 High-impact contribution areas:
 
-* Ingestion & indexing pipelines
-* Retrieval quality & evaluation
-* Chunking strategies
-* API design & refactoring
-* Performance & scaling
-* Documentation & examples
+- Ingestion & indexing pipelines
+- Retrieval quality & evaluation
+- Chunking strategies
+- API design & refactoring
+- Performance & scaling
+- Documentation & examples
 
 Frontend contributions are welcome but considered **non-core**.
 
@@ -317,5 +321,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 MIT License
 
 ⭐ Star the repo to follow progress and support the project.
-
-
