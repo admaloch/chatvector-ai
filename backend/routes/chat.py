@@ -10,6 +10,8 @@ router = APIRouter()
 
 @router.post("/chat")
 async def chat(question: str, document_id: str):
+    logger.info(f"Starting chat")
+
     embedding = await get_embedding(question)
 
     # vector search
