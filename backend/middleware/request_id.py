@@ -16,7 +16,6 @@ def get_request_id() -> str | None:
 def register_request_id_middleware(app: FastAPI) -> None:
     """
     Register HTTP middleware that attaches a request-scoped correlation ID.
-
     This middleware ensures every request has a unique X-Request-ID that is:
     - Generated or propagated from incoming headers
     - Stored using contextvars for async-safe, per-request isolation
