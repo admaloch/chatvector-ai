@@ -8,6 +8,7 @@ services:
       POSTGRES_DB: chatvector
     volumes:
       - chatvector-db-data:/var/lib/postgresql/data
+      - ./backend/db/init:/docker-entrypoint-initdb.d  # ✅ Auto-run SQL
     ports:
       - "5432:5432"
 

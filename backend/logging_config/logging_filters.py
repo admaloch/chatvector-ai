@@ -7,12 +7,4 @@ class RequestIDFilter(logging.Filter):
         record.request_id = get_request_id() or "system"
         return True
 
-class AppOnlyFilter(logging.Filter):
-    """Allow only backend (application) logs."""
-    def filter(self, record: logging.LogRecord) -> bool:
-        return record.name.startswith("backend")
 
-class UvicornOnlyFilter(logging.Filter):
-    """Allow only uvicorn logs."""
-    def filter(self, record: logging.LogRecord) -> bool:
-        return record.name.startswith("uvicorn")
