@@ -7,7 +7,7 @@ There is a range of tasks for beginners to more advanced developers
 This guide will walk you through the process step-by-step.
 
 - Watch our [Contributor Video Guide](https://www.loom.com/share/c41bdbff541f47d49efcb48920cba382) 
-- For initial project setup see -- **[📘 Readme](README.md) -- [🎥 Setup Video](https://www.loom.com/share/8635d7e0a5a64953a4bf028360b74e25)
+- For initial project setup see -- **[📘 Readme](README.md) 
 
 ### Start Here:
 
@@ -20,7 +20,7 @@ This guide will walk you through the process step-by-step.
 
 1. Comment on an issue
 2. Ask for help in - [Discussions](https://github.com/chatvector-ai/chatvector-ai/discussions/landing)
-3. We'll help you - find the perfect first contribution
+3. We'll help you find the perfect first contribution
 
   ---
 
