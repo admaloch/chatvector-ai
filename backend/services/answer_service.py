@@ -24,7 +24,7 @@ async def generate_answer(question: str, context: str) -> str:
     If you cannot answer, say "Not enough information."
     """
 
-    model = GenerativeModel("gemini-2.0-flash")
+    model = GenerativeModel("gemini-2.5-flash")
 
     try:
         loop = asyncio.get_running_loop()

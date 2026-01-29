@@ -41,11 +41,20 @@ async def create_document(file_name: str):
             logger.error(f"[SUPABASE] Failed to create document: {e}")
             raise
 
-async def insert_chunk(doc_id: str, chunk_text: str, embedding: List[float]):
+
+async def insert_chunk(doc_id: str, chunk_text: str, embedding) -> str:
     """
     Insert a single document chunk.
-    embedding: list of floats
+    embedding: list of floats or ContentEmbedding object
     """
+    # Ensure embedding is a plain list
+    if not isinstance(embedding, list):
+        try:
+            embedding = embedding.to_list()  # for ContentEmbedding
+        except AttributeError:
+            logger.warning(f"Embedding is not a list, defaulting to zero vector")
+            embedding = [0.0] * 3072
+
     if config.APP_ENV.lower() == "development":
         async with async_session() as session:
             session: AsyncSession  # type hint for IDE
@@ -74,6 +83,7 @@ async def insert_chunk(doc_id: str, chunk_text: str, embedding: List[float]):
         except Exception as e:
             logger.error(f"[SUPABASE] Failed to create chunk for document {doc_id}: {e}")
             raise
+
 
 
 async def locate_matching_chunks(
