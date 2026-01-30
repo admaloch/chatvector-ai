@@ -1,0 +1,44 @@
+-- Enable vector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Create documents table
+CREATE TABLE IF NOT EXISTS documents (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  file_name TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Create document_chunks table
+CREATE TABLE IF NOT EXISTS document_chunks (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  document_id UUID REFERENCES documents(id),
+  chunk_text TEXT,
+  embedding vector(768),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Vector search function
+CREATE OR REPLACE FUNCTION match_chunks(
+  query_embedding vector(768),
+  match_count int DEFAULT 5,
+  filter_document_id uuid DEFAULT NULL
+)
+RETURNS TABLE (
+  id uuid,
+  chunk_text text,
+  similarity float
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    document_chunks.id,
+    document_chunks.chunk_text,
+    1 - (document_chunks.embedding <=> query_embedding) as similarity
+  FROM document_chunks
+  WHERE (filter_document_id IS NULL OR document_chunks.document_id = filter_document_id)
+  ORDER BY document_chunks.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$$;

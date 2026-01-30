@@ -1,86 +1,195 @@
 # Development Guide
 
-This guide is intended as a quick reference for common development workflows
-(e.g. starting servers, creating branches, submitting PRs). Initial setup is
-covered in the main README. 
+Quick reference for day-to-day development workflows. For initial setup, see the main README.
 
-## 1. Running the backend
+---
+
+## 📚 Table of Contents
+
+- [Quick Start](#-quick-start)
+- [API Access](#-api-access)
+- [Backend Development](#-backend-development-local-python---advanced)
+- [Git Workflow](#-git-workflow)
+- [Common Tasks](#-common-tasks)
+- [Development Notes](#-development-notes)
+- [Troubleshooting](#-troubleshooting)
+
+
+## 🚀 Quick Start
+
+### Backend (Docker - Recommended)
+
+```bash
+# Start backend + PostgreSQL
+docker compose up chatvector-api chatvector-db
+
+# Stop backend and database
+docker compose down
+
+# Stop and remove data (clean slate)
+docker compose down -v
+
+# View backend logs
+docker compose logs -f chatvector-api
+
+# Rebuild backend after dependency changes
+docker compose build chatvector-api
+
+# Check running services
+docker compose ps
+# Should show: chatvector-api, chatvector-db
+
+# Restart containers
+docker compose restart
+```
+
+### Frontend (Local Node )
+
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Run dev server
+npm run dev
+```
+
+---
+
+## 🌐 API Access
+
+* **Backend:** [http://localhost:8000](http://localhost:8000)
+* **Frontend:** [http://localhost:3000](http://localhost:3000) (optional, for testing)
+* **API Docs (Swagger UI):** [http://localhost:8000/docs](http://localhost:8000/docs)
+* **Database:** PostgreSQL on port 5432
+
+---
+
+## 🔧 Backend Development (Local Python - Advanced)
 
 ```bash
 cd backend
 
-# Activate virtual environment
-# mac/linux
-source venv/bin/activate
-# Windows
-venv\Scripts\activate
+# Create/activate virtual environment
+python -m venv venv
+source venv/bin/activate  # Mac/Linux
+# venv\Scripts\activate   # Windows
 
-# Install dependencies (if requirements.txt changed)
+# Install dependencies
 pip install -r requirements.txt
 
-# Return to project root
-cd ..
-
-# Launch backend server
-uvicorn backend.main:app --reload --port 8000
-```
-## 2. Running the frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
+# Run with auto-reload
+uvicorn main:app --reload --port 8000
 ```
 
-## 3. Creating a new feature branch (OSS workflow)
-Always branch from an up-to-date main.
+---
+
+## 🌿 Git Workflow
+
+### 1. Create Feature Branch
 
 ```bash
-# 1. Switch to local main
+# Update local main
 git checkout main
-
-# 2. Fetch and pull latest commits from upstream
-git fetch upstream
 git pull upstream main
 
-# 3. Optional: update your fork's main
-git push origin main
-
-# 4. Create a new feature branch
-git checkout -b type/your-feature-name
-
-# 5. Confirm branch
-git branch
+# Create descriptive branch
+git checkout -b feat/your-feature-name
+# or: fix/bug-description, docs/topic-update
 ```
 
-## 4. Rebasing before submitting a pull request
-Before opening a PR, ensure your feature branch is up-to-date with upstream main:
+### 2. Make Changes & Commit
 
 ```bash
-# Fetch latest upstream commits
+# Stage changes
+git add .
+
+# Commit with clear message
+git commit -m "feat: add document search endpoint"
+
+# Push to your fork
+git push -u origin feat/your-feature-name
+```
+
+### 3. Update Branch (Before PR)
+
+```bash
+# Get latest from main
 git fetch upstream
 
-# Ensure you are on your feature branch
-git checkout type/your-feature-name
-
-# Rebase onto upstream/main
+# Rebase to avoid merge commits
 git rebase upstream/main
 
-# Resolve conflicts if any:
-# 1. Edit conflicting files
-# 2. git add <file>
-# 3. git rebase --continue
-# To abort if necessary: git rebase --abort
+# Resolve any conflicts, then continue
+git add .
+git rebase --continue
 
-# Push updated branch to your fork
-git push --force-with-lease origin type/your-feature-name
+# Force push (safe for your branch only)
+git push --force-with-lease
 ```
 
-## 5. Submitting a pull request
-Open a PR from:
+### 4. Submit Pull Request
+
+* Go to: `your-fork:feature-branch → upstream:main`
+* Use PR template
+* Link related issues
+* Wait for CI checks
+* Request review
+
+---
+
+## 🐛 Common Tasks
+
+### Database Access
+
 ```bash
-your-fork:type/your-feature-name → upstream:main
-```
-- Review your changes and confirm CI/tests pass before merging
+# Connect to PostgreSQL
+docker compose exec chatvector-db psql -U postgres -d chatvector
 
-- Review the [Contributor Guide](CONTRIBUTING.md) for more details on creating/submitting PRs
+# Run SQL
+\dt  # List tables
+SELECT * FROM documents LIMIT 5;
+\q   # Quit
+```
+
+### Test API Endpoints
+
+```bash
+# Health check
+curl http://localhost:8000/
+
+# Upload a document
+curl -X POST -F "file=@sample.pdf" http://localhost:8000/upload
+
+# Chat with document
+curl -X POST "http://localhost:8000/chat?doc_id=UUID&question=your+question"
+```
+
+---
+
+## 🚨 Troubleshooting
+
+### "Port already in use"
+
+```bash
+# Find and kill process
+lsof -ti:8000 | xargs kill -9  # Backend
+```
+
+### Database connection errors
+
+```bash
+# Reset database
+docker compose down -v
+docker compose up chatvector-db
+
+# Wait for PostgreSQL to be ready
+docker compose logs chatvector-db | grep "ready to accept"
+```
+
+### "No API_KEY found"
+
+* Check `.env` file exists
+* Verify `GEMINI_API_KEY` is set
+* Restart backend container: `docker compose restart`
