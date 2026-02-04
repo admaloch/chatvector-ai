@@ -1,16 +1,19 @@
 from fastapi import FastAPI
-from backend.routes.test import router as test_router
-from backend.routes.upload import router as upload_router
-from backend.routes.chat import router as chat_router
-from backend.core.config import Settings
-from backend.core.logging_config import setup_logging
+from routes.test import router as test_router
+from routes.upload import router as upload_router
+from routes.chat import router as chat_router
+from logging_config.logging_config import setup_logging
+from middleware.request_id import register_request_id_middleware
 import logging
-
 
 app = FastAPI()
 
 logger = logging.getLogger(__name__)
+
 setup_logging()
+
+# request id middleware
+register_request_id_middleware(app)
 
 @app.get("/")
 def root():
@@ -22,3 +25,4 @@ app.include_router(upload_router)
 app.include_router(chat_router)
 
 logger.info("Application startup complete.")
+

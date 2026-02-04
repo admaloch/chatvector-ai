@@ -1,16 +1,17 @@
+# answer_service.py - UPDATE TO MATCH EMBEDDING SERVICE
 import asyncio
-from functools import partial
+from google import genai
+from core.config import config
 import logging
-from google.generativeai import GenerativeModel
 
 logger = logging.getLogger(__name__)
+
+# Use the SAME client as embedding service
+client = genai.Client(api_key=config.GEN_AI_KEY)
 
 async def generate_answer(question: str, context: str) -> str:
     """
     Generate an answer using Gemini LLM based on the provided context.
-
-    Runs synchronously blocking code in a thread executor to avoid blocking
-    the FastAPI event loop.
     """
     prompt = f"""
     Answer the question based ONLY on the context.
@@ -24,15 +25,18 @@ async def generate_answer(question: str, context: str) -> str:
     If you cannot answer, say "Not enough information."
     """
 
-    model = GenerativeModel("gemini-2.0-flash")
-
     try:
-        loop = asyncio.get_running_loop()
-        func = partial(model.generate_content, prompt)
-        result = await loop.run_in_executor(None, func)
-        answer = result.text or "No response."
-        logger.info(f"Answer generated successfully for question of length {len(question)}")
+        # Use the new API like embeddings do
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model="gemini-2.5-flash",  
+            contents=prompt
+        )
+        
+        answer = response.text or "No response."
+        logger.info(f"Answer generated successfully")
         return answer
+        
     except Exception as e:
         logger.error(f"Failed to generate answer: {e}")
         return "Error generating answer."
