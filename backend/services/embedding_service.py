@@ -8,34 +8,29 @@ logger = logging.getLogger(__name__)
 # Initialize the GenAI client
 client = genai.Client(api_key=config.GEN_AI_KEY)
 
-async def get_embedding(text: str):
+async def get_embeddings(texts: list[str]) -> list[list[float]]:
     """
-    Get an embedding for the provided text using Gemini Embeddings.
-    Returns 768-dimensional vectors to match database schema.
+    Generate embeddings for multiple chunks at once using Gemini.
+    Returns a list of 768-dim vectors.
     """
     for attempt in range(3):
         try:
-            logger.info(f"Requesting embedding from GenAI (Attempt {attempt + 1}/3)...")
+            logger.info(f"Requesting embeddings for {len(texts)} chunks from GenAI (Attempt {attempt+1}/3)...")
             
-            # Use text-embedding-004 which returns 768 dimensions
             result = await asyncio.to_thread(
                 client.models.embed_content,
-                model="models/text-embedding-004",  # 768 dimensions
-                contents=text
+                model="models/text-embedding-004",
+                contents=texts
             )
-            
-            # Extract the embedding values
-            content_embedding = result.embeddings[0]
-            embedding_vector = content_embedding.values
 
-            logger.info(f"Generated embedding of length: {len(embedding_vector)}")
-            return embedding_vector
+            embeddings = [e.values for e in result.embeddings]
+            logger.info(f"Generated {len(embeddings)} embeddings successfully")
+            return embeddings
 
         except Exception as e:
             wait_time = (attempt + 1) * 2
-            logger.error(f"Embedding generation failed (Attempt {attempt + 1}/3). Error: {str(e)}")
+            logger.error(f"Batch embedding failed (Attempt {attempt + 1}/3): {e}")
             await asyncio.sleep(wait_time)
 
-    logger.error("Failed to get embedding after 3 attempts. Returning zero vector.")
-    # Match database schema: 768 dimensions
-    return [0.0] * 768
+    logger.error("Failed to get embeddings after 3 attempts. Returning zero vectors")
+    return [[0.0]*768 for _ in texts]
