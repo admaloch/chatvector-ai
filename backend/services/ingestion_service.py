@@ -20,17 +20,6 @@ async def ingest_chunks(chunks: list[str], doc_id: str):
 
             # Get embedding as plain list
             embedding = await get_embedding(chunk)
-            if not isinstance(embedding, list):
-                # Safety check: convert any ContentEmbedding object
-                try:
-                    embedding = embedding.to_list()
-                except AttributeError:
-                    logger.warning(
-                        f"Embedding for chunk {idx} is not a list; "
-                        f"defaulting to zero vector"
-                    )
-                    embedding = [0.0] * 3072
-
             # Insert chunk with embedding
             chunk_id = await insert_chunk(doc_id, chunk, embedding)
             inserted_chunk_ids.append(chunk_id)
