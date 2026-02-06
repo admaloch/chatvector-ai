@@ -31,8 +31,8 @@ async def get_embeddings(texts: list[str]) -> list[list[float]]:
 
         except Exception as e:
             wait_time = (attempt + 1) * 2
-            logger.error(f"Embedding batch failed: {e}")
-            await asyncio.sleep(wait_time)
+        logger.warning(f"Embedding batch attempt {attempt + 1} failed, retrying: {e}")           
+        await asyncio.sleep(wait_time)
 
     logger.error("Embedding batch failed after retries; returning zero vectors")
     return [[0.0] * 768 for _ in texts]
@@ -41,4 +41,5 @@ async def get_embedding(text: str) -> list[float]:
     """
     Convenience wrapper for single-text embedding.
     """
+    logger.info("Get Chat Embedding")
     return (await get_embeddings([text]))[0]
