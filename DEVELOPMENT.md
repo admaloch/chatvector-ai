@@ -8,14 +8,13 @@ Quick reference for day-to-day development workflows. For initial setup, see the
 
 - [Quick Start](#-quick-start)
 - [API Access](#-api-access)
+- [Tests](#-running-tests)
 - [Backend Development](#-backend-development-local-python---advanced)
 - [Git Workflow](#-git-workflow)
 - [Common Tasks](#-common-tasks)
-- [Development Notes](#-development-notes)
 - [Troubleshooting](#-troubleshooting)
 
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Backend (Docker - Recommended)
 
@@ -57,14 +56,26 @@ npm run dev
 
 ---
 
-## 🌐 API Access
+## API Access
 
-* **Backend:** [http://localhost:8000](http://localhost:8000)
-* **Frontend:** [http://localhost:3000](http://localhost:3000) (optional, for testing)
-* **API Docs (Swagger UI):** [http://localhost:8000/docs](http://localhost:8000/docs)
-* **Database:** PostgreSQL on port 5432
+- **Backend:** [http://localhost:8000](http://localhost:8000)
+- **Frontend:** [http://localhost:3000](http://localhost:3000) (optional, for testing)
+- **API Docs (Swagger UI):** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Database:** PostgreSQL on port 5432
 
 ---
+
+## Running Tests
+
+This project uses `pytest` and `pytest-asyncio` for async tests.
+
+### Using Docker
+
+Run all tests in a one-off container:
+
+```bash
+docker-compose run --rm tests
+```
 
 ## 🔧 Backend Development (Local Python - Advanced)
 
@@ -85,7 +96,30 @@ uvicorn main:app --reload --port 8000
 
 ---
 
-## 🌿 Git Workflow
+## Git Workflow
+
+### 0. One-Time Setup (Required)
+
+```bash
+# Clone your fork
+git clone https://github.com/<your-username>/chatvector-ai.git
+cd chatvector-ai
+
+# Add upstream (main project repo)
+git remote add upstream https://github.com/chatvector-ai/chatvector-ai.git
+
+# Verify remotes
+git remote -v
+```
+
+### Expected output
+
+```bash
+origin    https://github.com/<your-username>/chatvector-ai.git (fetch)
+origin    https://github.com/<your-username>/chatvector-ai.git (push)
+upstream  https://github.com/chatvector-ai/chatvector-ai.git (fetch)
+upstream  https://github.com/chatvector-ai/chatvector-ai.git (push)
+```
 
 ### 1. Create Feature Branch
 
@@ -131,15 +165,15 @@ git push --force-with-lease
 
 ### 4. Submit Pull Request
 
-* Go to: `your-fork:feature-branch → upstream:main`
-* Use PR template
-* Link related issues
-* Wait for CI checks
-* Request review
+- Go to: `your-fork:feature-branch → upstream:main`
+- Use PR template
+- Link related issues
+- Wait for CI checks
+- Request review
 
 ---
 
-## 🐛 Common Tasks
+## Common Tasks
 
 ### Database Access
 
@@ -168,7 +202,7 @@ curl -X POST "http://localhost:8000/chat?doc_id=UUID&question=your+question"
 
 ---
 
-## 🚨 Troubleshooting
+## Troubleshooting
 
 ### "Port already in use"
 
@@ -190,6 +224,6 @@ docker compose logs chatvector-db | grep "ready to accept"
 
 ### "No API_KEY found"
 
-* Check `.env` file exists
-* Verify `GEMINI_API_KEY` is set
-* Restart backend container: `docker compose restart`
+- Check `.env` file exists
+- Verify `GEMINI_API_KEY` is set
+- Restart backend container: `docker compose restart`

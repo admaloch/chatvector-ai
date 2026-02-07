@@ -35,7 +35,8 @@ async def test_embedding_dimension_consistency():
 
 
 async def test_embedding_fallback_on_failure(monkeypatch):
-    async def always_fail(*args, **kwargs):
+    # synchronous function for to_thread
+    def always_fail(*args, **kwargs):
         raise RuntimeError("forced failure")
 
     monkeypatch.setattr(
@@ -44,7 +45,7 @@ async def test_embedding_fallback_on_failure(monkeypatch):
     )
 
     texts = ["fallback test"]
-    embeddings = await get_embeddings(texts)
+    embeddings = await get_embeddings(texts)  # still await your async get_embeddings
 
     assert len(embeddings) == 1
     assert len(embeddings[0]) == 3072
