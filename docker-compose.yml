@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   db:
-    image: pgvector/pgvector:pg16  # ✅ Postgres 16 with vector extension
+    image: pgvector/pgvector:pg16
     container_name: chatvector-db
     environment:
       POSTGRES_USER: postgres
@@ -31,10 +31,26 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: "postgresql+psycopg://postgres:postgres@db:5432/postgres"
+      PYTHONPATH: /app        # ensures imports work
     working_dir: /app
     volumes:
       - ./backend:/app
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  tests:
+    build:
+      context: ./backend
+    container_name: chatvector-tests
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: "postgresql+psycopg://postgres:postgres@db:5432/postgres"
+      PYTHONPATH: /app
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["pytest", "-v"]  # run all tests
 
 volumes:
   chatvector-db-data:
