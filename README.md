@@ -22,11 +22,11 @@ Think of it as an engine developers can use to build document-aware applications
 ## 🔗 Quick Links
 
 - **[Good First Issues](https://github.com/chatvector-ai/chatvector-ai/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)** — Start here if new to the project
+- **[Roadmap](ROADMAP.md)** — Long-term vision + Issue details
 - **[Quick Setup](#backend-setup)** — Get running locally in 5 min (Docker + PostgreSQL)
 - **[Project Board](https://github.com/orgs/chatvector-ai/projects/2)** — Track development progress & priorities
 - **[Demo Video](https://www.loom.com/share/b7be8b165031450aad650144a71c1a10)** — 3-min overview of ChatVector-AI in action
 - **[Contributing Docs](CONTRIBUTING.md)** — **[Contributing Video](https://www.loom.com/share/c41bdbff541f47d49efcb48920cba382)** — PR workflow & code standards
-- **[Roadmap](ROADMAP.md)** — Upcoming features & long-term vision
 - **[Discussions](https://github.com/chatvector-ai/chatvector-ai/discussions/51)** — Community hub for questions & ideas
 - **[Dev Notes](DEVELOPMENT.md)** — Internal maintainer notes & conventions
 
