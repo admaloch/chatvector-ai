@@ -2,7 +2,7 @@ from fastapi import APIRouter, UploadFile, File
 from services.extraction_service import extract_text_from_file
 from services.db_service import create_document
 from services.ingestion_service import ingest_chunks
-from app.db import create_document, insert_chunks_batch
+from app.db import create_document, store_chunks_with_embeddings
 from services.embedding_service import get_embeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import logging
@@ -13,7 +13,7 @@ router = APIRouter()
 @router.post("/upload")
 async def upload(file: UploadFile = File(...)):
     logger.info(f"Starting upload for file: {file.filename} ({file.content_type})")
-    
+
     # Step 1: Extract text from the file
     file_text = await extract_text_from_file(file)
     # Step 2: Split text into chunks
@@ -29,7 +29,7 @@ async def upload(file: UploadFile = File(...)):
     # Step 4: Create document
     doc_id = await create_document(file.filename) 
     # Step 5: Upload: call db service
-    inserted_chunk_ids = await insert_chunks_batch(doc_id, chunks_with_embeddings)
+    inserted_chunk_ids = await store_chunks_with_embeddings(doc_id, chunks_with_embeddings)
     
     logger.info(f"Successfully uploaded {len(inserted_chunk_ids)} chunks")
     return {

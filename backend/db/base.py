@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import List, Tuple
 
 # abstract base class that defines WHAT database operations we need
 # all dbservices (sqlalchemy, supabas, mongodb etc.) must implement these methods.
@@ -14,11 +13,11 @@ class DatabaseService(ABC):
     
     #insert multiple chunks and their embeddings return list of ids
     @abstractmethod
-    async def insert_chunks_batch(
+    async def store_chunks_with_embeddings(
         self, 
         doc_id: str, 
-        chunks_with_embeddings: List[Tuple[str, List[float]]]
-    ) -> List[str]:
+        chunks_with_embeddings: list[tuple[str, list[float]]]
+    ) -> list[str]:
         pass
     
     #grab a document by id

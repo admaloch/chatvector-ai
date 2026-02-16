@@ -1,9 +1,6 @@
 import uuid
 import logging
-from typing import List, Tuple
-
 from sqlalchemy.ext.asyncio import async_session
-
 from app.models import DocumentChunk, Document
 from app.db.base import DatabaseService
 
@@ -25,11 +22,11 @@ class SQLAlchemyService(DatabaseService):
             logger.info(f"[SQLAlchemy] Created document {doc_id}")
             return doc_id
     
-    async def insert_chunks_batch(
+    async def store_chunks_with_embeddings(
         self, 
         doc_id: str, 
-        chunks_with_embeddings: List[Tuple[str, List[float]]]
-    ) -> List[str]:
+        chunks_with_embeddings: list[tuple[str, list[float]]]
+    ) -> list[str]:
         async with async_session() as session:
             chunk_rows = []
             chunk_ids = []

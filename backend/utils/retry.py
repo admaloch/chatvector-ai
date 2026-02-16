@@ -1,3 +1,49 @@
+"""
+Retry Utility with Exponential Backoff -- NOTES
+=======================================
+
+A reusable retry mechanism for handling transient failures in async operations.
+Used throughout the app to make external calls (database, embeddings, LLM) resilient.
+
+What it does:
+- Wraps any async function with retry logic
+- Implements exponential backoff (1s, 2s, 4s between retries)
+- Distinguishes between transient errors (retry) and permanent errors (fail fast)
+- Logs each retry attempt (WARNING) and final failure (ERROR)
+
+Why this exists:
+- Network calls, databases, and APIs can fail temporarily
+- Without retries, a 1-second timeout fails the whole operation
+- With retries, transient issues are invisible to the caller
+- Consistent behavior across all retry-able operations
+
+Error classification:
+    Transient (retry): timeouts, connection resets, deadlocks, rate limits
+    Permanent (no retry): validation errors, constraint violations, auth failures
+
+Usage:
+    # Basic usage
+    result = await retry_async(
+        lambda: some_async_function(),
+        max_retries=3
+    )
+    
+    # With custom backoff
+    result = await retry_async(
+        lambda: db_insert(data),
+        max_retries=5,
+        base_delay=2.0,
+        backoff=3.0
+    )
+
+The actual retry loop:
+    attempt 1: try, fail → wait 1s
+    attempt 2: try, fail → wait 2s  
+    attempt 3: try, fail → wait 4s
+    attempt 4: try, fail → raise final exception
+"""
+
+
 import asyncio
 import logging
 from typing import Type, Tuple, Callable, Any, Optional
@@ -73,7 +119,7 @@ async def retry_async(
     
     Example:
         result = await retry_async(
-            lambda: insert_chunks_batch(doc_id, chunks),
+            lambda: store_chunks_with_embeddings(doc_id, chunks),
             max_retries=3,
             base_delay=1.0
         )

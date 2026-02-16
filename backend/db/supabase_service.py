@@ -1,6 +1,4 @@
 import logging
-from typing import List, Tuple
-
 from app.db.base import DatabaseService
 from app.core.supabase_client import supabase_client  
 
@@ -18,11 +16,11 @@ class SupabaseService(DatabaseService):
         logger.info(f"[Supabase] Created document {doc_id}")
         return doc_id
     
-    async def insert_chunks_batch(
+    async def store_chunks_with_embeddings(
         self, 
         doc_id: str, 
-        chunks_with_embeddings: List[Tuple[str, List[float]]]
-    ) -> List[str]:
+        chunks_with_embeddings: list[tuple[str, list[float]]]
+    ) -> list[str]:
         payload = [
             {
                 "document_id": doc_id,
