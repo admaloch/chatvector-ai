@@ -2,7 +2,6 @@ import uuid
 import logging
 import os
 from typing import List, Tuple
-
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -43,7 +42,7 @@ class SQLAlchemyService(DatabaseService):
             doc_id = str(uuid.uuid4())
             document = Document(
                 id=doc_id,
-                filename=filename,
+                file_name=filename,
                 status="processing"
             )
             session.add(document)

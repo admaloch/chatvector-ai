@@ -1,7 +1,7 @@
 import logging
-from app.db.base import DatabaseService
-from app.core.supabase_client import supabase_client  
-from app.models import DocumentChunk, Document
+from db.base import DatabaseService
+from core.clients import supabase_client  
+from core.models import DocumentChunk
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class SupabaseService(DatabaseService):    
     async def create_document(self, filename: str) -> str:
         result = supabase_client.table("documents").insert({
-            "filename": filename,
+            "file_name": filename,
             "status": "processing"
         }).execute()
         

@@ -1,6 +1,5 @@
 from fastapi import APIRouter, UploadFile, File
 from services.extraction_service import extract_text_from_file
-from services.ingestion_service import ingest_chunks
 from db import create_document, store_chunks_with_embeddings
 from services.embedding_service import get_embeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter

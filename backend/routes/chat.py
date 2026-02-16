@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from services.embedding_service import get_embedding
 from services.answer_service import generate_answer
-from services.db_service import find_similar_chunks
+from db import find_similar_chunks
 from services.context_service import build_context_from_chunks
 import logging
 

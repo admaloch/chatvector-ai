@@ -23,8 +23,8 @@ Permanent errors (constraints, validation) fail immediately.
 """
 
 import logging
-from app.config import config
-from app.utils.retry import retry_async  
+from core.config import config
+from utils.retry import retry_async  
 from core.models import DocumentChunk
 
 logger = logging.getLogger(__name__)
@@ -40,11 +40,11 @@ def get_db_service():
         return db_service
     
     if config.APP_ENV.lower() == "development":
-        from app.db.sqlalchemy_service import SQLAlchemyService
+        from .sqlalchemy_service import SQLAlchemyService  # 👈 Changed
         db_service = SQLAlchemyService()
         logger.info("Using SQLAlchemy database service (development)")
     else:
-        from app.db.supabase_service import SupabaseService
+        from .supabase_service import SupabaseService      # 👈 Changed
         db_service = SupabaseService()
         logger.info("Using Supabase database service (production)")
     

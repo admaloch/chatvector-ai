@@ -18,7 +18,7 @@ async def test_retry_success_on_third_try():
         "success"
     ]
     
-    with patch('app.utils.retry.is_transient_error', return_value=True):
+    with patch('utils.retry.is_transient_error', return_value=True):
         result = await retry_async(mock_func, max_retries=3)
     
     assert result == "success"
@@ -30,7 +30,7 @@ async def test_retry_fails_on_permanent_error():
     mock_func = AsyncMock()
     mock_func.side_effect = Exception("constraint violation")
     
-    with patch('app.utils.retry.is_transient_error', return_value=False):
+    with patch('utils.retry.is_transient_error', return_value=False):
         with pytest.raises(Exception, match="constraint violation"):
             await retry_async(mock_func, max_retries=3)
     
@@ -42,7 +42,7 @@ async def test_retry_exhaustion():
     mock_func = AsyncMock()
     mock_func.side_effect = Exception("timeout")
     
-    with patch('app.utils.retry.is_transient_error', return_value=True):
+    with patch('utils.retry.is_transient_error', return_value=True):
         with pytest.raises(Exception, match="timeout"):
             await retry_async(mock_func, max_retries=2)
     
@@ -54,7 +54,7 @@ async def test_exponential_backoff():
     mock_func = AsyncMock()
     mock_func.side_effect = [Exception("timeout"), Exception("timeout"), "success"]
     
-    with patch('app.utils.retry.is_transient_error', return_value=True):
+    with patch('utils.retry.is_transient_error', return_value=True):
         with patch('asyncio.sleep') as mock_sleep:
             await retry_async(
                 mock_func, 

@@ -19,8 +19,12 @@ COPY . .
 # Make logs folder
 RUN mkdir -p logs
 
-# Make scripts executable
-RUN chmod +x /app/wait-for-db.sh /app/entrypoint.sh
+# Make scripts executable - FIX: Set specific permissions
+RUN chmod 755 /app/entrypoint.sh && \
+    chmod 755 /app/wait-for-db.sh
+
+# Debug: Verify permissions
+RUN ls -la /app/*.sh
 
 EXPOSE 8000
 
