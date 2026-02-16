@@ -7,22 +7,22 @@ from typing import List, Tuple
 
 class DatabaseService(ABC):
 
+    # create a document record and returns the document id.
     @abstractmethod
     async def create_document(self, filename: str) -> str:
-        # Create a document record and returns the document ID.
         pass
     
+    #insert multiple chunks and their embeddings return list of ids
     @abstractmethod
     async def insert_chunks_batch(
         self, 
         doc_id: str, 
         chunks_with_embeddings: List[Tuple[str, List[float]]]
     ) -> List[str]:
-        #insert multiple chunks and their embeddings return list of ids
         pass
     
+    #grab a document by id
     @abstractmethod
     async def get_document(self, doc_id: str) -> dict:
-        #Retrieve a document by ID.
         pass
     
