@@ -24,8 +24,8 @@ Permanent errors (constraints, validation) fail immediately.
 
 import logging
 from core.config import config
-from utils.retry import retry_async  
-from core.models import DocumentChunk
+from utils.retry import retry_async
+from .base import ChunkMatch
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +40,11 @@ def get_db_service():
         return db_service
     
     if config.APP_ENV.lower() == "development":
-        from .sqlalchemy_service import SQLAlchemyService  # 👈 Changed
+        from .sqlalchemy_service import SQLAlchemyService
         db_service = SQLAlchemyService()
         logger.info("Using SQLAlchemy database service (development)")
     else:
-        from .supabase_service import SupabaseService      # 👈 Changed
+        from .supabase_service import SupabaseService
         db_service = SupabaseService()
         logger.info("Using Supabase database service (production)")
     
@@ -98,20 +98,37 @@ async def get_document(doc_id: str) -> dict:
         func_name=f"{service.__class__.__name__}.get_document"
     )
 
-# Find chunks similar to query embedding using vector search.db
+async def create_document_with_chunks_atomic(
+    file_name: str, 
+    chunks_with_embeddings: list[tuple[str, list[float]]]
+) -> tuple[str, list[str]]:
+    """Atomic document+chunk creation with retry logic."""
+    service = get_db_service()
+    
+    async def _atomic():
+        return await service.create_document_with_chunks_atomic(file_name, chunks_with_embeddings)
+    
+    return await retry_async(
+        _atomic,
+        max_retries=3,
+        base_delay=1.0,
+        backoff=2.0,
+        func_name=f"{service.__class__.__name__}.create_document_with_chunks_atomic"
+    )
+
 async def find_similar_chunks(
     doc_id: str,
     query_embedding: list[float],
-    match_count: int = 5
-) -> list[DocumentChunk]:
-    
+    match_count: int = 5,
+) -> list[ChunkMatch]:
+    """Find similar chunks with retry logic."""
     service = get_db_service()
     
-    async def _find():
+    async def _search():
         return await service.find_similar_chunks(doc_id, query_embedding, match_count)
     
     return await retry_async(
-        _find,
+        _search,
         max_retries=3,
         base_delay=1.0,
         backoff=2.0,
@@ -120,10 +137,11 @@ async def find_similar_chunks(
 
 __all__ = [
     "get_db_service",
-    "create_document", 
-    "store_chunks_with_embeddings",
+    "create_document",
+    "store_chunks_with_embeddings", 
     "get_document",
-    "find_similar_chunks",  # 👈 Add this
-    "db_service",  
+    "create_document_with_chunks_atomic",
+    "find_similar_chunks",
+    "ChunkMatch",
+    "db_service",
 ]
-

@@ -1,7 +1,6 @@
 import logging
-from db.base import DatabaseService
+from db.base import ChunkMatch, DatabaseService
 from core.clients import supabase_client  
-from core.models import DocumentChunk
 
 logger = logging.getLogger(__name__)
 
@@ -43,34 +42,71 @@ class SupabaseService(DatabaseService):
             return result.data[0]
         return None
     
+    
+    async def create_document_with_chunks_atomic(
+        self, 
+        file_name: str, 
+        chunks_with_embeddings: list[tuple[str, list[float]]]
+    ) -> tuple[str, list[str]]:
+        """Atomic with compensating cleanup."""
+        doc_id = None
+        try:
+            # Create document
+            doc_id = await self.create_document(file_name)
+            
+            # Store chunks
+            chunk_ids = await self.store_chunks_with_embeddings(doc_id, chunks_with_embeddings)
+            
+            logger.info(f"[Supabase] Atomic upload: {doc_id} with {len(chunk_ids)} chunks")
+            return doc_id, chunk_ids
+            
+        except Exception as e:
+            logger.error(f"[Supabase] Atomic upload failed: {e}")
+            if doc_id:
+                await self._cleanup_orphaned_document(doc_id)
+            raise
+    
+    async def _cleanup_orphaned_document(self, doc_id: str):
+        """Best-effort cleanup for failed uploads."""
+        try:
+            supabase_client.table("document_chunks").delete().eq("document_id", doc_id).execute()
+            supabase_client.table("documents").delete().eq("id", doc_id).execute()
+            logger.info(f"[Supabase] Cleaned up orphaned document {doc_id}")
+        except Exception as e:
+            logger.error(f"[Supabase] Cleanup failed for {doc_id}: {e}")
+    
     async def find_similar_chunks(
         self,
         doc_id: str,
         query_embedding: list[float],
-        match_count: int = 5
-    ) -> list[DocumentChunk]:
-
+        match_count: int = 5,
+    ) -> list[ChunkMatch]:
+        """Find similar chunks using Supabase RPC."""
         try:
-            result = supabase_client.rpc("match_chunks", {
-                "query_embedding": query_embedding,
-                "match_count": match_count,
-                "filter_document_id": doc_id
-            }).execute()
+            result = supabase_client.rpc(
+                "match_chunks",
+                {
+                    "query_embedding": query_embedding,
+                    "match_count": match_count,
+                    "filter_document_id": doc_id,
+                },
+            ).execute()
             
-            chunks = []
-            for c in result.data:
-                chunk_obj = DocumentChunk(
+            matches = [
+                ChunkMatch(
                     id=c["id"],
-                    document_id=c["document_id"],
+                    document_id=c.get("document_id", doc_id),
                     chunk_text=c["chunk_text"],
-                    embedding=c["embedding"],
-                    created_at=c["created_at"]
+                    embedding=c.get("embedding"),
+                    created_at=c.get("created_at"),
+                    similarity=c.get("similarity"),
                 )
-                chunks.append(chunk_obj)
+                for c in result.data
+            ]
             
-            logger.debug(f"[Supabase] Vector search returned {len(chunks)} chunks for document {doc_id}")
-            return chunks
+            logger.debug(f"[Supabase] Vector search returned {len(matches)} chunks")
+            return matches
             
         except Exception as e:
-            logger.error(f"[Supabase] Failed to retrieve chunks for document {doc_id}: {e}")
+            logger.error(f"[Supabase] Failed to retrieve chunks: {e}")
             raise
