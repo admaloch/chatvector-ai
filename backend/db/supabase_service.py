@@ -51,10 +51,7 @@ class SupabaseService(DatabaseService):
         """Atomic with compensating cleanup."""
         doc_id = None
         try:
-            # Create document
             doc_id = await self.create_document(file_name)
-            
-            # Store chunks
             chunk_ids = await self.store_chunks_with_embeddings(doc_id, chunks_with_embeddings)
             
             logger.info(f"[Supabase] Atomic upload: {doc_id} with {len(chunk_ids)} chunks")
@@ -65,15 +62,16 @@ class SupabaseService(DatabaseService):
             if doc_id:
                 await self._cleanup_orphaned_document(doc_id)
             raise
-    
-    async def _cleanup_orphaned_document(self, doc_id: str):
-        """Best-effort cleanup for failed uploads."""
+
+    async def _cleanup_orphaned_document(self, doc_id: str) -> None:
+        """Best-effort compensating delete for a document when chunk insert fails."""
         try:
-            supabase_client.table("document_chunks").delete().eq("document_id", doc_id).execute()
             supabase_client.table("documents").delete().eq("id", doc_id).execute()
             logger.info(f"[Supabase] Cleaned up orphaned document {doc_id}")
-        except Exception as e:
-            logger.error(f"[Supabase] Cleanup failed for {doc_id}: {e}")
+        except Exception as cleanup_error:
+            logger.error(
+                f"[Supabase] Failed to cleanup orphaned document {doc_id}: {cleanup_error}"
+            )
     
     async def find_similar_chunks(
         self,

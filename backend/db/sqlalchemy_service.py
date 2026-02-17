@@ -96,29 +96,32 @@ class SQLAlchemyService(DatabaseService):
         chunks_with_embeddings: list[tuple[str, list[float]]]
     ) -> tuple[str, list[str]]:
         """Atomic document+chunk creation with transaction."""
+        # Don't use self.async_session() directly - we need one session for everything
         async with self.async_session() as session:
             chunk_ids = []
             doc_id = str(uuid.uuid4())
             
             try:
                 async with session.begin():
-                    # Create document
-                    session.add(Document(
-                        id=doc_id, 
+                    # Create document directly (don't call self.create_document)
+                    document = Document(
+                        id=doc_id,
                         file_name=file_name,
                         status="processing"
-                    ))
+                    )
+                    session.add(document)
                     
-                    # Create chunks
+                    # Create chunks directly (don't call self.store_chunks_with_embeddings)
                     for chunk_text, embedding in chunks_with_embeddings:
                         chunk_id = str(uuid.uuid4())
                         chunk_ids.append(chunk_id)
-                        session.add(DocumentChunk(
+                        chunk = DocumentChunk(
                             id=chunk_id,
                             document_id=doc_id,
                             chunk_text=chunk_text,
                             embedding=embedding,
-                        ))
+                        )
+                        session.add(chunk)
                 
                 logger.info(f"[PostgreSQL] Atomic upload: {doc_id} with {len(chunk_ids)} chunks")
                 return doc_id, chunk_ids

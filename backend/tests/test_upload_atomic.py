@@ -9,21 +9,21 @@ async def test_create_document_with_chunks_atomic_supabase_success(monkeypatch):
     monkeypatch.setattr("core.config.config.APP_ENV", "production")
     
     # Mock the SupabaseService methods
-    async def fake_create_document(file_name: str):
+    async def fake_create_document(self, file_name: str):
         assert file_name == "example.pdf"
         return "doc-123"
 
-    async def fake_store_chunks(doc_id: str, chunks_with_embeddings):
+    async def fake_store_chunks(self, doc_id: str, chunks_with_embeddings):
         assert doc_id == "doc-123"
         assert len(chunks_with_embeddings) == 2
         return ["chunk-1", "chunk-2"]
 
     cleanup_calls: list[str] = []
 
-    async def fake_cleanup(doc_id: str):
+    async def fake_cleanup(self, doc_id: str):
         cleanup_calls.append(doc_id)
 
-    # Apply mocks to the service class
+    # Apply mocks to the service class - update paths to match your structure
     monkeypatch.setattr("db.supabase_service.SupabaseService.create_document", fake_create_document)
     monkeypatch.setattr("db.supabase_service.SupabaseService.store_chunks_with_embeddings", fake_store_chunks)
     monkeypatch.setattr("db.supabase_service.SupabaseService._cleanup_orphaned_document", fake_cleanup)
@@ -43,17 +43,18 @@ async def test_create_document_with_chunks_atomic_supabase_success(monkeypatch):
 async def test_create_document_with_chunks_atomic_supabase_cleanup_on_chunk_failure(monkeypatch):
     monkeypatch.setattr("core.config.config.APP_ENV", "production")
 
-    async def fake_create_document(file_name: str):
+    async def fake_create_document(self, file_name: str):
         return "doc-rollback"
 
-    async def fake_store_chunks(doc_id: str, chunks_with_embeddings):
+    async def fake_store_chunks(self, doc_id: str, chunks_with_embeddings):
         raise RuntimeError("chunk insert failed")
 
     cleanup_calls: list[str] = []
 
-    async def fake_cleanup(doc_id: str):
+    async def fake_cleanup(self, doc_id: str):
         cleanup_calls.append(doc_id)
 
+    # Update paths here too
     monkeypatch.setattr("db.supabase_service.SupabaseService.create_document", fake_create_document)
     monkeypatch.setattr("db.supabase_service.SupabaseService.store_chunks_with_embeddings", fake_store_chunks)
     monkeypatch.setattr("db.supabase_service.SupabaseService._cleanup_orphaned_document", fake_cleanup)
@@ -82,6 +83,7 @@ async def test_ingest_document_atomic_calls_atomic_db_path(monkeypatch):
         captured["payload"] = chunks_with_embeddings
         return "doc-789", ["chunk-abc"]
 
+    # Update this path to match your db/__init__.py export
     monkeypatch.setattr("db.create_document_with_chunks_atomic", fake_atomic)
 
     doc_id, chunk_ids = await ingest_document_atomic(
