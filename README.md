@@ -22,10 +22,6 @@ Think of it as an engine developers can use to build document-aware applications
 [![GitHub stars](https://img.shields.io/github/stars/chatvector-ai/chatvector-ai?style=social)](https://github.com/chatvector-ai/chatvector-ai)
 **Next Milestone:** 25
 
-```
-██████████████░░░░░░░░░░░░░░░░ 12/25 stars
-```
-
 ---
 
 ## 🔗 Quick Links
