@@ -4,64 +4,104 @@ This document outlines the current development focus and future direction of the
 
 ---
 
-## 🎯 Phase 1: Stabilize & Optimize Core Engine (Current)
+## 🎮 Fun Beginner-Friendly Issues 
+
+These issues are perfect for first-time contributors. They're well-scoped, have clear instructions, and let you add some personality to the project while exploring the codebase, project setup and collaborative GitHub PR process.
+
+**Note:** No need to understand the codebase or RAG concepts to contribute here!
+
+| Issue | What You'll Build | Impact | Skill Level |
+|-------|-----------------|--------|-------------|
+| [#83 Enhance Root Endpoint with Clickable Links to Docs and Status](https://github.com/chatvector-ai/chatvector-ai/issues/83) | Update the root ASCII page to include clickable links to documentation and status endpoints | Improve developer UX for testing the backend | Beginner |
+| [#58 Add Setup Demo Video to Quick Links](https://github.com/chatvector-ai/chatvector-ai/issues/58) | Record a short setup demo and add it to the README | Be the face of the project and help future contributors get started | Beginner |
+| [#24 Normalize PDF Text in Ingestion Pipeline](https://github.com/chatvector-ai/chatvector-ai/issues/24) | Clean up extracted PDF text (fix line breaks, normalize whitespace, handle special characters) | Improve downstream retrieval and RAG answer accuracy | Beginner |
+
+**All beginner issues are tagged with** `good first issue` • `beginner-friendly` • `first-timers-only`
+
+---
+
+## 🚀 Phase 1: Stabilize & Optimize Core Engine (Current)
 
 - **Focus:** Hardening the RAG backend for **reliability, observability, and performance**. 
 - **Emphasis:** Advanced logging, ingestion pipeline robustness, asynchronous and batch processing foundations, chunking quality, and comprehensive error handling. 
 - Completion of these tasks is critical before starting Phase 2.
 
-### 🔴 Critical / Blocking Issues
+---
 
-* [#44 Enhance `insert_chunk` with retry logic](https://github.com/chatvector-ai/chatvector-ai/issues/44) – blocks #43, #46
-* [#27 Implement batch chunk insertions](https://github.com/chatvector-ai/chatvector-ai/issues/27) – blocks #28
-* [#43 Validation & error handling in upload pipeline](https://github.com/chatvector-ai/chatvector-ai/issues/43) – blocks #46
+### 🧱 Core Reliability & Architecture
 
-### 🟡 Performance & Observability Enhancements
-
-* [#20 Implement JSON logging format](https://github.com/chatvector-ai/chatvector-ai/issues/20) – Good First Issue
-* [#21 Add request / correlation IDs](https://github.com/chatvector-ai/chatvector-ai/issues/21) – Good First Issue
-* [#22 Research centralized logging integration](https://github.com/chatvector-ai/chatvector-ai/issues/22) – Research / Blocked
-* [#31 Async / batch retrieval for chat endpoint](https://github.com/chatvector-ai/chatvector-ai/issues/31) – Advanced / Ready (design)
-* [#28 Implement async embedding queue](https://github.com/chatvector-ai/chatvector-ai/issues/28) – Advanced / Blocked by #27
-
-### 🟢 Ready for Development (Answer Quality / RAG Enhancements)
-
-* [#23 Enhance chunk metadata storage](https://github.com/chatvector-ai/chatvector-ai/issues/23) – Good First Issue
-* [#24 Normalize PDF text in ingestion pipeline](https://github.com/chatvector-ai/chatvector-ai/issues/24) – Good First Issue
-* [#25 Tune chunk size & overlap](https://github.com/chatvector-ai/chatvector-ai/issues/25) – Good First Issue
-* [#26 Add source citation support](https://github.com/chatvector-ai/chatvector-ai/issues/26) – Good First Issue
-
-### 📝 Documentation & Polish
-
-* [#45 Align terminology: “Ingestion” vs “Upload”](https://github.com/chatvector-ai/chatvector-ai/issues/45) – Good First Issue
-* [#2 Frontend demo improvements](https://github.com/chatvector-ai/chatvector-ai/issues/2)
-* [#4 Frontend demo improvements](https://github.com/chatvector-ai/chatvector-ai/issues/4)
-* [#5 Frontend demo improvements](https://github.com/chatvector-ai/chatvector-ai/issues/5)
+| Issue | Description | Skill Level |
+|-------|-------------|-------------|
+| [#74 Refactor: Move Upload Pipeline Logic to Dedicated Service](https://github.com/chatvector-ai/chatvector-ai/issues/74) | Extract upload/ingestion logic into a dedicated service layer for improved maintainability and separation of concerns | Advanced |
+| [#72 Update embedding service to use centralized retry utility](https://github.com/chatvector-ai/chatvector-ai/issues/72) | Refactor embedding calls to use a shared retry utility for consistency and resilience | Intermediate |
+| [#45 Align Terminology: Use "Ingestion" Instead of "Upload"](https://github.com/chatvector-ai/chatvector-ai/issues/45) | Standardize terminology throughout the codebase and documentation | Beginner |
+| [#79 Add real system metrics to /status endpoint](https://github.com/chatvector-ai/chatvector-ai/issues/79) | Replace mock data in `/status` endpoint with real system metrics (CPU, memory, disk, etc.) for immediate observability | Beginner/Intermediate |
 
 ---
 
-## 🔮 Phase 2: Enhance Developer Experience (Next)
+### ⚡ Performance & Observability
+
+| Issue | Description | Skill Level |
+|-------|-------------|-------------|
+| [#31 Async / Batch Retrieval for Chat Endpoint](https://github.com/chatvector-ai/chatvector-ai/issues/31) | Optimize chat responses by retrieving and processing context in parallel | Advanced |
+| [#28 Implement Embedding Queue for Production Scaling](https://github.com/chatvector-ai/chatvector-ai/issues/28) | Build background queue system to handle embedding generation at scale without rate limits or timeouts | Advanced |
+| [#22 Research Centralized Logging Integration](https://github.com/chatvector-ai/chatvector-ai/issues/22) | Investigate options for shipping logs to services like DataDog, Splunk, or ELK | Research |
+
+---
+
+### 🧠 RAG Enhancements (Answer Quality)
+
+| Issue | Description | Skill Level |
+|-------|-------------|-------------|
+| [#23 Enhance Chunk Metadata Storage](https://github.com/chatvector-ai/chatvector-ai/issues/23) | Store additional metadata (page numbers, headings, timestamps) with each chunk | Beginner |
+| [#25 Tune Chunk Size and Overlap](https://github.com/chatvector-ai/chatvector-ai/issues/25) | Experiment with different chunk sizes and overlaps to optimize retrieval quality | Beginner |
+| [#26 Add Source Citation Support for LLM Answers](https://github.com/chatvector-ai/chatvector-ai/issues/26) | Make LLM responses include references to source documents and specific chunks | Beginner |
+
+---
+
+## 🎨 Frontend
+
+The frontend is the face of ChatVector and demonstrates what's possible. It's designed to:
+- **Showcase demos** of different RAG use cases
+- **Provide a testing ground** for developers to experiment with the API
+- **Inspire adoption** by showing real-world examples
+- **Eventually host community contributions**
+
+While the backend is the core engine, the frontend is the face of ChatVector — and we want it to be polished and intuitive.
+
+| Issue | Description | Skill Level |
+|-------|-------------|-------------|
+| [#2 Create chat page layout](https://github.com/chatvector-ai/chatvector-ai/issues/2) | Build the basic UI structure for the chat interface (message bubbles, input field, send button) | Beginner |
+| [#5 Add document upload to chat page](https://github.com/chatvector-ai/chatvector-ai/issues/5) | Integrate the upload component into the chat interface | Beginner |
+
+---
+
+## 🚧 Phase 2: Enhance Developer Experience (Next)
 
 Focus: Make ChatVector-AI easier to adopt, extend, and integrate.
 
-* Developer tools: Client SDKs, deployment improvements (e.g., Docker)
+* Developer tools: Client SDKs, deployment improvements
 * Advanced caching: Redis for embedding and response caching
 * Extended RAG features: Advanced chunking, query transformations, prompt tuning
+* **Frontend expansion:** Demo gallery, use case examples, interactive playground
 
 ---
 
-## 🚀 Phase 3: Scale & Specialize (Later)
+## 🏗 Phase 3: Scale & Specialize (Later)
 
 Focus: Production-ready document intelligence platform.
 
 * Enterprise features: Authentication, multi-tenancy, monitoring
 * Specialized pipelines: Legal, academic, or code documents
 * Ecosystem growth: Community integrations, example applications
+* **Frontend maturity:** Full documentation site with live API explorer and community showcase gallery
 
 ---
 
-### ✅ Notes
+### 📌 Notes
 
-* Critical / Blocking issues must be resolved before Phase 2 features can progress.
-* “Good First Issue” tags highlight tasks suitable for new contributors.
-* This roadmap is intended to provide a quick overview; contributors can click the links to jump directly to the GitHub issues.
+* "Good First Issue" tags highlight tasks suitable for new contributors.
+* **New contributors should start with the 🎮 Fun Beginner-Friendly Issues section!**
+* Issue status (blocked, in progress, etc.) is visible when you click through to GitHub.
+* This roadmap provides a quick overview; click any link for full issue details.
+* #28 is critical for production scaling — ensures embedding generation doesn't become a bottleneck under load.
