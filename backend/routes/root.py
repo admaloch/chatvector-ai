@@ -17,6 +17,12 @@ ASCII_ART = (
     "ChatVector AI Backend is Live!\n"
 )
 
+links_html = (
+    '<p>'
+    '<a href="/docs">API Docs</a> | '
+    '<a href="/status">System Status</a>'
+    '</p>'
+)
 
 def _is_browser(request: Request) -> bool:
     # Prefer Accept header, then fall back to User-Agent heuristics.
@@ -31,5 +37,5 @@ def _is_browser(request: Request) -> bool:
 def root(request: Request):
     logger.info("Root endpoint accessed")
     if _is_browser(request):
-        return HTMLResponse(content=f"<pre style=\"font-family: monospace;\">{ASCII_ART}</pre>")
+        return HTMLResponse(content=f"<pre style=\"font-family: monospace;\">{ASCII_ART}</pre>{links_html}")
     return {"message": "ChatVector AI Backend is Live!"}
