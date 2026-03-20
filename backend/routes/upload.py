@@ -18,6 +18,7 @@ def _http_error(
     stage: str,
     message: str,
     document_id: str | None = None,
+    headers: dict | None = None,
 ) -> HTTPException:
     detail = {
         "code": code,
@@ -26,7 +27,7 @@ def _http_error(
     }
     if document_id:
         detail["document_id"] = document_id
-    return HTTPException(status_code=status_code, detail=detail)
+    return HTTPException(status_code=status_code, detail=detail, headers=headers)
 
 
 @router.post("/upload")
@@ -67,12 +68,13 @@ async def upload(file: UploadFile = File(...)):
                 error_message="Queue is at capacity. Please retry later.",
             )
             raise _http_error(
-                status_code=503,
-                code="queue_full",
-                stage="queued",
-                message="The processing queue is currently full. Please try again later.",
-                document_id=doc_id,
-            )
+                    status_code=503,
+                    code="queue_full",
+                    stage="queued",
+                    message="The processing queue is currently full. Please try again later.",
+                    document_id=doc_id,
+                    headers={"Retry-After": "30"},
+                )
 
         logger.info(
             f"Accepted upload {file.filename!r} → document {doc_id} "

@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
+import db
 from core.config import config
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,24 @@ class QueueJob:
     file_bytes: bytes
     attempt: int = 0
     enqueued_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+
+@dataclass
+class DLQEntry:
+    """
+    Lightweight dead-letter record kept after a job exhausts all retries.
+
+    File bytes are intentionally omitted to avoid unbounded memory growth
+    when large uploads fail repeatedly.
+    """
+    doc_id: str
+    file_name: str
+    content_type: str
+    attempt: int
+    error: str
+    failed_at: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
 
@@ -101,7 +120,7 @@ class IngestionQueueService:
         self._queue: asyncio.Queue[QueueJob] = asyncio.Queue(
             maxsize=config.QUEUE_MAX_SIZE
         )
-        self._dlq: list[QueueJob] = []
+        self._dlq: list[DLQEntry] = []
         self._workers: list[asyncio.Task] = []
         self._rate_limiter = TokenBucketRateLimiter(
             rate=config.QUEUE_EMBEDDING_RPS,
@@ -176,8 +195,8 @@ class IngestionQueueService:
     def queue_size(self) -> int:
         return self._queue.qsize()
 
-    def dlq_jobs(self) -> list[QueueJob]:
-        """Read-only view of dead-letter queue entries."""
+    def dlq_jobs(self) -> list[DLQEntry]:
+        """Read-only view of dead-letter queue entries (file bytes not retained)."""
         return list(self._dlq)
 
     # ------------------------------------------------------------------
@@ -216,9 +235,6 @@ class IngestionQueueService:
             f"(attempt {job.attempt + 1}/{config.QUEUE_JOB_MAX_RETRIES + 1})"
         )
 
-        # Rate-limit before the embedding API call
-        await self._rate_limiter.acquire()
-
         pipeline = IngestionPipeline()
         try:
             await pipeline.process_document_background(
@@ -226,6 +242,7 @@ class IngestionQueueService:
                 file_name=job.file_name,
                 content_type=job.content_type,
                 file_bytes=job.file_bytes,
+                rate_limiter=self._rate_limiter,
             )
         except Exception as exc:
             if job.attempt < config.QUEUE_JOB_MAX_RETRIES:
@@ -234,13 +251,30 @@ class IngestionQueueService:
                     f"Document {job.doc_id} failed on attempt {job.attempt} "
                     f"— requeueing: {exc}"
                 )
+                # Override the "failed" status set by _handle_error so clients
+                # polling the status endpoint see "retrying" instead of a
+                # misleading permanent failure during a transient retry window.
+                try:
+                    await db.update_document_status(
+                        doc_id=job.doc_id, status="retrying"
+                    )
+                except Exception as status_err:
+                    logger.error(
+                        f"Failed to set retrying status for {job.doc_id}: {status_err}"
+                    )
                 await self._queue.put(job)
             else:
                 logger.error(
                     f"Document {job.doc_id} exhausted {config.QUEUE_JOB_MAX_RETRIES} "
                     f"retries — moving to DLQ: {exc}"
                 )
-                self._dlq.append(job)
+                self._dlq.append(DLQEntry(
+                    doc_id=job.doc_id,
+                    file_name=job.file_name,
+                    content_type=job.content_type,
+                    attempt=job.attempt,
+                    error=str(exc),
+                ))
 
 
 # Module-level singleton — imported by routes and main.py

@@ -145,7 +145,10 @@ async def test_failed_job_retries_then_moves_to_dlq(monkeypatch):
         side_effect=RuntimeError("embedding API unavailable")
     )
 
-    with patch("services.ingestion_pipeline.IngestionPipeline", mock_pipeline_cls):
+    with (
+        patch("services.ingestion_pipeline.IngestionPipeline", mock_pipeline_cls),
+        patch("services.queue_service.db.update_document_status", new=AsyncMock()),
+    ):
         await service.start()
         try:
             await service.enqueue(_make_job("doc-fail"))
@@ -157,6 +160,7 @@ async def test_failed_job_retries_then_moves_to_dlq(monkeypatch):
     assert mock_pipeline_inst.process_document_background.await_count == 3
     assert len(service.dlq_jobs()) == 1
     assert service.dlq_jobs()[0].doc_id == "doc-fail"
+    assert service.dlq_jobs()[0].error == "embedding API unavailable"
 
 
 @pytest.mark.asyncio
@@ -173,7 +177,10 @@ async def test_job_in_dlq_has_correct_attempt_count(monkeypatch):
         side_effect=RuntimeError("always fails")
     )
 
-    with patch("services.ingestion_pipeline.IngestionPipeline", mock_pipeline_cls):
+    with (
+        patch("services.ingestion_pipeline.IngestionPipeline", mock_pipeline_cls),
+        patch("services.queue_service.db.update_document_status", new=AsyncMock()),
+    ):
         await service.start()
         try:
             await service.enqueue(_make_job("doc-dlq"))
@@ -215,6 +222,7 @@ async def test_upload_returns_503_when_queue_is_full():
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail["code"] == "queue_full"
     assert exc_info.value.detail["document_id"] == "doc-full"
+    assert exc_info.value.headers["Retry-After"] == "30"
 
 
 @pytest.mark.asyncio

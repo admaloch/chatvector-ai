@@ -18,7 +18,7 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 # Statuses that indicate a document was mid-flight when the server last stopped.
-_STALE_STATUSES = ["queued", "extracting", "chunking", "embedding", "storing"]
+_STALE_STATUSES = ["queued", "retrying", "extracting", "chunking", "embedding", "storing"]
 
 
 @asynccontextmanager

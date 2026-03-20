@@ -223,6 +223,7 @@ class IngestionPipeline:
         file_name: str,
         content_type: str,
         file_bytes: bytes,
+        rate_limiter=None,
     ) -> None:
         """
         Run the extraction→chunking→embedding→storing pipeline stages for a
@@ -269,6 +270,8 @@ class IngestionPipeline:
                 chunks_total=len(chunks),
                 chunks_processed=0,
             )
+            if rate_limiter is not None:
+                await rate_limiter.acquire()
             embeddings = await get_embeddings(chunks)
 
             if len(embeddings) != len(chunks):
