@@ -138,17 +138,42 @@ class IngestionQueueService:
             return
         self._running = True
         for i in range(config.QUEUE_WORKER_COUNT):
-            task = asyncio.create_task(
-                self._worker(worker_id=i),
-                name=f"ingestion-worker-{i}",
-            )
-            self._workers.append(task)
+            self._spawn_worker(worker_id=i)
         logger.info(
             f"Ingestion queue started with {config.QUEUE_WORKER_COUNT} workers "
             f"(max_size={config.QUEUE_MAX_SIZE}, "
             f"embedding_rps={config.QUEUE_EMBEDDING_RPS}, "
             f"max_retries={config.QUEUE_JOB_MAX_RETRIES})"
         )
+
+    def _spawn_worker(self, worker_id: int) -> None:
+        """Create a worker task and attach a crash-recovery callback."""
+        task = asyncio.create_task(
+            self._worker(worker_id=worker_id),
+            name=f"ingestion-worker-{worker_id}",
+        )
+        task.add_done_callback(
+            lambda t: self._on_worker_done(t, worker_id=worker_id)
+        )
+        self._workers.append(task)
+
+    def _on_worker_done(self, task: asyncio.Task, worker_id: int) -> None:
+        """Respawn a replacement worker if one exits unexpectedly."""
+        try:
+            self._workers.remove(task)
+        except ValueError:
+            pass  # already cleared by stop()
+
+        if task.cancelled() or not self._running:
+            return
+
+        exc = task.exception()
+        if exc is not None:
+            logger.error(
+                f"Worker-{worker_id} crashed unexpectedly — respawning: {exc}",
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+            self._spawn_worker(worker_id=worker_id)
 
     async def stop(self) -> None:
         """Cancel all workers and wait for them to finish cleanly."""
@@ -265,8 +290,10 @@ class IngestionQueueService:
                 await self._queue.put(job)
             else:
                 logger.error(
-                    f"Document {job.doc_id} exhausted {config.QUEUE_JOB_MAX_RETRIES} "
-                    f"retries — moving to DLQ: {exc}"
+                    f"Document {job.doc_id} ({job.file_name!r}) exhausted "
+                    f"{config.QUEUE_JOB_MAX_RETRIES} retries "
+                    f"(final attempt={job.attempt}) — moving to DLQ: {exc}",
+                    exc_info=True,
                 )
                 self._dlq.append(DLQEntry(
                     doc_id=job.doc_id,
