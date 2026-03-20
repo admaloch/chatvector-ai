@@ -7,6 +7,7 @@ from logging_config.logging_config import setup_logging
 from middleware.request_id import register_request_id_middleware
 from routes.chat import router as chat_router
 from routes.documents import router as documents_router
+from routes.queue import router as queue_router
 from routes.root import router as root_router
 from routes.test import router as test_router
 from routes.upload import router as upload_router
@@ -51,3 +52,4 @@ app.include_router(test_router)
 app.include_router(upload_router)
 app.include_router(chat_router)
 app.include_router(documents_router)
+app.include_router(queue_router)
