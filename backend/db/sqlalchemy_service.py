@@ -5,7 +5,7 @@ import time
 import uuid
 from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -187,6 +187,23 @@ class SQLAlchemyService(DatabaseService):
             await session.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc_id))
             await session.commit()
             logger.info(f"[PostgreSQL] Deleted chunks for failed upload document {doc_id}")
+
+    async def fail_stale_documents(self, statuses: list[str]) -> int:
+        async with self.async_session() as session:
+            result = await session.execute(
+                sql_update(Document)
+                .where(Document.status.in_(statuses))
+                .values(
+                    status="failed",
+                    failed_stage="server_restart",
+                    error_message="Server restarted while document was being processed.",
+                    updated_at=datetime.utcnow(),
+                )
+            )
+            await session.commit()
+            count = result.rowcount
+            logger.info(f"[PostgreSQL] Marked {count} stale document(s) as failed on startup")
+            return count
 
     async def find_similar_chunks(
         self,

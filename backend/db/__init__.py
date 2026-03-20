@@ -187,6 +187,26 @@ async def delete_document_chunks(doc_id: str) -> None:
     )
 
 
+async def fail_stale_documents(statuses: list[str]) -> int:
+    """
+    Bulk-fail documents left in an in-progress state by a previous restart.
+
+    Returns the number of documents updated.
+    """
+    service = get_db_service()
+
+    async def _fail_stale():
+        return await service.fail_stale_documents(statuses)
+
+    return await retry_async(
+        _fail_stale,
+        max_retries=3,
+        base_delay=1.0,
+        backoff=2.0,
+        func_name=f"{service.__class__.__name__}.fail_stale_documents",
+    )
+
+
 __all__ = [
     "get_db_service",
     "create_document",
@@ -197,6 +217,7 @@ __all__ = [
     "update_document_status",
     "get_document_status",
     "delete_document_chunks",
+    "fail_stale_documents",
     "ChunkMatch",
     "db_service",
 ]

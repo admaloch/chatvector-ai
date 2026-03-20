@@ -81,3 +81,14 @@ class DatabaseService(ABC):
     async def delete_document_chunks(self, doc_id: str) -> None:
         """Delete all chunks for a document (cleanup on failures)."""
         pass
+
+    @abstractmethod
+    async def fail_stale_documents(self, statuses: list[str]) -> int:
+        """
+        Bulk-update all documents whose status is in *statuses* to 'failed'.
+
+        Used at startup to resolve documents that were left in an in-progress
+        state by a previous server crash or restart.  Returns the number of
+        documents updated.
+        """
+        pass

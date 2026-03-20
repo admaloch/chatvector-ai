@@ -190,6 +190,27 @@ class SupabaseService(DatabaseService):
         )
         logger.info(f"[Supabase] Deleted chunks for failed upload document {doc_id}")
 
+    async def fail_stale_documents(self, statuses: list[str]) -> int:
+        result = await self._run_io(
+            lambda: supabase_client.table("documents")
+            .update(
+                {
+                    "status": "failed",
+                    "failed_stage": "server_restart",
+                    "error_message": (
+                        "Server restarted while document was being processed."
+                    ),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+            .in_("status", statuses)
+            .execute(),
+            operation_name="fail_stale_documents",
+        )
+        count = len(result.data) if result.data else 0
+        logger.info(f"[Supabase] Marked {count} stale document(s) as failed on startup")
+        return count
+
     async def find_similar_chunks(
         self,
         doc_id: str,
