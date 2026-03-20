@@ -30,7 +30,7 @@ def _http_error(
     return HTTPException(status_code=status_code, detail=detail, headers=headers)
 
 
-@router.post("/upload")
+@router.post("/upload", status_code=202)
 async def upload(file: UploadFile = File(...)):
     """
     Accept a file upload, validate it, and enqueue it for background processing.
