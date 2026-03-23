@@ -1,4 +1,9 @@
-"""Unit tests for the text cleaning and normalization service."""
+"""Unit tests for the text cleaning and normalization service.
+
+clean_text() uses a "nuclear" flattening approach: ALL line breaks are
+converted to spaces, producing a single flat prose string. This maximises
+reflow of PDF-extracted fragments while keeping the implementation simple.
+"""
 
 import pytest
 
@@ -12,10 +17,8 @@ class TestEdgeCases:
     def test_whitespace_only_returns_empty(self):
         assert clean_text("   \n\n\t  ") == ""
 
-    def test_none_like_passthrough_is_not_called(self):
-        # Sanity: function is only called with str; empty string is safe
-        result = clean_text("")
-        assert result == ""
+    def test_single_word_unchanged(self):
+        assert clean_text("hello") == "hello"
 
 
 class TestUnicodeNormalization:
@@ -30,7 +33,6 @@ class TestUnicodeNormalization:
         assert result == "hello world"
 
     def test_fullwidth_digits_normalized(self):
-        # Fullwidth digit characters normalized to ASCII
         result = clean_text("\uff11\uff12\uff13")
         assert result == "123"
 
@@ -45,17 +47,17 @@ class TestControlCharacterRemoval:
         assert result == "test"
 
     def test_vertical_tab_and_form_feed_removed(self):
+        # \x0b and \x0c are stripped before line-break flattening
         result = clean_text("a\x0bb\x0cc")
         assert result == "abc"
 
-    def test_newlines_preserved(self):
+    def test_newlines_become_spaces(self):
         result = clean_text("line one\nline two")
-        assert result == "line one\nline two"
+        assert result == "line one line two"
 
-    def test_tabs_preserved_within_line(self):
-        # Tabs at the start of a line are kept (indented content)
-        result = clean_text("header\n\tindented")
-        assert result == "header\n\tindented"
+    def test_tabs_become_spaces(self):
+        result = clean_text("col1\tcol2")
+        assert result == "col1 col2"
 
 
 class TestSoftHyphenRemoval:
@@ -75,103 +77,132 @@ class TestHyphenatedLineBreaks:
         result = clean_text("connec-\ntion")
         assert result == "connection"
 
-    def test_hyphenated_line_break_with_leading_space(self):
-        # Hyphen at end of line followed by word on next line
+    def test_hyphenated_line_break_with_context(self):
         result = clean_text("This is a connec-\ntion example.")
         assert result == "This is a connection example."
 
-    def test_hyphen_at_end_of_line_before_blank_line_preserved(self):
-        # A trailing hyphen before a blank line is NOT a word-break artifact
+    def test_trailing_hyphen_before_blank_line_not_joined(self):
+        # Hyphen before a blank line is NOT a word-break artifact
         result = clean_text("some text-\n\nnext paragraph")
         assert "text-" in result
 
-    def test_standalone_hyphen_line_not_joined(self):
-        # A line that is just "- item" (list marker) should not be mangled
+    def test_standalone_list_hyphen_preserved(self):
         result = clean_text("- first item\n- second item")
         assert "- first item" in result
         assert "- second item" in result
 
 
-class TestLineEndingNormalization:
-    def test_windows_crlf_normalized(self):
-        result = clean_text("line one\r\nline two")
-        assert result == "line one\nline two"
+class TestLineBreakFlattening:
+    """All line breaks — regardless of type or surrounding punctuation — become spaces."""
 
-    def test_old_mac_cr_normalized(self):
-        result = clean_text("line one\rline two")
-        assert result == "line one\nline two"
+    def test_single_newline_becomes_space(self):
+        assert clean_text("first\nsecond") == "first second"
 
-    def test_mixed_line_endings_normalized(self):
-        result = clean_text("a\r\nb\rc\nd")
-        assert result == "a\nb\nc\nd"
+    def test_crlf_becomes_space(self):
+        assert clean_text("first\r\nsecond") == "first second"
 
+    def test_cr_becomes_space(self):
+        assert clean_text("first\rsecond") == "first second"
 
-class TestTrailingWhitespace:
-    def test_trailing_spaces_stripped_per_line(self):
+    def test_multiple_newlines_become_single_space(self):
+        assert clean_text("first\n\n\nsecond") == "first second"
+
+    def test_blank_lines_become_single_space(self):
+        assert clean_text("para one\n\n\n\npara two") == "para one para two"
+
+    def test_punctuated_lines_also_joined(self):
+        # Terminal punctuation does NOT prevent joining in the nuclear approach
+        result = clean_text("Sentence one.\nSentence two.")
+        assert result == "Sentence one. Sentence two."
+
+    def test_trailing_whitespace_removed(self):
         result = clean_text("hello   \nworld  ")
-        assert result == "hello\nworld"
-
-    def test_trailing_tab_stripped_per_line(self):
-        result = clean_text("line\t")
-        assert result == "line"
-
-    def test_multiple_leading_spaces_collapsed(self):
-        # Multiple leading spaces are collapsed to one — PDF indentation is
-        # a layout artifact and not semantically meaningful for prose documents.
-        result = clean_text("header\n    indented line\nfooter")
-        lines = result.split("\n")
-        assert lines[1] == " indented line"
-
-
-class TestBlankLineCollapse:
-    def test_three_blank_lines_collapsed_to_two(self):
-        result = clean_text("para one\n\n\n\npara two")
-        assert result == "para one\n\npara two"
-
-    def test_many_blank_lines_collapsed_to_two(self):
-        result = clean_text("a\n\n\n\n\n\n\nb")
-        assert result == "a\n\nb"
-
-    def test_two_blank_lines_preserved(self):
-        result = clean_text("a\n\nb")
-        assert result == "a\n\nb"
-
-    def test_single_blank_line_preserved(self):
-        result = clean_text("a\n\nb")
-        assert result == "a\n\nb"
-
-
-class TestInlineSpaceCollapse:
-    def test_multiple_spaces_collapsed(self):
-        result = clean_text("hello     world")
         assert result == "hello world"
 
-    def test_mixed_spaces_and_tabs_collapsed(self):
-        result = clean_text("col1\t\t\tcol2")
-        assert result == "col1 col2"
-
-    def test_single_space_untouched(self):
-        result = clean_text("hello world")
-        assert result == "hello world"
-
-
-class TestFinalStrip:
     def test_leading_newlines_stripped(self):
-        result = clean_text("\n\nhello")
-        assert result == "hello"
+        assert clean_text("\n\nhello") == "hello"
 
     def test_trailing_newlines_stripped(self):
-        result = clean_text("hello\n\n")
-        assert result == "hello"
+        assert clean_text("hello\n\n") == "hello"
+
+
+class TestWhitespaceNormalization:
+    def test_multiple_spaces_collapsed(self):
+        assert clean_text("hello     world") == "hello world"
+
+    def test_tab_sequence_collapsed_to_space(self):
+        assert clean_text("col1\t\t\tcol2") == "col1 col2"
+
+    def test_mixed_spaces_and_tabs_collapsed(self):
+        assert clean_text("a\t  \tb") == "a b"
+
+    def test_single_space_untouched(self):
+        assert clean_text("hello world") == "hello world"
 
     def test_surrounding_whitespace_stripped(self):
-        result = clean_text("   hello world   ")
-        assert result == "hello world"
+        assert clean_text("   hello world   ") == "hello world"
+
+
+class TestBulletRemoval:
+    def test_filled_circle_bullet_removed(self):
+        result = clean_text("● First item\n● Second item")
+        assert "●" not in result
+        assert "First item" in result
+        assert "Second item" in result
+
+    def test_dot_bullet_removed(self):
+        result = clean_text("• Option A\n• Option B")
+        assert "•" not in result
+        assert "Option A" in result
+
+    def test_small_square_bullet_removed(self):
+        result = clean_text("▪ Step one\n▪ Step two")
+        assert "▪" not in result
+        assert "Step one" in result
+
+    def test_hollow_circle_bullet_removed(self):
+        result = clean_text("◦ Sub-item")
+        assert "◦" not in result
+        assert "Sub-item" in result
+
+    def test_mixed_bullets_all_removed(self):
+        result = clean_text("● Item A\n• Item B\n▪ Item C\n◦ Item D")
+        for bullet in ("●", "•", "▪", "◦"):
+            assert bullet not in result
+
+    def test_regular_text_unaffected_by_bullet_removal(self):
+        result = clean_text("No bullets here, just normal text.")
+        assert result == "No bullets here, just normal text."
+
+
+class TestPDFReflowArtifacts:
+    """PDF extraction often produces one word or phrase per line; all get merged."""
+
+    def test_word_per_line_fragments_joined(self):
+        result = clean_text("users\nto\nhave\nconversational")
+        assert result == "users to have conversational"
+
+    def test_uppercase_fragments_joined(self):
+        result = clean_text("Users\nTo\nHave\nConversational")
+        assert result == "Users To Have Conversational"
+
+    def test_mixed_case_fragments_joined(self):
+        result = clean_text("allow\nUsers\nto access\nData")
+        assert result == "allow Users to access Data"
+
+    def test_multi_line_prose_fully_joined(self):
+        result = clean_text("The quick brown fox\njumps over\nthe lazy dog.")
+        assert result == "The quick brown fox jumps over the lazy dog."
+
+    def test_no_newlines_in_output(self):
+        raw = "line one\nline two\nline three"
+        result = clean_text(raw)
+        assert "\n" not in result
 
 
 class TestRealWorldPatterns:
-    def test_pdf_page_with_header_and_footer_whitespace(self):
-        """Simulates a PDF page dump with extra blank lines from header/footer separation."""
+    def test_pdf_page_with_headers_and_footers(self):
+        """Simulates a PDF page dump with header/footer blank-line padding."""
         raw = (
             "\n\n\n"
             "CHAPTER 1\n\n\n\n"
@@ -181,18 +212,15 @@ class TestRealWorldPatterns:
             "Page 1\n"
         )
         result = clean_text(raw)
-        # Hyphenated break rejoined
-        assert "architecture" in result
-        # Excess blank lines collapsed
-        assert "\n\n\n" not in result
-        # Page number line preserved (we don't strip arbitrary lines)
+        assert "architecture" in result   # hyphenated break rejoined
+        assert "\n" not in result         # no stray newlines
+        assert "CHAPTER 1" in result
         assert "Page 1" in result
 
-    def test_txt_file_with_inconsistent_whitespace(self):
-        """Simulates a TXT dump with tabs and multiple spaces."""
+    def test_txt_file_with_tabs_and_multiple_spaces(self):
         raw = "Name:\t\tJohn   Doe\nAge:\t\t 30\nCity:   New   York"
         result = clean_text(raw)
-        assert result == "Name: John Doe\nAge: 30\nCity: New York"
+        assert result == "Name: John Doe Age: 30 City: New York"
 
     def test_combined_ligature_and_hyphen_artifact(self):
         """PDF may have both ligatures and hyphenated breaks in the same text."""
