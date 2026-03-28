@@ -4,17 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User, FileText, X } from "lucide-react";
 import UploadButton from "../components/UploadButton";
 import UploadModal from "../components/UploadModal";
-
-const API_BASE = "http://localhost:8000";
-
-async function deleteDocumentById(
-  documentId: string
-): Promise<"gone" | "conflict" | "error"> {
-  const res = await fetch(`${API_BASE}/documents/${documentId}`, { method: "DELETE" });
-  if (res.status === 204 || res.status === 404) return "gone";
-  if (res.status === 409) return "conflict";
-  return "error";
-}
+import { deleteDocument, getDocumentStatus } from "../lib/api";
 
 type Message = {
   id: number;
@@ -30,6 +20,7 @@ type AttachmentState = {
   status: "processing" | "ready" | "failed";
 };
 
+// Demo placeholder messages — not persisted
 const sampleMessages: Message[] = [
   { id: 1, sender: "ai", text: "Hello! I'm ChatVector. Upload a document and I'll help you find answers from it." },
   { id: 2, sender: "user", text: "What is RAG?" },
@@ -54,23 +45,22 @@ export default function ChatPage() {
 
     const docId = attachment.documentId;
     const statusPath = attachment.statusEndpoint;
-    const url = `${API_BASE}${statusPath}`;
     let cancelled = false;
 
     const poll = async () => {
       if (cancelled) return;
       try {
-        const res = await fetch(url);
-        if (!res.ok) {
-          if (res.status === 404) {
+        const result = await getDocumentStatus(statusPath);
+        if (!result.ok) {
+          if (result.status === 404) {
             setAttachment((curr) =>
               curr?.documentId === docId ? { ...curr, status: "failed" } : curr
             );
           }
           return;
         }
-        const data = await res.json();
-        const st = data.status as string | undefined;
+        const data = result.data as { status?: string };
+        const st = data.status;
         if (st === "completed") {
           let readyName = "";
           setAttachment((curr) => {
@@ -106,7 +96,7 @@ export default function ChatPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [attachment?.documentId, attachment?.statusEndpoint, attachment?.status]);
+  }, [attachment?.documentId, attachment?.status]);
 
   const handleSend = () => {
     if (!input.trim()) return;
@@ -125,7 +115,7 @@ export default function ChatPage() {
 
   const handleBeforeUpload = async () => {
     if (!attachment) return;
-    const out = await deleteDocumentById(attachment.documentId);
+    const out = await deleteDocument(attachment.documentId);
     if (out === "gone") {
       setAttachment(null);
       setRemoveError(null);
@@ -157,7 +147,7 @@ export default function ChatPage() {
     if (!attachment) return;
     setRemoveError(null);
     try {
-      const out = await deleteDocumentById(attachment.documentId);
+      const out = await deleteDocument(attachment.documentId);
       if (out === "gone") {
         setAttachment(null);
         return;

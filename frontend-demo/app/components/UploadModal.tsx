@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { X, Upload } from "lucide-react";
+import { uploadDocument } from "../lib/api";
 
 export type UploadAcceptedPayload = {
   fileName: string;
@@ -28,29 +29,7 @@ export default function UploadModal({ onClose, onBeforeUpload, onUploadAccepted 
       if (onBeforeUpload) {
         await onBeforeUpload();
       }
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("http://localhost:8000/upload", {
-        method: "POST",
-        body: formData,
-      });
-      if (!res.ok) {
-        let message = "Upload failed. Please try again.";
-        try {
-          const errBody = await res.json();
-          const detail = errBody?.detail;
-          if (typeof detail?.message === "string") message = detail.message;
-        } catch {
-          /* ignore */
-        }
-        throw new Error(message);
-      }
-      const data = await res.json();
-      const documentId = data?.document_id as string | undefined;
-      const statusEndpoint = data?.status_endpoint as string | undefined;
-      if (!documentId || !statusEndpoint) {
-        throw new Error("Invalid upload response from server.");
-      }
+      const { documentId, statusEndpoint } = await uploadDocument(file);
       onUploadAccepted({ fileName: file.name, documentId, statusEndpoint });
       onClose();
     } catch (e) {

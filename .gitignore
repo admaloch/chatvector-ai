@@ -10,7 +10,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# Python build layout (root only — do not ignore frontend app/lib)
+/lib/
 lib64/
 parts/
 sdist/
