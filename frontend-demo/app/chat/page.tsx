@@ -7,6 +7,15 @@ import UploadModal from "../components/UploadModal";
 
 const API_BASE = "http://localhost:8000";
 
+async function deleteDocumentById(
+  documentId: string
+): Promise<"gone" | "conflict" | "error"> {
+  const res = await fetch(`${API_BASE}/documents/${documentId}`, { method: "DELETE" });
+  if (res.status === 204 || res.status === 404) return "gone";
+  if (res.status === 409) return "conflict";
+  return "error";
+}
+
 type Message = {
   id: number;
   sender: "ai" | "user";
@@ -114,6 +123,22 @@ export default function ChatPage() {
     if (e.key === "Enter") handleSend();
   };
 
+  const handleBeforeUpload = async () => {
+    if (!attachment) return;
+    const out = await deleteDocumentById(attachment.documentId);
+    if (out === "gone") {
+      setAttachment(null);
+      setRemoveError(null);
+      return;
+    }
+    if (out === "conflict") {
+      throw new Error(
+        "Wait for the current document to finish processing, or remove it, before uploading another."
+      );
+    }
+    throw new Error("Could not remove the previous document. Try again.");
+  };
+
   const handleUploadAccepted = (payload: {
     fileName: string;
     documentId: string;
@@ -132,14 +157,12 @@ export default function ChatPage() {
     if (!attachment) return;
     setRemoveError(null);
     try {
-      const res = await fetch(`${API_BASE}/documents/${attachment.documentId}`, {
-        method: "DELETE",
-      });
-      if (res.status === 204 || res.status === 404) {
+      const out = await deleteDocumentById(attachment.documentId);
+      if (out === "gone") {
         setAttachment(null);
         return;
       }
-      if (res.status === 409) {
+      if (out === "conflict") {
         setRemoveError("Can't remove while the document is queued or processing.");
         return;
       }
@@ -161,6 +184,7 @@ export default function ChatPage() {
       {showModal && (
         <UploadModal
           onClose={() => setShowModal(false)}
+          onBeforeUpload={handleBeforeUpload}
           onUploadAccepted={handleUploadAccepted}
         />
       )}

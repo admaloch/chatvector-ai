@@ -11,10 +11,12 @@ export type UploadAcceptedPayload = {
 
 type Props = {
   onClose: () => void;
+  /** Run before POST /upload (e.g. delete the prior document so replacement does not orphan rows). */
+  onBeforeUpload?: () => Promise<void>;
   onUploadAccepted: (payload: UploadAcceptedPayload) => void;
 };
 
-export default function UploadModal({ onClose, onUploadAccepted }: Props) {
+export default function UploadModal({ onClose, onBeforeUpload, onUploadAccepted }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<"idle" | "uploading" | "error">("idle");
   const [error, setError] = useState("");
@@ -23,6 +25,9 @@ export default function UploadModal({ onClose, onUploadAccepted }: Props) {
     setStatus("uploading");
     setError("");
     try {
+      if (onBeforeUpload) {
+        await onBeforeUpload();
+      }
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch("http://localhost:8000/upload", {
