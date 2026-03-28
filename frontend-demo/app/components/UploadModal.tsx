@@ -3,14 +3,20 @@
 import { useRef, useState } from "react";
 import { X, Upload } from "lucide-react";
 
-type Props = {
-  onClose: () => void;
-  onUploadSuccess: (fileName: string) => void;
+export type UploadAcceptedPayload = {
+  fileName: string;
+  documentId: string;
+  statusEndpoint: string;
 };
 
-export default function UploadModal({ onClose, onUploadSuccess }: Props) {
+type Props = {
+  onClose: () => void;
+  onUploadAccepted: (payload: UploadAcceptedPayload) => void;
+};
+
+export default function UploadModal({ onClose, onUploadAccepted }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [status, setStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "uploading" | "error">("idle");
   const [error, setError] = useState("");
 
   const handleFile = async (file: File) => {
@@ -23,13 +29,28 @@ export default function UploadModal({ onClose, onUploadSuccess }: Props) {
         method: "POST",
         body: formData,
       });
-      if (!res.ok) throw new Error("Upload failed");
-      setStatus("success");
-      onUploadSuccess(file.name);
-      setTimeout(() => onClose(), 1000);
-    } catch {
+      if (!res.ok) {
+        let message = "Upload failed. Please try again.";
+        try {
+          const errBody = await res.json();
+          const detail = errBody?.detail;
+          if (typeof detail?.message === "string") message = detail.message;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(message);
+      }
+      const data = await res.json();
+      const documentId = data?.document_id as string | undefined;
+      const statusEndpoint = data?.status_endpoint as string | undefined;
+      if (!documentId || !statusEndpoint) {
+        throw new Error("Invalid upload response from server.");
+      }
+      onUploadAccepted({ fileName: file.name, documentId, statusEndpoint });
+      onClose();
+    } catch (e) {
       setStatus("error");
-      setError("Upload failed. Please try again.");
+      setError(e instanceof Error ? e.message : "Upload failed. Please try again.");
     }
   };
 
@@ -67,7 +88,6 @@ export default function UploadModal({ onClose, onUploadSuccess }: Props) {
             className="hidden"
           />
           {status === "uploading" && <p className="text-indigo-400 text-sm animate-pulse">Uploading...</p>}
-          {status === "success" && <p className="text-green-400 text-sm">✅ Upload successful!</p>}
           {status === "error" && <p className="text-red-400 text-sm">{error}</p>}
           {status === "idle" && (
             <>

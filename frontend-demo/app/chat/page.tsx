@@ -1,14 +1,24 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, FileText } from "lucide-react";
+import { Send, Bot, User, FileText, X } from "lucide-react";
 import UploadButton from "../components/UploadButton";
 import UploadModal from "../components/UploadModal";
+
+const API_BASE = "http://localhost:8000";
 
 type Message = {
   id: number;
   sender: "ai" | "user";
   text: string;
+  document_id?: string;
+};
+
+type AttachmentState = {
+  fileName: string;
+  documentId: string;
+  statusEndpoint: string;
+  status: "processing" | "ready" | "failed";
 };
 
 const sampleMessages: Message[] = [
@@ -22,18 +32,80 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>(sampleMessages);
   const [input, setInput] = useState("");
   const [showModal, setShowModal] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<string | null>(null);
+  const [attachment, setAttachment] = useState<AttachmentState | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    if (!attachment || attachment.status !== "processing") return;
+
+    const docId = attachment.documentId;
+    const statusPath = attachment.statusEndpoint;
+    const url = `${API_BASE}${statusPath}`;
+    let cancelled = false;
+
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          if (res.status === 404) {
+            setAttachment((curr) =>
+              curr?.documentId === docId ? { ...curr, status: "failed" } : curr
+            );
+          }
+          return;
+        }
+        const data = await res.json();
+        const st = data.status as string | undefined;
+        if (st === "completed") {
+          let readyName = "";
+          setAttachment((curr) => {
+            if (!curr || curr.documentId !== docId || curr.status !== "processing") {
+              return curr;
+            }
+            readyName = curr.fileName;
+            return { ...curr, status: "ready" };
+          });
+          if (readyName) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: Date.now(),
+                sender: "ai",
+                text: `Document "${readyName}" is ready. You can ask questions about it.`,
+              },
+            ]);
+          }
+        } else if (st === "failed") {
+          setAttachment((curr) =>
+            curr?.documentId === docId ? { ...curr, status: "failed" } : curr
+          );
+        }
+      } catch {
+        /* next interval */
+      }
+    };
+
+    void poll();
+    const interval = setInterval(poll, 2500);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [attachment?.documentId, attachment?.statusEndpoint, attachment?.status]);
+
   const handleSend = () => {
     if (!input.trim()) return;
+    const document_id =
+      attachment?.status === "ready" ? attachment.documentId : undefined;
     setMessages((prev) => [
       ...prev,
-      { id: Date.now(), sender: "user", text: input.trim() },
+      { id: Date.now(), sender: "user", text: input.trim(), document_id },
     ]);
     setInput("");
   };
@@ -42,20 +114,54 @@ export default function ChatPage() {
     if (e.key === "Enter") handleSend();
   };
 
-  const handleUploadSuccess = (fileName: string) => {
-    setUploadedFile(fileName);
-    setMessages((prev) => [
-      ...prev,
-      { id: Date.now(), sender: "ai", text: `Document "${fileName}" uploaded! You can now ask questions about it.` },
-    ]);
+  const handleUploadAccepted = (payload: {
+    fileName: string;
+    documentId: string;
+    statusEndpoint: string;
+  }) => {
+    setRemoveError(null);
+    setAttachment({
+      fileName: payload.fileName,
+      documentId: payload.documentId,
+      statusEndpoint: payload.statusEndpoint,
+      status: "processing",
+    });
   };
+
+  const handleRemoveAttachment = async () => {
+    if (!attachment) return;
+    setRemoveError(null);
+    try {
+      const res = await fetch(`${API_BASE}/documents/${attachment.documentId}`, {
+        method: "DELETE",
+      });
+      if (res.status === 204 || res.status === 404) {
+        setAttachment(null);
+        return;
+      }
+      if (res.status === 409) {
+        setRemoveError("Can't remove while the document is queued or processing.");
+        return;
+      }
+      setRemoveError("Could not remove the document. Try again.");
+    } catch {
+      setRemoveError("Could not remove the document. Try again.");
+    }
+  };
+
+  const chipLabel =
+    attachment?.status === "processing"
+      ? "Processing…"
+      : attachment?.status === "failed"
+        ? "Processing failed"
+        : attachment?.fileName ?? "";
 
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-white">
       {showModal && (
         <UploadModal
           onClose={() => setShowModal(false)}
-          onUploadSuccess={handleUploadSuccess}
+          onUploadAccepted={handleUploadAccepted}
         />
       )}
 
@@ -76,12 +182,42 @@ export default function ChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      {uploadedFile && (
+      {attachment && (
         <div className="px-4 py-2 bg-gray-900 border-t border-gray-800 flex items-center gap-2">
-          <FileText size={14} className="text-indigo-400" />
+          <FileText
+            size={14}
+            className={
+              attachment.status === "failed"
+                ? "text-red-400"
+                : attachment.status === "processing"
+                  ? "text-amber-400"
+                  : "text-indigo-400"
+            }
+          />
           <span className="text-xs text-gray-400">Active document:</span>
-          <span className="text-xs text-indigo-400 font-medium">{uploadedFile}</span>
+          <span
+            className={`text-xs font-medium flex-1 truncate ${
+              attachment.status === "failed"
+                ? "text-red-400"
+                : attachment.status === "processing"
+                  ? "text-amber-400"
+                  : "text-indigo-400"
+            }`}
+          >
+            {chipLabel}
+          </span>
+          <button
+            type="button"
+            onClick={handleRemoveAttachment}
+            className="p-1 rounded-md text-gray-500 hover:text-white hover:bg-gray-800 transition shrink-0"
+            aria-label="Remove attachment"
+          >
+            <X size={16} />
+          </button>
         </div>
+      )}
+      {removeError && (
+        <p className="px-4 pb-1 text-xs text-red-400 bg-gray-900">{removeError}</p>
       )}
 
       <div className="px-4 py-3 border-t border-gray-800 bg-gray-900">
