@@ -35,20 +35,25 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_data)
 
 
-def setup_logging(log_file: str = "logs/app.log") -> None:
+def setup_logging(
+    log_file: str = "logs/app.log",
+    access_log_file: str = "logs/access.log",
+) -> None:
     """
     Logging strategy:
-    - Application logs -> file (with request_id)
-    - Uvicorn logs -> console only
+    - Application logs -> logs/app.log (with request_id)
+    - Uvicorn access logs -> logs/access.log AND console
     - No duplicate logs
     - Supports JSON format when LOG_FORMAT=JSON is set
     """
 
     logging.captureWarnings(True)
 
-    # Ensure log directory exists
+    # Ensure log directories exist
     log_path = Path(log_file)
+    access_log_path = Path(access_log_file)
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    access_log_path.parent.mkdir(parents=True, exist_ok=True)
 
     # -------- FORMATTERS --------
     if config.LOG_FORMAT == "JSON":
@@ -77,6 +82,13 @@ def setup_logging(log_file: str = "logs/app.log") -> None:
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(uvicorn_formatter)
 
+    access_file_handler = RotatingFileHandler(
+        access_log_file,
+        maxBytes=10_000_000,
+        backupCount=5,
+    )
+    access_file_handler.setFormatter(uvicorn_formatter)
+
     # -------- ROOT LOGGER (APP LOGS) --------
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
@@ -88,5 +100,6 @@ def setup_logging(log_file: str = "logs/app.log") -> None:
         logger = logging.getLogger(name)
         logger.handlers.clear()
         logger.addHandler(console_handler)
+        logger.addHandler(access_file_handler)
         logger.setLevel(logging.INFO)
         logger.propagate = False
