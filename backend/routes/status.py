@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import time
@@ -120,8 +121,106 @@ async def _database_connected_and_document_count() -> tuple[bool, int | None]:
     return False, None
 
 
-def _overall_status(db_ok: bool) -> str:
-    return "healthy" if db_ok else "degraded"
+def _short_error_message(exc: BaseException, max_len: int = 120) -> str:
+    msg = str(exc).strip() or type(exc).__name__
+    return msg[:max_len]
+
+
+async def _embedding_health_check() -> dict:
+    from services.embedding_service import get_embedding
+
+    t0 = time.monotonic()
+    try:
+        await asyncio.wait_for(get_embedding("health check"), timeout=10.0)
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        return {"status": "ok", "latency_ms": latency_ms}
+    except asyncio.TimeoutError:
+        return {"status": "error", "error": "timeout"}
+    except Exception as e:
+        return {"status": "error", "error": _short_error_message(e)}
+
+
+def _llm_error_code_from_answer_text(text: str) -> str | None:
+    """Map generate_answer error strings to short health-check codes."""
+    from services.answer_service import (
+        LLM_MSG_MISSING_API_KEY,
+        LLM_MSG_RATE_LIMIT,
+        LLM_MSG_TIMEOUT,
+    )
+
+    if text == LLM_MSG_MISSING_API_KEY:
+        return "api_key_missing"
+    if text == LLM_MSG_RATE_LIMIT:
+        return "rate_limited"
+    if text == LLM_MSG_TIMEOUT:
+        return "timeout"
+    if text.startswith("LLM request failed") or text.startswith("LLM service is not available"):
+        return "error"
+    return None
+
+
+def _llm_classify_exception(exc: BaseException) -> str:
+    from google.genai.errors import APIError
+
+    import httpx
+
+    if isinstance(exc, APIError):
+        code = getattr(exc, "code", None)
+        status = str(getattr(exc, "status", "") or "").lower()
+        msg = str(exc).lower()
+        if code == 429 or "resource_exhausted" in status or "quota" in msg:
+            return "rate_limited"
+        if code in (401, 403) or "unauthenticated" in msg or "permission_denied" in status:
+            return "error"
+        if code == 400 and ("api key" in msg or "api_key" in msg or "invalid key" in msg):
+            return "error"
+        return "error"
+
+    if isinstance(
+        exc,
+        (
+            httpx.TimeoutException,
+            httpx.ConnectError,
+            httpx.RemoteProtocolError,
+            httpx.NetworkError,
+        ),
+    ):
+        return "timeout"
+
+    if isinstance(exc, (TimeoutError, ConnectionError, BrokenPipeError)):
+        return "timeout"
+
+    return "error"
+
+
+async def _llm_health_check() -> dict:
+    from services.answer_service import generate_answer
+
+    t0 = time.monotonic()
+    try:
+        result = await asyncio.wait_for(
+            generate_answer("health check", "context: ok"),
+            timeout=15.0,
+        )
+    except asyncio.TimeoutError:
+        return {"status": "error", "error": "timeout"}
+    except Exception as e:
+        return {"status": "error", "error": _llm_classify_exception(e)}
+
+    err_code = _llm_error_code_from_answer_text(result)
+    if err_code is not None:
+        return {"status": "error", "error": err_code}
+
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    return {"status": "ok", "latency_ms": latency_ms}
+
+
+def _overall_status(db_ok: bool, embedding_ok: bool, llm_ok: bool) -> str:
+    if not db_ok:
+        return "unhealthy"
+    if embedding_ok and llm_ok:
+        return "healthy"
+    return "degraded"
 
 
 def _build_payload(
@@ -133,15 +232,25 @@ def _build_payload(
     version: str,
     queue_pending: int,
     workers_active: int,
+    embedding_health: dict,
+    llm_health: dict,
 ) -> dict:
     db_component = "connected" if db_ok else "disconnected"
+    embedding_ok = embedding_health.get("status") == "ok"
+    llm_ok = llm_health.get("status") == "ok"
+    embeddings_component = "ok" if embedding_ok else "degraded"
+    llm_component = "ok" if llm_ok else "degraded"
     return {
-        "status": _overall_status(db_ok),
+        "status": _overall_status(db_ok, embedding_ok, llm_ok),
         "components": {
             "api": "online",
             "database": db_component,
-            "embeddings": "not_monitored",
-            "llm": "not_monitored",
+            "embeddings": embeddings_component,
+            "llm": llm_component,
+        },
+        "health_checks": {
+            "embedding": embedding_health,
+            "llm": llm_health,
         },
         "metrics": {
             "document_queue": queue_pending,
@@ -158,12 +267,25 @@ def _build_payload(
 def _format_ascii(data: dict) -> str:
     c = data["components"]
     m = data["metrics"]
+    hc = data.get("health_checks") or {}
+    emb_h = hc.get("embedding") or {}
+    llm_h = hc.get("llm") or {}
     inner = 50  # text between "║  " and closing "║"
 
     def row(s: str) -> str:
         return "║  " + s[:inner].ljust(inner) + "║"
 
     db_line = "🟢 Database: Connected" if c["database"] == "connected" else "🔴 Database: Disconnected"
+    if emb_h.get("status") == "ok":
+        emb_line = f"🟢 Embeddings: OK ({emb_h['latency_ms']}ms)"
+    else:
+        emb_err = emb_h.get("error", "error")
+        emb_line = f"🔴 Embeddings: Degraded ({emb_err})"
+    if llm_h.get("status") == "ok":
+        llm_line = f"🟢 LLM Service: OK ({llm_h['latency_ms']}ms)"
+    else:
+        llm_err = llm_h.get("error", "error")
+        llm_line = f"🔴 LLM Service: Degraded ({llm_err})"
     mem = m["memory_usage"]
     docs = m["documents_indexed"]
     docs_str = f"{docs:,}" if docs is not None else "—"
@@ -180,8 +302,8 @@ def _format_ascii(data: dict) -> str:
         "╠════════════════════════════════════════════════════╣",
         row("🟢 API Server: ONLINE"),
         row(db_line),
-        row("🟡 Embeddings: Not monitored"),
-        row("🟡 LLM Service: Not monitored"),
+        row(emb_line),
+        row(llm_line),
         row(""),
         row(f"📊 Queue: {queue_bar} {q_cur}/{q_max} pending"),
         row(f"⚙️ Workers Active: {w_active}/{w_cap}"),
@@ -196,10 +318,37 @@ def _format_ascii(data: dict) -> str:
     return "\n".join(lines)
 
 
+def _status_fallback_health_dict(exc: BaseException, label: str) -> dict:
+    logger.exception("%s health check raised unexpectedly", label)
+    return {"status": "error", "error": _short_error_message(exc)}
+
+
 @router.get("/status")
 async def status(request: Request):
     start = getattr(request.app.state, "start_time", time.time())
-    db_ok, doc_count = await _database_connected_and_document_count()
+    db_result, embedding_result, llm_result = await asyncio.gather(
+        _database_connected_and_document_count(),
+        _embedding_health_check(),
+        _llm_health_check(),
+        return_exceptions=True,
+    )
+
+    if isinstance(db_result, BaseException):
+        logger.exception("Database health check raised unexpectedly")
+        db_ok, doc_count = False, None
+    else:
+        db_ok, doc_count = db_result
+
+    if isinstance(embedding_result, BaseException):
+        embedding_health = _status_fallback_health_dict(embedding_result, "Embedding")
+    else:
+        embedding_health = embedding_result
+
+    if isinstance(llm_result, BaseException):
+        llm_health = _status_fallback_health_dict(llm_result, "LLM")
+    else:
+        llm_health = llm_result
+
     memory_pct = _process_memory_percent()
     version = _read_version()
     uptime_str = _format_uptime(start)
@@ -214,6 +363,8 @@ async def status(request: Request):
         version=version,
         queue_pending=q_pending,
         workers_active=workers_active,
+        embedding_health=embedding_health,
+        llm_health=llm_health,
     )
 
     if _is_browser(request):

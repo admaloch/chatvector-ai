@@ -28,25 +28,37 @@ def _load_system_prompt() -> str:
 
 _SYSTEM_PROMPT = _load_system_prompt()
 
+LLM_MSG_MISSING_API_KEY = (
+    "LLM service is not available: API key is missing or not configured."
+)
+LLM_MSG_INVALID_API_KEY = "LLM request failed: invalid or unauthorized API key."
+LLM_MSG_RATE_LIMIT = (
+    "LLM request failed: rate limit or quota exceeded. Please try again later."
+)
+LLM_MSG_TIMEOUT = (
+    "LLM request failed: the service timed out or could not be reached."
+)
+LLM_MSG_UNEXPECTED = "LLM request failed due to an unexpected error."
+
 
 def _msg_missing_api_key() -> str:
-    return "LLM service is not available: API key is missing or not configured."
+    return LLM_MSG_MISSING_API_KEY
 
 
 def _msg_invalid_api_key() -> str:
-    return "LLM request failed: invalid or unauthorized API key."
+    return LLM_MSG_INVALID_API_KEY
 
 
 def _msg_rate_limit() -> str:
-    return "LLM request failed: rate limit or quota exceeded. Please try again later."
+    return LLM_MSG_RATE_LIMIT
 
 
 def _msg_timeout_or_connection() -> str:
-    return "LLM request failed: the service timed out or could not be reached."
+    return LLM_MSG_TIMEOUT
 
 
 def _msg_unexpected() -> str:
-    return "LLM request failed due to an unexpected error."
+    return LLM_MSG_UNEXPECTED
 
 
 async def generate_answer(question: str, context: str) -> str:
