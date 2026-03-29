@@ -189,7 +189,10 @@ class ChatVectorClientTests(unittest.TestCase):
 
         with patch.object(self.client._client, "request", return_value=response):
             batch = self.client.batch_chat(
-                [BatchChatQuery(question="Summarize it.", doc_ids=["doc-123"], match_count=3)]
+                [
+                    BatchChatQuery(question="Summarize it.", doc_ids=["doc-123"], match_count=3),
+                    BatchChatQuery(question="What are the risks?", doc_ids=["doc-123"], match_count=3),
+                ]
             )
 
         self.assertIsInstance(batch, BatchChatResponse)
