@@ -6,7 +6,7 @@ from pathlib import Path
 
 import httpx
 from google import genai
-from google.genai import types
+from google.genai import types as genai_types
 from google.genai.errors import APIError
 
 from core.config import config
@@ -14,7 +14,10 @@ from core.config import config
 logger = logging.getLogger(__name__)
 
 # Use the SAME client as embedding service
-client = genai.Client(api_key=config.GEN_AI_KEY)
+client = genai.Client(
+    api_key=config.GEN_AI_KEY,
+    http_options=genai_types.HttpOptions(timeout=config.LLM_HTTP_TIMEOUT_MS),
+)
 
 
 def _load_system_prompt() -> str:
@@ -75,7 +78,7 @@ async def generate_answer(question: str, context: str) -> str:
         )
         return _msg_missing_api_key()
 
-    config_obj = types.GenerateContentConfig(
+    config_obj = genai_types.GenerateContentConfig(
         system_instruction=_SYSTEM_PROMPT,
         temperature=config.LLM_TEMPERATURE,
         max_output_tokens=config.LLM_MAX_OUTPUT_TOKENS,

@@ -1,4 +1,4 @@
-from supabase import create_client
+from supabase import ClientOptions, create_client
 from core.config import config
 import logging
 
@@ -21,7 +21,11 @@ class _LazySupabaseClient:
                 )
             self._client = create_client(
                 config.SUPABASE_URL,
-                config.SUPABASE_KEY
+                config.SUPABASE_KEY,
+                options=ClientOptions(
+                    postgrest_client_timeout=config.SUPABASE_HTTP_TIMEOUT_SEC,
+                    storage_client_timeout=config.SUPABASE_HTTP_TIMEOUT_SEC,
+                ),
             )
             logger.info("Supabase client initialized successfully.")
 

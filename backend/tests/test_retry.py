@@ -2,8 +2,11 @@
 Tests for the retry utility.
 Tests both the retry mechanism and error classification.
 """
-import pytest
 import asyncio
+
+import httpx
+import pytest
+from google.genai.errors import APIError
 from unittest.mock import AsyncMock, patch
 
 from utils.retry import retry_async, is_transient_error
@@ -150,3 +153,32 @@ def test_transient_error_detection():
     assert is_transient_error(Exception("constraint violation")) is False
     assert is_transient_error(Exception("invalid input syntax")) is False
     assert is_transient_error(Exception("permission denied")) is False
+
+
+def test_is_transient_error_api_error_429():
+    resp = httpx.Response(
+        429,
+        json={
+            "error": {
+                "status": "RESOURCE_EXHAUSTED",
+                "message": "Rate exceeded",
+            }
+        },
+    )
+    assert is_transient_error(APIError(429, resp)) is True
+
+
+def test_is_transient_error_api_error_resource_exhausted_in_status():
+    resp = httpx.Response(
+        503,
+        json={"error": {"status": "RESOURCE_EXHAUSTED", "message": "Try later"}},
+    )
+    assert is_transient_error(APIError(503, resp)) is True
+
+
+def test_is_transient_error_api_error_non_transient():
+    resp = httpx.Response(
+        400,
+        json={"error": {"status": "INVALID_ARGUMENT", "message": "Malformed request"}},
+    )
+    assert is_transient_error(APIError(400, resp)) is False

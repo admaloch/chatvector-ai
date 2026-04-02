@@ -31,12 +31,32 @@ TRANSIENT_DB_ERROR_PATTERNS = [
     "reset",
     "broken pipe",
     "unavailable",
+    "quota",
+    "resource_exhausted",
+    "rate limit",
 ]
 
 
 def is_transient_error(exception: Exception) -> bool:
     if isinstance(exception, asyncio.TimeoutError):
         return True
+
+    try:
+        from google.genai.errors import APIError
+
+        if isinstance(exception, APIError):
+            code = getattr(exception, "code", None)
+            status = str(getattr(exception, "status", "") or "").lower()
+            msg = str(exception).lower()
+            if (
+                code == 429
+                or "resource_exhausted" in status
+                or "quota" in msg
+                or "rate_limit" in msg
+            ):
+                return True
+    except ImportError:
+        pass
 
     error_str = str(exception).lower()
     logger.debug(f"Checking if error is transient: {error_str}")

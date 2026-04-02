@@ -31,6 +31,9 @@ class SQLAlchemyService(DatabaseService):
             pool_size=config.SQLALCHEMY_POOL_SIZE,
             max_overflow=config.SQLALCHEMY_MAX_OVERFLOW,
             pool_timeout=config.SQLALCHEMY_POOL_TIMEOUT_SEC,
+            connect_args={
+                "command_timeout": config.SQLALCHEMY_STATEMENT_TIMEOUT_SEC,
+            },
         )
         self.async_session = sessionmaker(
             self.engine,
