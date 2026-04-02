@@ -27,6 +27,7 @@ Configuration (via .env / core/config.py)
 
 import asyncio
 import logging
+import random
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -253,7 +254,7 @@ class IngestionQueueService:
 
     async def _process_job(self, job: QueueJob, worker_id: int) -> None:
         # Lazy import avoids a circular-import at module level
-        from services.ingestion_pipeline import IngestionPipeline
+        from services.ingestion_pipeline import IngestionPipeline, UploadPipelineError
 
         logger.info(
             f"Worker-{worker_id} processing document {job.doc_id} "
@@ -270,11 +271,29 @@ class IngestionQueueService:
                 rate_limiter=self._rate_limiter,
             )
         except Exception as exc:
+            if isinstance(exc, UploadPipelineError) and 400 <= exc.status_code < 500:
+                logger.error(
+                    f"Document {job.doc_id} ({job.file_name!r}) failed with "
+                    f"non-retryable pipeline error (HTTP {exc.status_code}) "
+                    f"— moving to DLQ: {exc}",
+                    exc_info=True,
+                )
+                self._dlq.append(DLQEntry(
+                    doc_id=job.doc_id,
+                    file_name=job.file_name,
+                    content_type=job.content_type,
+                    attempt=job.attempt,
+                    error=str(exc),
+                ))
+                return
+
             if job.attempt < config.QUEUE_JOB_MAX_RETRIES:
                 job.attempt += 1
+                cap = config.QUEUE_RETRY_BASE_DELAY * (2 ** job.attempt)
+                delay = random.uniform(0, cap)
                 logger.warning(
                     f"Document {job.doc_id} failed on attempt {job.attempt} "
-                    f"— requeueing: {exc}"
+                    f"— requeueing after {delay:.2f}s: {exc}"
                 )
                 # Override the "failed" status set by _handle_error so clients
                 # polling the status endpoint see "retrying" instead of a
@@ -287,6 +306,7 @@ class IngestionQueueService:
                     logger.error(
                         f"Failed to set retrying status for {job.doc_id}: {status_err}"
                     )
+                await asyncio.sleep(delay)
                 await self._queue.put(job)
             else:
                 logger.error(

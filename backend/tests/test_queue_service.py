@@ -148,6 +148,7 @@ async def test_failed_job_retries_then_moves_to_dlq(monkeypatch):
     with (
         patch("services.ingestion_pipeline.IngestionPipeline", mock_pipeline_cls),
         patch("services.queue_service.db.update_document_status", new=AsyncMock()),
+        patch("services.queue_service.asyncio.sleep", new=AsyncMock()),
     ):
         await service.start()
         try:
@@ -180,6 +181,7 @@ async def test_job_in_dlq_has_correct_attempt_count(monkeypatch):
     with (
         patch("services.ingestion_pipeline.IngestionPipeline", mock_pipeline_cls),
         patch("services.queue_service.db.update_document_status", new=AsyncMock()),
+        patch("services.queue_service.asyncio.sleep", new=AsyncMock()),
     ):
         await service.start()
         try:
@@ -189,6 +191,84 @@ async def test_job_in_dlq_has_correct_attempt_count(monkeypatch):
             await service.stop()
 
     assert service.dlq_jobs()[0].attempt == 1  # max_retries value after exhaustion
+
+
+@pytest.mark.asyncio
+async def test_upload_pipeline_error_4xx_goes_to_dlq_without_retry(monkeypatch):
+    """Non-retryable 4xx UploadPipelineError should not consume retries or requeue."""
+    monkeypatch.setattr("services.queue_service.config.QUEUE_JOB_MAX_RETRIES", 5)
+
+    service = IngestionQueueService()
+    service._rate_limiter.acquire = AsyncMock()
+
+    from services.ingestion_pipeline import UploadPipelineError
+
+    pipeline_error = UploadPipelineError(
+        status_code=422,
+        code="unprocessable_entity",
+        stage="extract",
+        message="No extractable text",
+    )
+
+    mock_pipeline_cls = MagicMock()
+    mock_pipeline_inst = mock_pipeline_cls.return_value
+    mock_pipeline_inst.process_document_background = AsyncMock(
+        side_effect=pipeline_error
+    )
+
+    with (
+        patch("services.ingestion_pipeline.IngestionPipeline", mock_pipeline_cls),
+        patch("services.queue_service.db.update_document_status", new=AsyncMock()),
+        patch("services.queue_service.asyncio.sleep", new=AsyncMock()) as sleep_mock,
+    ):
+        await service.start()
+        try:
+            await service.enqueue(_make_job("doc-422"))
+            await _drain(service)
+        finally:
+            await service.stop()
+
+    assert mock_pipeline_inst.process_document_background.await_count == 1
+    sleep_mock.assert_not_called()
+    assert len(service.dlq_jobs()) == 1
+    assert service.dlq_jobs()[0].doc_id == "doc-422"
+    assert service.dlq_jobs()[0].attempt == 0
+
+
+@pytest.mark.asyncio
+async def test_retryable_failure_sleeps_before_requeue(monkeypatch):
+    """Generic failures backoff (full jitter) before requeue; success on second attempt."""
+    monkeypatch.setattr("services.queue_service.config.QUEUE_JOB_MAX_RETRIES", 2)
+    monkeypatch.setattr("services.queue_service.config.QUEUE_RETRY_BASE_DELAY", 10.0)
+
+    service = IngestionQueueService()
+    service._rate_limiter.acquire = AsyncMock()
+
+    mock_pipeline_cls = MagicMock()
+    mock_pipeline_inst = mock_pipeline_cls.return_value
+    mock_pipeline_inst.process_document_background = AsyncMock(
+        side_effect=[RuntimeError("transient failure"), None]
+    )
+
+    sleep_mock = AsyncMock()
+    with (
+        patch("services.ingestion_pipeline.IngestionPipeline", mock_pipeline_cls),
+        patch("services.queue_service.db.update_document_status", new=AsyncMock()),
+        patch("services.queue_service.asyncio.sleep", sleep_mock),
+    ):
+        await service.start()
+        try:
+            await service.enqueue(_make_job("doc-retry"))
+            await _drain(service)
+        finally:
+            await service.stop()
+
+    assert mock_pipeline_inst.process_document_background.await_count == 2
+    sleep_mock.assert_awaited_once()
+    delay = sleep_mock.await_args.args[0]
+    # First failure increments attempt to 1 → cap = 10 * 2**1
+    assert 0.0 <= delay <= 20.0
+    assert len(service.dlq_jobs()) == 0
 
 
 # ---------------------------------------------------------------------------

@@ -51,6 +51,9 @@ class Settings:
     IS_PROD = APP_ENV.lower() == "production"
     SUPABASE_URL: str | None = os.getenv("SUPABASE_URL")
     SUPABASE_KEY: str | None = os.getenv("SUPABASE_KEY")
+    SUPABASE_HTTP_TIMEOUT_SEC: int = max(
+        1, int(os.getenv("SUPABASE_HTTP_TIMEOUT_SEC", "30"))
+    )
     GEN_AI_KEY: str | None = os.getenv("GEN_AI_KEY")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
     LOG_USE_UTC: bool = os.getenv("LOG_USE_UTC", "false").lower() in ("1", "true", "yes")
@@ -78,6 +81,9 @@ class Settings:
     SQLALCHEMY_POOL_SIZE: int = max(1, int(os.getenv("SQLALCHEMY_POOL_SIZE", "5")))
     SQLALCHEMY_MAX_OVERFLOW: int = max(0, int(os.getenv("SQLALCHEMY_MAX_OVERFLOW", "10")))
     SQLALCHEMY_POOL_TIMEOUT_SEC: int = max(1, int(os.getenv("SQLALCHEMY_POOL_TIMEOUT_SEC", "30")))
+    SQLALCHEMY_STATEMENT_TIMEOUT_SEC: int = max(
+        1, int(os.getenv("SQLALCHEMY_STATEMENT_TIMEOUT_SEC", "30"))
+    )
     SQLALCHEMY_RETRIEVAL_CONCURRENCY: int = max(1, int(os.getenv("SQLALCHEMY_RETRIEVAL_CONCURRENCY", "8")))
 
     # Background ingestion queue
@@ -85,6 +91,9 @@ class Settings:
     QUEUE_MAX_SIZE: int = max(1, int(os.getenv("QUEUE_MAX_SIZE", "100")))
     QUEUE_EMBEDDING_RPS: float = max(0.1, float(os.getenv("QUEUE_EMBEDDING_RPS", "2.0")))
     QUEUE_JOB_MAX_RETRIES: int = max(0, int(os.getenv("QUEUE_JOB_MAX_RETRIES", "3")))
+    QUEUE_RETRY_BASE_DELAY: float = max(
+        0.1, float(os.getenv("QUEUE_RETRY_BASE_DELAY", "2.0"))
+    )
 
     SYSTEM_PROMPT_PATH: str = os.getenv(
         "SYSTEM_PROMPT_PATH",
@@ -95,6 +104,9 @@ class Settings:
         min(2.0, float(os.getenv("LLM_TEMPERATURE", "0.2"))),
     )
     LLM_MAX_OUTPUT_TOKENS: int = max(1, int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "1024")))
+    LLM_HTTP_TIMEOUT_MS: int = max(
+        1000, int(os.getenv("LLM_HTTP_TIMEOUT_MS", "60000"))
+    )
 
     # Backwards-compatible lowercase properties for accessing config values
     @property
