@@ -1,7 +1,10 @@
 import logging
 
 import asyncio
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+
+from core.config import config
+from middleware.rate_limit import limiter
 
 import db
 from services.ingestion_pipeline import IngestionPipeline, UploadPipelineError
@@ -31,7 +34,8 @@ def _http_error(
 
 
 @router.post("/upload", status_code=202)
-async def upload(file: UploadFile = File(...)):
+@limiter.limit(config.RATE_LIMIT_UPLOAD)
+async def upload(request: Request, file: UploadFile = File(...)):
     """
     Accept a file upload, validate it, and enqueue it for background processing.
 

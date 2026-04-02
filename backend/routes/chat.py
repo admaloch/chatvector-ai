@@ -1,6 +1,9 @@
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+
+from core.config import config
+from middleware.rate_limit import limiter
 from pydantic import BaseModel, Field
 
 from services.chat_service import (
@@ -29,7 +32,8 @@ class ChatRequest(BaseModel):
 
 
 @router.post("/chat")
-async def chat(payload: ChatRequest):
+@limiter.limit(config.RATE_LIMIT_CHAT)
+async def chat(request: Request, payload: ChatRequest):
     logger.info(f"Chat request received for document {payload.doc_id}")
     return await answer_question_for_document(
         question=payload.question,
@@ -39,7 +43,8 @@ async def chat(payload: ChatRequest):
 
 
 @router.post("/chat/batch")
-async def chat_batch(payload: ChatBatchRequest):
+@limiter.limit(config.RATE_LIMIT_CHAT_BATCH)
+async def chat_batch(request: Request, payload: ChatBatchRequest):
     logger.info(f"Batch chat request received with {len(payload.queries)} queries")
 
     try:

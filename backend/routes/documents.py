@@ -1,6 +1,9 @@
 import logging
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Request, Response
+
+from core.config import config
+from middleware.rate_limit import limiter
 
 import db
 from core.config import STALE_INGESTION_STATUSES
@@ -11,7 +14,8 @@ router = APIRouter()
 
 
 @router.get("/documents/{document_id}/status")
-async def get_document_status(document_id: str):
+@limiter.limit(config.RATE_LIMIT_DOCUMENT_STATUS)
+async def get_document_status(request: Request, document_id: str):
     status_payload = await db.get_document_status(document_id)
     if not status_payload:
         raise HTTPException(
@@ -43,7 +47,8 @@ async def get_document_status(document_id: str):
 
 
 @router.delete("/documents/{document_id}", status_code=204)
-async def delete_document(document_id: str):
+@limiter.limit(config.RATE_LIMIT_DOCUMENT_DELETE)
+async def delete_document(request: Request, document_id: str):
     status_payload = await db.get_document_status(document_id)
     if not status_payload:
         raise HTTPException(

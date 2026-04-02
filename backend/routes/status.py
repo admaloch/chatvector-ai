@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 import db
 from core.config import config
+from middleware.rate_limit import limiter
 from core.models import Document as DocumentModel
 from db.sqlalchemy_service import SQLAlchemyService
 from db.supabase_service import SupabaseService
@@ -324,6 +325,7 @@ def _status_fallback_health_dict(exc: BaseException, label: str) -> dict:
 
 
 @router.get("/status")
+@limiter.limit(config.RATE_LIMIT_STATUS)
 async def status(request: Request):
     start = getattr(request.app.state, "start_time", time.time())
     db_result, embedding_result, llm_result = await asyncio.gather(

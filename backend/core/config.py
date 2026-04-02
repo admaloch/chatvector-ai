@@ -95,6 +95,18 @@ class Settings:
         0.1, float(os.getenv("QUEUE_RETRY_BASE_DELAY", "2.0"))
     )
 
+    RATE_LIMIT_UPLOAD: str = os.getenv("RATE_LIMIT_UPLOAD", "20/hour")
+    RATE_LIMIT_CHAT: str = os.getenv("RATE_LIMIT_CHAT", "30/minute")
+    RATE_LIMIT_CHAT_BATCH: str = os.getenv("RATE_LIMIT_CHAT_BATCH", "10/minute")
+    RATE_LIMIT_STATUS: str = os.getenv("RATE_LIMIT_STATUS", "10/minute")
+    RATE_LIMIT_QUEUE_STATS: str = os.getenv("RATE_LIMIT_QUEUE_STATS", "10/minute")
+    RATE_LIMIT_DOCUMENT_STATUS: str = os.getenv(
+        "RATE_LIMIT_DOCUMENT_STATUS", "120/minute"
+    )
+    RATE_LIMIT_DOCUMENT_DELETE: str = os.getenv(
+        "RATE_LIMIT_DOCUMENT_DELETE", "60/hour"
+    )
+
     SYSTEM_PROMPT_PATH: str = os.getenv(
         "SYSTEM_PROMPT_PATH",
         str(ROOT_DIR / "prompts" / "default_system.txt"),

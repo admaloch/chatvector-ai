@@ -1,7 +1,9 @@
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
+from core.config import config
+from middleware.rate_limit import limiter
 from services.queue_service import ingestion_queue
 
 logger = logging.getLogger(__name__)
@@ -20,7 +22,8 @@ router = APIRouter()
 
 
 @router.get("/queue/stats")
-def get_queue_stats():
+@limiter.limit(config.RATE_LIMIT_QUEUE_STATS)
+def get_queue_stats(request: Request):
     """
     Return live ingestion queue statistics and dead-letter queue entries.
 

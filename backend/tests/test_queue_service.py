@@ -280,6 +280,7 @@ async def test_upload_returns_503_when_queue_is_full():
     """POST /upload returns HTTP 503 when the ingestion queue is at capacity."""
     from fastapi import HTTPException, UploadFile
 
+    from request_utils import make_test_request
     from routes.upload import upload
 
     mock_file = AsyncMock(spec=UploadFile)
@@ -297,7 +298,7 @@ async def test_upload_returns_503_when_queue_is_full():
         ),
     ):
         with pytest.raises(HTTPException) as exc_info:
-            await upload(mock_file)
+            await upload(make_test_request("POST", "/upload"), mock_file)
 
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail["code"] == "queue_full"
@@ -310,6 +311,7 @@ async def test_upload_returns_immediately_with_queue_position():
     """POST /upload returns 'queued' status and a numeric queue_position."""
     from fastapi import UploadFile
 
+    from request_utils import make_test_request
     from routes.upload import upload
 
     mock_file = AsyncMock(spec=UploadFile)
@@ -323,7 +325,7 @@ async def test_upload_returns_immediately_with_queue_position():
         patch("routes.upload.db.update_document_status", new=AsyncMock()),
         patch("routes.upload.ingestion_queue.enqueue", new=AsyncMock(return_value=3)),
     ):
-        result = await upload(mock_file)
+        result = await upload(make_test_request("POST", "/upload"), mock_file)
 
     assert result["status"] == "queued"
     assert result["document_id"] == "doc-queued"
@@ -338,6 +340,7 @@ async def test_upload_returns_immediately_with_queue_position():
 @pytest.mark.asyncio
 async def test_document_status_includes_queue_position_when_queued():
     """GET /documents/{id}/status includes live queue_position for queued docs."""
+    from request_utils import make_test_request
     from routes.documents import get_document_status
 
     db_payload = {
@@ -351,7 +354,9 @@ async def test_document_status_includes_queue_position_when_queued():
         patch("routes.documents.db.get_document_status", new=AsyncMock(return_value=db_payload)),
         patch("routes.documents.ingestion_queue.queue_position", return_value=2),
     ):
-        result = await get_document_status("doc-q")
+        result = await get_document_status(
+            make_test_request("GET", "/documents/doc-q/status"), "doc-q"
+        )
 
     assert result["status"] == "queued"
     assert result["queue_position"] == 2
@@ -360,12 +365,15 @@ async def test_document_status_includes_queue_position_when_queued():
 @pytest.mark.asyncio
 async def test_document_status_queue_position_omitted_when_not_queued():
     """GET /documents/{id}/status omits queue_position for non-queued docs."""
+    from request_utils import make_test_request
     from routes.documents import get_document_status
 
     db_payload = {"document_id": "doc-emb", "status": "embedding"}
 
     with patch("routes.documents.db.get_document_status", new=AsyncMock(return_value=db_payload)):
-        result = await get_document_status("doc-emb")
+        result = await get_document_status(
+            make_test_request("GET", "/documents/doc-emb/status"), "doc-emb"
+        )
 
     assert "queue_position" not in result
 

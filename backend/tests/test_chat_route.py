@@ -2,6 +2,7 @@ import asyncio
 from fastapi import HTTPException
 from unittest.mock import AsyncMock, patch
 
+from request_utils import make_test_request
 from routes.chat import ChatBatchItem, ChatBatchRequest, ChatRequest, chat, chat_batch
 
 
@@ -9,7 +10,12 @@ def test_chat_route_delegates_to_chat_service():
     payload = {"question": "q", "chunks": 1, "answer": "a"}
 
     with patch("routes.chat.answer_question_for_document", new=AsyncMock(return_value=payload)) as mock_chat:
-        result = asyncio.run(chat(ChatRequest(question="q", doc_id="doc-xyz")))
+        result = asyncio.run(
+            chat(
+                make_test_request("POST", "/chat"),
+                ChatRequest(question="q", doc_id="doc-xyz"),
+            )
+        )
 
     assert result == payload
     mock_chat.assert_awaited_once_with(question="q", doc_id="doc-xyz", match_count=5)
@@ -28,7 +34,9 @@ def test_chat_batch_route_delegates_to_chat_service():
         "routes.chat.answer_questions_for_documents_batch",
         new=AsyncMock(return_value=payload["results"]),
     ) as mock_batch:
-        result = asyncio.run(chat_batch(batch_request))
+        result = asyncio.run(
+            chat_batch(make_test_request("POST", "/chat/batch"), batch_request)
+        )
 
     assert result == payload
     mock_batch.assert_awaited_once_with(
@@ -54,7 +62,9 @@ def test_chat_batch_route_counts_failures_and_successes():
             ]
         ),
     ):
-        result = asyncio.run(chat_batch(batch_request))
+        result = asyncio.run(
+            chat_batch(make_test_request("POST", "/chat/batch"), batch_request)
+        )
 
     assert result["count"] == 2
     assert result["success_count"] == 1
@@ -69,7 +79,9 @@ def test_chat_batch_route_returns_422_for_value_error():
         new=AsyncMock(side_effect=ValueError("invalid payload")),
     ):
         try:
-            asyncio.run(chat_batch(batch_request))
+            asyncio.run(
+                chat_batch(make_test_request("POST", "/chat/batch"), batch_request)
+            )
             raise AssertionError("Expected HTTPException was not raised")
         except HTTPException as exc:
             assert exc.status_code == 422
