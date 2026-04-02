@@ -10,7 +10,7 @@ httpx==0.28.1
 tenacity==9.1.2
 
 # -------- Database / Vector --------
-SQLAlchemy[asyncio]==2.0.22
+SQLAlchemy[asyncio]==2.0.36
 psycopg==3.3.2
 pgvector==0.4.2
 asyncpg
