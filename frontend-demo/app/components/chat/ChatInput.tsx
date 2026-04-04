@@ -46,16 +46,16 @@ export default function ChatInput({
         />
       )}
       {attachment?.status === "processing" && (
-        <p className="px-4 pb-1 text-xs text-amber-400 bg-gray-900">
+        <p className="px-4 pb-1 text-xs text-amber-400 bg-background">
           Document still processing — sending is disabled until it is ready.
         </p>
       )}
       {removeError && (
-        <p className="px-4 pb-1 text-xs text-red-400 bg-gray-900">{removeError}</p>
+        <p className="px-4 pb-1 text-xs text-red-400 bg-background">{removeError}</p>
       )}
 
-      <div className="px-4 py-3 border-t border-gray-800 bg-gray-900">
-        <div className="flex items-center gap-2 bg-gray-800 rounded-xl px-4 py-2">
+      <div className="px-4 py-3 border-t border-border bg-background">
+        <div className="flex items-center gap-2 bg-surface rounded-xl px-4 py-2">
           <UploadButton onClick={onUploadClick} />
           <input
             type="text"
@@ -68,7 +68,7 @@ export default function ChatInput({
                 : "Ask about your document..."
             }
             disabled={inflight}
-            className="flex-1 bg-transparent outline-none text-sm text-white placeholder-gray-500 disabled:opacity-50"
+            className="flex-1 bg-transparent outline-none text-sm text-foreground placeholder:text-muted disabled:opacity-50"
           />
           <button
             type="button"
@@ -85,14 +85,14 @@ export default function ChatInput({
             }
             className={`w-8 h-8 rounded-lg flex items-center justify-center transition ${
               sendDisabled
-                ? "bg-gray-600 cursor-not-allowed opacity-50"
-                : "bg-indigo-600 hover:bg-indigo-500 cursor-pointer"
+                ? "bg-surface cursor-not-allowed opacity-50"
+                : "bg-accent hover:bg-accent/80 cursor-pointer text-black"
             }`}
           >
             <Send size={15} />
           </button>
         </div>
-        <p className="text-center text-xs text-gray-600 mt-2">
+        <p className="text-center text-xs text-muted mt-2">
           ChatVector may make mistakes. Always verify important information.
         </p>
       </div>

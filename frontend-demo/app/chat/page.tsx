@@ -26,7 +26,7 @@ export default function ChatPage() {
   } = useChat();
 
   return (
-    <div className="flex flex-col h-screen bg-gray-950 text-white">
+    <div className="flex flex-col h-screen bg-background text-foreground">
       {showModal && (
         <UploadModal
           onClose={() => setShowModal(false)}
