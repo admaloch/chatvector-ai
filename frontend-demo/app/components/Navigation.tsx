@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -70,12 +71,19 @@ export default function Navigation() {
       <nav className="mx-auto flex min-h-[60px] max-w-[1100px] items-center justify-between gap-4 px-4">
         <Link
           href="/"
-          className="shrink-0 font-mono text-[1.05rem] font-bold text-accent no-underline"
+          className="flex shrink-0 items-center gap-2.5 font-mono text-xl font-bold no-underline md:text-[1.35rem]"
         >
-          Chat
-          <span className="text-foreground/45">&lt;</span>
-          Vector
-          <span className="text-foreground/45">&gt;</span>
+          <Image
+            src="/chatvector-logo.svg"
+            alt=""
+            width={36}
+            height={36}
+            unoptimized
+            className="size-9 shrink-0"
+          />
+          <span className="bg-gradient-to-r from-accent to-blue bg-clip-text text-transparent">
+            ChatVector
+          </span>
         </Link>
 
         <ul className="m-0 hidden list-none flex-1 flex-row flex-wrap items-center justify-center gap-8 p-0 md:flex">
