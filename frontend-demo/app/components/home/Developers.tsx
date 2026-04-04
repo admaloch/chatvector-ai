@@ -2,15 +2,15 @@ import { SYNTAX } from "../../lib/constants";
 
 const DEV_POINTS = [
   {
-    title: "Zero vendor lock-in",
-    desc: "Your models, your store, your infra. Switch anytime.",
+    title: "Deploy anywhere",
+    desc: "Run as a Docker container on your laptop, your server, or any cloud VM.",
   },
   {
-    title: "Minimal dependencies",
-    desc: "Lean core. Bring only what your stack needs.",
+    title: "Integrate via HTTP",
+    desc: "Use the Python SDK or call the REST API directly from any language.",
   },
   {
-    title: "Type-safe Python API",
+    title: "Type-safe Python SDK",
     desc: "Full type hints. IDE autocomplete works out of the box.",
   },
   {
@@ -21,74 +21,45 @@ const DEV_POINTS = [
 
 export default function Developers() {
   const codeLines = [
-    { parts: [{ c: SYNTAX.cm, t: "# Swap components without rewriting" }] },
+    { parts: [{ c: SYNTAX.cm, t: "# Upload and wait for processing" }] },
     {
       parts: [
-        { c: SYNTAX.plain, t: "cv = " },
-        { c: SYNTAX.fn, t: "ChatVector" },
+        { c: SYNTAX.plain, t: "doc = cv." },
+        { c: SYNTAX.fn, t: "upload_document" },
         { c: SYNTAX.plain, t: "(" },
-      ],
-    },
-    {
-      parts: [
-        { c: SYNTAX.plain, t: "  embedder=" },
-        { c: SYNTAX.fn, t: "HuggingFaceEmbedder" },
-        { c: SYNTAX.plain, t: "(" },
-      ],
-    },
-    {
-      parts: [
-        { c: SYNTAX.plain, t: "    model=" },
-        { c: SYNTAX.str, t: '"BAAI/bge-small-en"' },
-      ],
-    },
-    { parts: [{ c: SYNTAX.plain, t: "  )," }] },
-    {
-      parts: [
-        { c: SYNTAX.plain, t: "  store=" },
-        { c: SYNTAX.fn, t: "ChromaStore" },
-        { c: SYNTAX.plain, t: "(path=" },
-        { c: SYNTAX.str, t: '"./db"' },
-        { c: SYNTAX.plain, t: ")," },
-      ],
-    },
-    {
-      parts: [
-        { c: SYNTAX.plain, t: "  llm=" },
-        { c: SYNTAX.fn, t: "OllamaLLM" },
-        { c: SYNTAX.plain, t: "(model=" },
-        { c: SYNTAX.str, t: '"llama3"' },
-        { c: SYNTAX.plain, t: ")," },
-      ],
-    },
-    {
-      parts: [
-        { c: SYNTAX.plain, t: "  retriever=" },
-        { c: SYNTAX.fn, t: "MMRRetriever" },
-        { c: SYNTAX.plain, t: "(k=" },
-        { c: "var(--accent)", t: "6" },
-        { c: SYNTAX.plain, t: ")," },
-      ],
-    },
-    { parts: [{ c: SYNTAX.plain, t: ")" }] },
-    { parts: [] },
-    { parts: [{ c: SYNTAX.cm, t: "# Full control, clean API" }] },
-    {
-      parts: [
-        { c: SYNTAX.plain, t: "docs = cv." },
-        { c: SYNTAX.fn, t: "retrieve" },
-        { c: SYNTAX.plain, t: "(query, top_k=" },
-        { c: "var(--accent)", t: "8" },
+        { c: SYNTAX.str, t: '"report.pdf"' },
         { c: SYNTAX.plain, t: ")" },
       ],
     },
     {
       parts: [
-        { c: SYNTAX.plain, t: "answer = cv." },
-        { c: SYNTAX.fn, t: "generate" },
-        { c: SYNTAX.plain, t: "(query, docs)" },
+        { c: SYNTAX.plain, t: "cv." },
+        { c: SYNTAX.fn, t: "wait_for_ready" },
+        { c: SYNTAX.plain, t: "(doc.document_id)" },
       ],
     },
+    { parts: [] },
+    { parts: [{ c: SYNTAX.cm, t: "# Ask questions against the document" }] },
+    {
+      parts: [
+        { c: SYNTAX.plain, t: "answer = cv." },
+        { c: SYNTAX.fn, t: "chat" },
+        { c: SYNTAX.plain, t: "(" },
+      ],
+    },
+    {
+      parts: [
+        { c: SYNTAX.plain, t: "  " },
+        { c: SYNTAX.str, t: '"Summarise the key findings."' },
+        { c: SYNTAX.plain, t: "," },
+      ],
+    },
+    { parts: [{ c: SYNTAX.plain, t: "  doc.document_id" }] },
+    { parts: [{ c: SYNTAX.plain, t: ")" }] },
+    { parts: [] },
+    { parts: [{ c: SYNTAX.cm, t: "# Full response with source citations" }] },
+    { parts: [{ c: SYNTAX.plain, t: "print(answer.answer)" }] },
+    { parts: [{ c: SYNTAX.plain, t: "print(answer.sources)" }] },
   ];
 
   return (
@@ -103,8 +74,9 @@ export default function Developers() {
           read the source code.
         </h2>
         <p className="mb-12 max-w-[540px] text-[1.05rem] font-light leading-[1.7] text-muted">
-          No drag-and-drop. No &quot;AI magic&quot;. Just clean Python APIs,
-          sensible defaults, and full control when you need it.
+          Spin up an instance, point the SDK at it, and start querying your
+          documents over HTTP. No magic, no lock-in — just a clean API you can
+          read and trust.
         </p>
 
         <div className="grid grid-cols-1 items-center gap-12 md:grid-cols-2">
@@ -142,7 +114,7 @@ export default function Developers() {
               <div className="size-2.5 rounded-full bg-[rgb(254,188,46)]" />
               <div className="size-2.5 rounded-full bg-[rgb(40,200,64)]" />
               <span className="ml-auto font-mono text-xs text-muted">
-                custom_pipeline.py
+                upload_and_chat.py
               </span>
             </div>
             <pre className="m-0 overflow-x-auto px-6 py-5 font-mono text-[0.82rem] leading-[1.75]">

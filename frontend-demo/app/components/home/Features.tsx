@@ -20,7 +20,7 @@ const FEATURES = [
     color: "rgb(168, 85, 247)",
     bg: "rgba(168,85,247,0.1)",
     title: "LLM-powered answers",
-    desc: "Works with Mistral, LLaMA, GPT-4, Claude — any OpenAI-compatible endpoint.",
+    desc: "Powered by Google Gemini. LLM answers grounded in your document context — not hallucinated from training data.",
     tag: "generation",
   },
   {
@@ -43,9 +43,9 @@ const FEATURES = [
     icon: "⬡",
     color: "rgb(239, 68, 68)",
     bg: "rgba(239,68,68,0.1)",
-    title: "Pluggable vector stores",
-    desc: "FAISS, ChromaDB, Pinecone, Weaviate. Swap with one config line.",
-    tag: "modular",
+    title: "pgvector / Supabase storage",
+    desc: "Document embeddings stored in pgvector via Supabase. Reliable, SQL-native, no separate vector DB to manage.",
+    tag: "storage",
   },
 ];
 
