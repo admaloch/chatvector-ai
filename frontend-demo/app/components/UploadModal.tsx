@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { X, Upload, Loader2 } from "lucide-react";
+import { X, Upload, Loader2, AlertCircle } from "lucide-react";
 import { uploadDocument } from "../lib/api";
 import { STAGE_LABELS } from "../lib/stageLabels";
 
@@ -115,22 +115,68 @@ export default function UploadModal({
   const dropZoneInteractive = showPicker;
   const showDismissWait = (showUploading || showProcessing) && !showSuccess;
 
+  const dropZoneClassName = [
+    "relative min-h-[200px] rounded-2xl border-2 border-dashed p-10 flex flex-col items-center justify-center transition-all duration-300 ease-out",
+    showSuccess
+      ? "border-emerald-500/40 bg-emerald-500/[0.07] shadow-[inset_0_1px_0_0_rgba(52,211,153,0.12)]"
+      : showFailed
+        ? "border-red-500/25 bg-red-500/[0.04]"
+        : dropZoneInteractive
+          ? "border-white/[0.12] bg-gradient-to-b from-white/[0.06] to-transparent hover:border-indigo-400/45 hover:from-indigo-500/10 hover:shadow-[0_0_0_1px_rgba(129,140,248,0.15)] cursor-pointer active:scale-[0.99]"
+          : "border-white/[0.08] bg-white/[0.02]",
+  ].join(" ");
+
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-md mx-4 border border-gray-700">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-white font-semibold text-lg">Upload Document</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
-            <X size={20} />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+      style={{
+        backgroundColor: "rgba(2, 6, 23, 0.72)",
+        backdropFilter: "blur(10px)",
+      }}
+    >
+      <div
+        className="w-full max-w-[420px] rounded-3xl border border-white/[0.08] bg-zinc-950/90 p-6 shadow-2xl shadow-black/50 ring-1 ring-white/[0.04]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold tracking-tight text-white">
+              Upload document
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              PDF, TXT, or DOCX — we&apos;ll index it for chat
+            </p>
+            <div className="mt-2 flex min-h-[2.5rem] items-center">
+              <button
+                type="button"
+                onClick={onClose}
+                tabIndex={showDismissWait ? 0 : -1}
+                aria-hidden={!showDismissWait}
+                className={`inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-xs font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 ${
+                  showDismissWait
+                    ? "cursor-pointer text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-300"
+                    : "pointer-events-none invisible"
+                }`}
+              >
+                Dismiss and wait
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl p-2 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
+            aria-label="Close"
+          >
+            <X size={20} strokeWidth={1.75} />
           </button>
         </div>
+
         <div
           onDrop={dropZoneInteractive ? handleDrop : (e) => e.preventDefault()}
           onDragOver={(e) => e.preventDefault()}
           onClick={() => dropZoneInteractive && inputRef.current?.click()}
-          className={`border-2 border-dashed border-gray-600 rounded-xl p-10 flex flex-col items-center justify-center transition ${
-            dropZoneInteractive ? "hover:border-indigo-500 cursor-pointer" : ""
-          }`}
+          className={dropZoneClassName}
         >
           <input
             ref={inputRef}
@@ -140,15 +186,19 @@ export default function UploadModal({
             className="hidden"
           />
           {showUploading && (
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="text-indigo-400 animate-spin" size={28} />
-              <p className="text-indigo-400 text-sm">Uploading…</p>
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-500/15 ring-1 ring-indigo-400/20">
+                <Loader2 className="h-7 w-7 animate-spin text-indigo-400" strokeWidth={2} />
+              </div>
+              <p className="text-sm font-medium text-indigo-200/90">Uploading…</p>
             </div>
           )}
           {showProcessing && (
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="text-indigo-400 animate-spin" size={28} />
-              <p className="text-indigo-400 text-sm">
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-500/15 ring-1 ring-indigo-400/20">
+                <Loader2 className="h-7 w-7 animate-spin text-indigo-400" strokeWidth={2} />
+              </div>
+              <p className="max-w-[260px] text-center text-sm font-medium leading-snug text-indigo-200/90">
                 {attachment?.stage
                   ? STAGE_LABELS[attachment.stage] ?? attachment.stage
                   : "Processing your document…"}
@@ -159,55 +209,54 @@ export default function UploadModal({
             </div>
           )}
           {showFailed && (
-            <div className="flex flex-col items-center gap-3 text-center">
-              <p className="text-red-400 text-sm">Upload failed. Please try again.</p>
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10 ring-1 ring-red-500/20">
+                <AlertCircle className="h-7 w-7 text-red-400" strokeWidth={1.75} aria-hidden />
+              </div>
+              <p className="max-w-[260px] text-sm font-medium text-red-300/90">
+                Upload failed. Please try again.
+              </p>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleRetry();
                 }}
-                className="text-sm text-indigo-400 hover:text-indigo-300"
+                className="rounded-full bg-white/[0.08] px-4 py-2 text-sm font-medium text-white ring-1 ring-white/[0.1] transition hover:bg-white/[0.12] focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
               >
                 Retry
               </button>
             </div>
           )}
           {showSuccess && (
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/15 ring-1 ring-emerald-400/25">
+                <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden>
                   <path
                     d="M4 10l4.5 4.5L16 6"
-                    stroke="#4ade80"
+                    stroke="#34d399"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                 </svg>
               </div>
-              <p className="text-green-400 text-sm font-medium">Document ready!</p>
+              <p className="text-sm font-semibold text-emerald-300/95">Document ready!</p>
             </div>
           )}
           {showPicker && (
             <>
-              <Upload size={32} className="text-gray-500 mb-3" />
-              <p className="text-gray-400 text-sm text-center">
-                Drag & drop or <span className="text-indigo-400">click to browse</span>
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.06] ring-1 ring-white/[0.08]">
+                <Upload className="h-7 w-7 text-zinc-400" strokeWidth={1.5} />
+              </div>
+              <p className="max-w-[260px] text-center text-sm text-zinc-400">
+                Drop a file here or{" "}
+                <span className="font-medium text-indigo-400">browse</span>
               </p>
-              <p className="text-gray-600 text-xs mt-1">PDF, TXT, DOCX supported</p>
+              <p className="mt-2 text-xs text-zinc-600">PDF · TXT · DOCX</p>
             </>
           )}
         </div>
-        {showDismissWait && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="mt-3 w-full text-center text-xs text-gray-500 hover:text-gray-400"
-          >
-            Dismiss and wait
-          </button>
-        )}
       </div>
     </div>
   );
