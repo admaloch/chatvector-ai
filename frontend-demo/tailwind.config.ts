@@ -9,6 +9,7 @@ const config: Config = {
         border: "var(--border)",
         foreground: "var(--foreground)",
         muted: "var(--muted)",
+        subtle: "var(--subtle)",
         accent: "var(--accent)",
         blue: "var(--blue)",
       },

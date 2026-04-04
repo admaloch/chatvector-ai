@@ -31,8 +31,8 @@ function NavLinks({
               onClick={onNavigate}
               className={`text-[0.9rem] no-underline transition-colors duration-200 ${
                 chatActive
-                  ? "text-(--accent)"
-                  : "text-(--muted) hover:text-(--foreground)"
+                  ? "text-accent"
+                  : "text-muted hover:text-foreground"
               }`}
             >
               {label}
@@ -50,7 +50,7 @@ function GitHubButton({ className }: { className?: string }) {
       href={GITHUB_REPO}
       target="_blank"
       rel="noopener noreferrer"
-      className={`inline-flex cursor-pointer items-center justify-center rounded-md border border-(--accent) bg-transparent px-[18px] py-[7px] text-[0.85rem] text-(--accent) no-underline transition-all duration-200 hover:bg-(--accent) hover:text-black ${className ?? ""}`}
+      className={`inline-flex cursor-pointer items-center justify-center rounded-md border border-accent bg-transparent px-[18px] py-[7px] text-[0.85rem] text-accent no-underline transition-all duration-200 hover:bg-accent hover:text-black ${className ?? ""}`}
     >
       GitHub
     </a>
@@ -63,19 +63,19 @@ export default function Navigation() {
 
   return (
     <header
-      className="sticky top-0 z-[100] border-b border-(--border) backdrop-blur-[14px]"
+      className="sticky top-0 z-[100] border-b border-border backdrop-blur-[14px]"
       style={{ background: "rgba(10,12,16,0.88)" }}
     >
-      {/* Exact header scrim (88% of page background) — kept as inline style; token opacity with backdrop is finicky in utilities */}
+      {/* Header scrim: 88% of page background rgba — inline for exact match with backdrop-blur */}
       <nav className="mx-auto flex min-h-[60px] max-w-[1100px] items-center justify-between gap-4 px-4">
         <Link
           href="/"
-          className="shrink-0 font-[family-name:JetBrains_Mono,monospace] text-[1.05rem] font-bold text-(--accent) no-underline"
+          className="shrink-0 font-mono text-[1.05rem] font-bold text-accent no-underline"
         >
           Chat
-          <span className="text-(--foreground)/45">&lt;</span>
+          <span className="text-foreground/45">&lt;</span>
           Vector
-          <span className="text-(--foreground)/45">&gt;</span>
+          <span className="text-foreground/45">&gt;</span>
         </Link>
 
         <ul className="m-0 hidden list-none flex-1 flex-row flex-wrap items-center justify-center gap-8 p-0 md:flex">
@@ -89,7 +89,7 @@ export default function Navigation() {
             aria-expanded={mobileOpen}
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             onClick={() => setMobileOpen((o) => !o)}
-            className="cursor-pointer rounded-md border border-(--border) bg-transparent px-3 py-2 text-base leading-none text-(--foreground) md:hidden"
+            className="cursor-pointer rounded-md border border-border bg-transparent px-3 py-2 text-base leading-none text-foreground md:hidden"
           >
             {mobileOpen ? "✕" : "☰"}
           </button>
@@ -97,7 +97,7 @@ export default function Navigation() {
       </nav>
 
       {mobileOpen ? (
-        <div className="flex flex-col gap-4 border-t border-(--border) p-4 md:hidden">
+        <div className="flex flex-col gap-4 border-t border-border p-4 md:hidden">
           <ul className="m-0 flex list-none flex-col gap-4 p-0">
             <NavLinks
               pathname={pathname}
