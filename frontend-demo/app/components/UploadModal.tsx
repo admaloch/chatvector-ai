@@ -49,6 +49,16 @@ export default function UploadModal({
     }
   }, [attachment?.status]);
 
+  const showSuccess = attachment?.status === "ready";
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!showSuccess) return;
+    const timer = setTimeout(() => onCloseRef.current(), 1500);
+    return () => clearTimeout(timer);
+  }, [showSuccess]);
+
   const handleFile = async (file: File) => {
     setLastFile(file);
     setIsUploading(true);
@@ -92,13 +102,18 @@ export default function UploadModal({
   const showProcessing =
     !showFailed &&
     !isUploading &&
+    !showSuccess &&
     (attachment?.status === "processing" || awaitingProcessing);
   const showUploading = isUploading;
   const showPicker =
-    !showUploading && !showProcessing && !showFailed && (attachment === null || attachment.status === "ready");
+    !showUploading &&
+    !showProcessing &&
+    !showFailed &&
+    !showSuccess &&
+    (attachment === null || attachment.status === "ready");
 
   const dropZoneInteractive = showPicker;
-  const showDismissWait = showUploading || showProcessing;
+  const showDismissWait = (showUploading || showProcessing) && !showSuccess;
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
@@ -156,6 +171,22 @@ export default function UploadModal({
               >
                 Retry
               </button>
+            </div>
+          )}
+          {showSuccess && (
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path
+                    d="M4 10l4.5 4.5L16 6"
+                    stroke="#4ade80"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+              <p className="text-green-400 text-sm font-medium">Document ready!</p>
             </div>
           )}
           {showPicker && (

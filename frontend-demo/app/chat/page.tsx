@@ -51,12 +51,6 @@ export default function ChatPage() {
   }, [messages, inflight]);
 
   useEffect(() => {
-    if (poll.status === "ready") {
-      setShowModal(false);
-    }
-  }, [poll.status]);
-
-  useEffect(() => {
     readyAnnouncedForDocRef.current = null;
   }, [attachment?.documentId]);
 
