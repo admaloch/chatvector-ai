@@ -36,7 +36,7 @@ export default function MessageList({ messages, inflight, bottomRef }: Props) {
             {msg.sender === "ai" ? <Bot size={16} /> : <User size={16} />}
           </div>
           <div
-            className={`max-w-[75%] md:max-w-[60%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+            className={`max-w-[75%] md:max-w-[60%] whitespace-pre-wrap break-words px-4 py-3 rounded-2xl text-sm leading-relaxed ${
               msg.sender === "ai" ? "bg-surface text-foreground rounded-bl-none" : "bg-accent text-black rounded-br-none"
             }`}
           >

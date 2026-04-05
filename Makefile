@@ -1,4 +1,4 @@
-.PHONY: help up build down reset logs db sync
+.PHONY: help up build down reset logs db sync dev stop
 
 # ==========================================
 # Auto-detect Docker Compose (v1 or v2)
@@ -31,11 +31,12 @@ help:
 	@echo "██║     ███████║███████║   ██║   ██║   ██║█████╗  ██║        ██║   ██║   ██║██████╔╝█████╗███████║██║"
 	@echo "██║     ██╔══██║██╔══██║   ██║   ╚██╗ ██╔╝██╔══╝  ██║        ██║   ██║   ██║██╔══██╗╚════╝██╔══██║██║"
 	@echo "╚██████╗██║  ██║██║  ██║   ██║    ╚████╔╝ ███████╗╚██████╗   ██║   ╚██████╔╝██║  ██║      ██║  ██║██║"
-	@echo " ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝     ╚═══╝  ╚══════╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝      ╚═╝  ╚═╝╚═╝"                                                                                                    
+	@echo " ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝     ╚═══╝  ╚══════╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝      ╚═╝  ╚═╝╚═╝"
 	@echo "$(RESET)"
 	@echo ""
 	@echo "$(YELLOW)Available Commands$(RESET)"
 	@echo "-------------------------------------"
+	@echo "$(GREEN)make dev$(RESET)     ⚡ Start backend + frontend together"
 	@echo "$(GREEN)make up$(RESET)      🚀 Start containers"
 	@echo "$(GREEN)make build$(RESET)   🔧 Rebuild & start containers"
 	@echo "$(GREEN)make down$(RESET)    🛑 Stop containers"
@@ -49,6 +50,19 @@ help:
 	@echo "These are wrappers around docker compose commands."
 	@echo "Direct docker compose usage still works."
 	@echo ""
+
+# ==========================================
+# Dev (Backend + Frontend together)
+# ==========================================
+dev:
+	@echo "$(GREEN)⚡ Starting backend (detached) + frontend...$(RESET)"
+	@$(DOCKER_COMPOSE) up -d
+	@cd frontend-demo && npm run dev
+stop:
+	@echo "$(YELLOW)🛑 Stopping frontend dev server...$(RESET)"
+	@pkill -f "npm run dev" || true
+	@$(DOCKER_COMPOSE) down
+	@echo "$(YELLOW)🛑 All services stopped$(RESET)"
 
 # ==========================================
 # Docker Commands

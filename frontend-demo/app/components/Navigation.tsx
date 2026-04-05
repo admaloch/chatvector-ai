@@ -17,22 +17,28 @@ const SECTION_LINKS = [
 function NavLinks({
   onNavigate,
   pathname,
+  centerOnMobile = false,
 }: {
   onNavigate?: () => void;
   pathname: string | null;
+  /** Stack + center link text (hamburger menu on small screens only). */
+  centerOnMobile?: boolean;
 }) {
   return (
     <>
       {SECTION_LINKS.map(({ label, href }) => {
         const chatActive = href === "/chat" && pathname === "/chat";
         return (
-          <li key={label}>
+          <li
+            key={label}
+            className={centerOnMobile ? "w-full text-center" : undefined}
+          >
             <Link
               href={href}
               onClick={onNavigate}
               className={`text-[1.05rem] no-underline transition-colors duration-200 ${
                 chatActive
-                  ? "text-blue"
+                  ? "text-accent"
                   : "text-white hover:text-accent"
               }`}
             >
@@ -105,14 +111,15 @@ export default function Navigation() {
       </nav>
 
       {mobileOpen ? (
-        <div className="flex flex-col gap-4 border-t border-border p-4 md:hidden">
-          <ul className="m-0 flex list-none flex-col gap-4 p-0">
+        <div className="flex flex-col items-center gap-4 border-t border-border p-4 md:hidden">
+          <ul className="m-0 flex w-full list-none flex-col items-center gap-4 p-0">
             <NavLinks
               pathname={pathname}
+              centerOnMobile
               onNavigate={() => setMobileOpen(false)}
             />
           </ul>
-          <div className="self-start">
+          <div className="flex justify-center">
             <GitHubButton />
           </div>
         </div>

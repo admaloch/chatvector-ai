@@ -26,7 +26,13 @@ export default function ChatPage() {
   } = useChat();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background text-foreground">
+    <div
+      className="flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-background text-foreground"
+      style={{
+        height: "calc(100dvh - 60px)",
+        maxHeight: "calc(100dvh - 60px)",
+      }}
+    >
       {showModal && (
         <UploadModal
           onClose={() => setShowModal(false)}
@@ -44,21 +50,23 @@ export default function ChatPage() {
         />
       )}
 
-      <MessageList messages={messages} inflight={inflight} bottomRef={bottomRef} />
+      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden">
+        <MessageList messages={messages} inflight={inflight} bottomRef={bottomRef} />
 
-      <ChatInput
-        input={input}
-        setInput={setInput}
-        sendDisabled={sendDisabled}
-        inflight={inflight}
-        attachment={attachment}
-        removeError={removeError}
-        poll={poll}
-        handleSend={handleSend}
-        handleKeyDown={handleKeyDown}
-        handleRemoveAttachment={handleRemoveAttachment}
-        onUploadClick={() => setShowModal(true)}
-      />
+        <ChatInput
+          input={input}
+          setInput={setInput}
+          sendDisabled={sendDisabled}
+          inflight={inflight}
+          attachment={attachment}
+          removeError={removeError}
+          poll={poll}
+          handleSend={handleSend}
+          handleKeyDown={handleKeyDown}
+          handleRemoveAttachment={handleRemoveAttachment}
+          onUploadClick={() => setShowModal(true)}
+        />
+      </div>
     </div>
   );
 }

@@ -1,10 +1,14 @@
 "use client";
 
+import { useLayoutEffect, useRef } from "react";
 import { Send } from "lucide-react";
 import UploadButton from "../UploadButton";
 import AttachmentChip from "../AttachmentChip";
 import type { AttachmentState } from "../../lib/api";
 import { useDocumentPolling } from "../../lib/hooks/useDocumentPolling";
+
+const TEXTAREA_MIN_PX = 44;
+const TEXTAREA_MAX_PX = 220;
 
 type Props = {
   input: string;
@@ -15,7 +19,7 @@ type Props = {
   removeError: string | null;
   poll: ReturnType<typeof useDocumentPolling>;
   handleSend: () => void;
-  handleKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  handleKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   handleRemoveAttachment: () => void;
   onUploadClick: () => void;
 };
@@ -33,17 +37,32 @@ export default function ChatInput({
   handleRemoveAttachment,
   onUploadClick,
 }: Props) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "0px";
+    const h = Math.min(
+      Math.max(el.scrollHeight, TEXTAREA_MIN_PX),
+      TEXTAREA_MAX_PX
+    );
+    el.style.height = `${h}px`;
+  }, [input]);
+
   return (
     <div className="shrink-0 bg-background">
       {attachment && (
-        <AttachmentChip
-          fileName={attachment.fileName}
-          status={attachment.status}
-          stage={poll.stage}
-          chunks={poll.chunks}
-          awaitingProcessing={poll.awaitingProcessing}
-          onRemove={() => void handleRemoveAttachment()}
-        />
+        <div className="px-4 pt-2">
+          <AttachmentChip
+            fileName={attachment.fileName}
+            status={attachment.status}
+            stage={poll.stage}
+            chunks={poll.chunks}
+            awaitingProcessing={poll.awaitingProcessing}
+            onRemove={() => void handleRemoveAttachment()}
+          />
+        </div>
       )}
       {attachment?.status === "processing" && (
         <p className="px-4 pb-1 text-xs text-amber-400 bg-background">
@@ -54,11 +73,12 @@ export default function ChatInput({
         <p className="px-4 pb-1 text-xs text-red-400 bg-background">{removeError}</p>
       )}
 
-      <div className="px-4 py-3 border-t border-border bg-background">
-        <div className="flex items-center gap-2 bg-surface rounded-xl px-4 py-2">
+      <div className="bg-background px-4 py-3">
+        <div className="flex items-end gap-2 bg-surface rounded-xl px-4 py-2">
           <UploadButton onClick={onUploadClick} />
-          <input
-            type="text"
+          <textarea
+            ref={textareaRef}
+            rows={1}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -68,7 +88,8 @@ export default function ChatInput({
                 : "Ask about your document..."
             }
             disabled={inflight}
-            className="flex-1 bg-transparent outline-none text-sm text-foreground placeholder:text-muted disabled:opacity-50"
+            aria-label="Message"
+            className="min-h-[44px] max-h-[220px] flex-1 resize-none overflow-y-auto bg-transparent py-2.5 text-sm leading-snug text-foreground outline-none placeholder:text-muted disabled:opacity-50"
           />
           <button
             type="button"

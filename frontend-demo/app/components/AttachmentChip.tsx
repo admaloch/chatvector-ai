@@ -66,18 +66,18 @@ export default function AttachmentChip({
   const tone = iconAndTextClass(status);
 
   return (
-    <div className="px-4 py-2 bg-gray-900 border-t border-gray-800 flex items-center gap-2">
-      <FileText size={14} className={tone} />
-      <span className="text-xs text-gray-400">Active document:</span>
+    <div className="flex w-fit max-w-full items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+      <FileText size={14} className={`shrink-0 ${tone}`} />
+      <span className="shrink-0 text-xs text-muted">Active document:</span>
       <span
-        className={`text-xs font-medium flex-1 truncate ${tone}`}
+        className={`min-w-0 max-w-[min(100%,14rem)] truncate text-xs font-medium sm:max-w-[18rem] ${tone}`}
       >
         {label}
       </span>
       <button
         type="button"
         onClick={onRemove}
-        className="p-1 rounded-md text-gray-500 hover:text-white hover:bg-gray-800 transition shrink-0"
+        className="shrink-0 rounded-md p-1 text-muted transition hover:bg-background hover:text-foreground"
         aria-label="Remove attachment"
       >
         <X size={16} />
