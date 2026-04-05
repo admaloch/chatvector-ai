@@ -2,47 +2,52 @@
 Tests for the database factory.
 Ensures the right service is returned based on environment.
 """
+import importlib
+
 import pytest
 from unittest.mock import patch
 
-import db
-from db import get_db_service
+import core.config
+import db as db_module
 
 
 @pytest.fixture(autouse=True)
-def reset_db_service_cache():
-    """Reset cached DB service between tests."""
-    db.db_service = None
+def reset_db_singleton():
+    import db as db_module
+
+    db_module.db_service = None
     yield
-    db.db_service = None
+    db_module.db_service = None
 
 
-@pytest.mark.asyncio
-async def test_factory_returns_sqlalchemy_in_dev():
+def test_factory_returns_sqlalchemy_in_dev(monkeypatch, reset_db_singleton):
     """Should return SQLAlchemyService when APP_ENV=development."""
     pytest.importorskip("pgvector")
-    with patch("core.config.config.APP_ENV", "development"):
-        service = get_db_service()
-        from db.sqlalchemy_service import SQLAlchemyService
+    monkeypatch.setenv("APP_ENV", "development")
+    importlib.reload(core.config)
+    importlib.reload(db_module)
+    service = db_module.get_db_service()
+    from db.sqlalchemy_service import SQLAlchemyService
 
-        assert isinstance(service, SQLAlchemyService)
+    assert isinstance(service, SQLAlchemyService)
 
 
-@pytest.mark.asyncio
-async def test_factory_returns_supabase_in_prod():
+def test_factory_returns_supabase_in_prod(monkeypatch, reset_db_singleton):
     """Should return SupabaseService when APP_ENV=production."""
-    with patch("core.config.config.APP_ENV", "production"):
-        service = get_db_service()
-        from db.supabase_service import SupabaseService
+    monkeypatch.setenv("APP_ENV", "production")
+    importlib.reload(core.config)
+    importlib.reload(db_module)
+    service = db_module.get_db_service()
+    from db.supabase_service import SupabaseService
 
-        assert isinstance(service, SupabaseService)
+    assert isinstance(service, SupabaseService)
 
 
 @pytest.mark.asyncio
-async def test_factory_caches_service():
+async def test_factory_caches_service(reset_db_singleton):
     """Should return same instance on subsequent calls."""
     pytest.importorskip("pgvector")
     with patch("core.config.config.APP_ENV", "development"):
-        service1 = get_db_service()
-        service2 = get_db_service()
+        service1 = db_module.get_db_service()
+        service2 = db_module.get_db_service()
         assert service1 is service2
