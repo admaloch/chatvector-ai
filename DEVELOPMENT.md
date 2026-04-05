@@ -336,7 +336,7 @@ For day-to-day work, use the [Quick Start](#quick-start) flow (`docker compose u
 
 ### Local production simulation
 
-To exercise the production Compose override (no code bind mounts, multi-worker API, JSON logs, stricter env):
+To exercise production-style Compose (no API bind mounts, multi-worker `uvicorn`, JSON logs, stricter env): use `docker-compose.prod.yml`, which is a **standalone** file — it does not extend or merge with `docker-compose.yml`; define the full `db` and `api` stack there.
 
 ```bash
 # Copy and configure production env
@@ -344,14 +344,12 @@ cp backend/.env.example backend/.env.prod
 # Edit .env.prod with real values
 
 # Start production stack
-make prod-up
+docker compose -f docker-compose.prod.yml up -d
 # or
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+make prod-up
 ```
 
 Docker Compose expands `${VAR}` from your process environment or from a `.env` file in the project root. If you keep values only in `backend/.env.prod`, either `export` them before `make prod-up` or pass `--env-file backend/.env.prod` to the `docker compose` command.
-
-**Compose merge note:** `volumes` lists are merged across Compose files, not replaced, so `volumes: []` in `docker-compose.prod.yml` does not strip dev bind mounts from `docker-compose.yml`. Production overrides for `environment`, `command`, `healthcheck`, `restart`, and resource limits still apply.
 
 ### Production environment variables
 
@@ -361,7 +359,7 @@ Docker Compose expands `${VAR}` from your process environment or from a `.env` f
 | `DATABASE_URL` | **Required** | Async SQLAlchemy URL (e.g. `postgresql+asyncpg://…`) pointing at your Postgres instance |
 | `APP_ENV=production` | **Required** | Disables `/docs` (and related OpenAPI UI), enables JSON-friendly logging expectations |
 | `CORS_ORIGINS` | **Required** | Comma-separated list of allowed browser origins |
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | **Required** | Used by the `db` service when using the production override |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | **Required** | Used by the `db` service in `docker-compose.prod.yml` |
 | `LOG_LEVEL` | Optional | Default: `INFO` |
 | `QUEUE_WORKER_COUNT` | Optional | Default: `3` |
 | `QUEUE_EMBEDDING_RPS` | Optional | Default: `2.0` |
