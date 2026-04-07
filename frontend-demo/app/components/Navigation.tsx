@@ -4,14 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 const GITHUB_REPO = "https://github.com/chatvector-ai/chatvector-ai";
 
-const SECTION_LINKS = [
-  { label: "About", href: "/#about" },
-  { label: "Features", href: "/#features" },
-  { label: "Developers", href: "/#developers" },
+const MAIN_NAV_LINKS = [
   { label: "Chat", href: "/chat" },
   { label: "Contributors", href: "/contributors" },
 ] as const;
@@ -24,9 +21,6 @@ const DOC_LINKS = [
   { label: "Contributing", href: "/contributing" },
 ] as const;
 
-const SECTION_LINKS_BEFORE = SECTION_LINKS.slice(0, 3);
-const SECTION_LINKS_AFTER = SECTION_LINKS.slice(3);
-
 function isDocsActive(pathname: string | null): boolean {
   if (!pathname) return false;
   return DOC_LINKS.some((l) => pathname.startsWith(l.href));
@@ -36,17 +30,15 @@ function NavLinks({
   onNavigate,
   pathname,
   centerOnMobile = false,
-  links,
 }: {
   onNavigate?: () => void;
   pathname: string | null;
   /** Stack + center link text (hamburger menu on small screens only). */
   centerOnMobile?: boolean;
-  links: readonly (typeof SECTION_LINKS)[number][];
 }) {
   return (
     <>
-      {links.map(({ label, href }) => {
+      {MAIN_NAV_LINKS.map(({ label, href }) => {
         const isActive = pathname === href;
         return (
           <li
@@ -87,21 +79,7 @@ function GitHubButton({ className }: { className?: string }) {
 export default function Navigation() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [docsDropdownOpen, setDocsDropdownOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
-  const docsDesktopRef = useRef<HTMLLIElement>(null);
-
-  useEffect(() => {
-    if (!docsDropdownOpen) return;
-    const onMouseDown = (e: MouseEvent) => {
-      const el = docsDesktopRef.current;
-      if (el && !el.contains(e.target as Node)) {
-        setDocsDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onMouseDown);
-    return () => document.removeEventListener("mousedown", onMouseDown);
-  }, [docsDropdownOpen]);
 
   const docsActive = isDocsActive(pathname);
 
@@ -114,7 +92,7 @@ export default function Navigation() {
       <nav className="mx-auto flex min-h-[60px] max-w-[1100px] items-center justify-between gap-4 px-4">
         <Link
           href="/"
-          className="flex shrink-0 items-center gap-2.5 font-mono text-[1.25rem] font-bold no-underline"
+          className="flex shrink-0 items-center font-mono text-[1.25rem] font-bold no-underline"
         >
           <Image
             src="/chatvector-logo.svg"
@@ -130,13 +108,11 @@ export default function Navigation() {
         </Link>
 
         <ul className="m-0 hidden list-none flex-1 flex-row flex-wrap items-center justify-center gap-8 p-0 md:flex">
-          <NavLinks pathname={pathname} links={SECTION_LINKS_BEFORE} />
-          <li ref={docsDesktopRef} className="relative">
+          <NavLinks pathname={pathname} />
+          <li className="group relative">
             <button
               type="button"
-              aria-expanded={docsDropdownOpen}
-              aria-haspopup="true"
-              onClick={() => setDocsDropdownOpen((o) => !o)}
+              aria-haspopup="menu"
               className={`flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-[1.05rem] no-underline transition-colors duration-200 ${
                 docsActive
                   ? "text-accent"
@@ -146,14 +122,12 @@ export default function Navigation() {
               Docs
               <ChevronDown
                 aria-hidden
-                className={`size-[1em] shrink-0 transition-transform duration-200 ${
-                  docsDropdownOpen ? "rotate-180" : ""
-                }`}
+                className="size-[1em] shrink-0 transition-transform duration-200 group-hover:rotate-180 group-focus-within:rotate-180"
               />
             </button>
-            {docsDropdownOpen ? (
+            <div className="pointer-events-none invisible absolute right-0 top-full z-50 pt-2 opacity-0 transition-[opacity,visibility] duration-200 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100">
               <div
-                className="absolute top-full z-50 mt-2 min-w-[180px] rounded-xl border border-border bg-surface py-2"
+                className="min-w-[180px] rounded-xl border border-border bg-surface py-2"
                 role="menu"
               >
                 {DOC_LINKS.map(({ label, href }) => (
@@ -161,16 +135,14 @@ export default function Navigation() {
                     key={href}
                     href={href}
                     role="menuitem"
-                    onClick={() => setDocsDropdownOpen(false)}
                     className="block px-4 py-2 text-[0.9rem] text-muted no-underline transition-colors hover:text-foreground"
                   >
                     {label}
                   </Link>
                 ))}
               </div>
-            ) : null}
+            </div>
           </li>
-          <NavLinks pathname={pathname} links={SECTION_LINKS_AFTER} />
         </ul>
 
         <div className="flex shrink-0 items-center gap-3">
@@ -194,7 +166,6 @@ export default function Navigation() {
               pathname={pathname}
               centerOnMobile
               onNavigate={() => setMobileOpen(false)}
-              links={SECTION_LINKS_BEFORE}
             />
             <li className="w-full text-center">
               <button
@@ -234,12 +205,6 @@ export default function Navigation() {
                 </ul>
               ) : null}
             </li>
-            <NavLinks
-              pathname={pathname}
-              centerOnMobile
-              onNavigate={() => setMobileOpen(false)}
-              links={SECTION_LINKS_AFTER}
-            />
           </ul>
           <div className="flex justify-center">
             <GitHubButton />
