@@ -10,7 +10,7 @@ export default function UploadButton({ onClick }: Props) {
   return (
     <button
       onClick={onClick}
-      className="text-gray-400 hover:text-white transition"
+      className="text-muted hover:text-foreground transition"
       title="Upload document"
     >
       <Paperclip size={18} />
