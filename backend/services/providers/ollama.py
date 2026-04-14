@@ -80,7 +80,22 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
                 json={"model": self._model, "input": texts},
             )
             response.raise_for_status()
-            return response.json()["embeddings"]
+            data = response.json()
+
+            if "embeddings" in data:
+                return data["embeddings"]
+
+            if "embedding" in data:
+                embedding = data["embedding"]
+                # legacy compatibility: Older Ollama instances return a flat list[float]
+                # for single inputs. wrap it to maintain the list[list[float]] interface.
+                if embedding and not isinstance(embedding[0], (list, tuple)):
+                    return [embedding]
+                return embedding
+
+            raise ProviderError(
+                f"Unexpected Ollama embed response shape: {list(data.keys())}"
+            )
 
         except httpx.HTTPStatusError as exc:
             raise _classify_http_error(exc) from exc
