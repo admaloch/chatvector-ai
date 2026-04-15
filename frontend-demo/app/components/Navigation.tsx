@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import ThemeToggle from "./ThemeToggle";
 
 const GITHUB_REPO = "https://github.com/chatvector-ai/chatvector-ai";
@@ -78,28 +78,10 @@ function GitHubButton({ className }: { className?: string }) {
   );
 }
 
-function getLogoSrc(): string {
-  if (typeof window === "undefined") return "/chatvector-logo-dark.svg";
-  return document.documentElement.getAttribute("data-theme") === "light"
-    ? "/chatvector-logo-light.svg"
-    : "/chatvector-logo-dark.svg";
-}
-
 export default function Navigation() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
-  const [logoSrc, setLogoSrc] = useState<string>(getLogoSrc);
-
-  useEffect(() => {
-    setLogoSrc(getLogoSrc());
-    const observer = new MutationObserver(() => setLogoSrc(getLogoSrc()));
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme"],
-    });
-    return () => observer.disconnect();
-  }, []);
 
   const docsActive = isDocsActive(pathname);
 
@@ -114,13 +96,22 @@ export default function Navigation() {
           href="/"
           className="flex shrink-0 items-center font-mono text-[1.25rem] font-bold no-underline"
         >
+          {/* Both images rendered; CSS shows/hides based on data-theme on <html> */}
           <Image
-            src={logoSrc}
+            src="/chatvector-logo-dark.svg"
             alt=""
             width={40}
             height={40}
             unoptimized
-            className="size-10 shrink-0"
+            className="size-10 shrink-0 [[data-theme=light]_&]:hidden"
+          />
+          <Image
+            src="/chatvector-logo-light.svg"
+            alt=""
+            width={40}
+            height={40}
+            unoptimized
+            className="size-10 shrink-0 hidden [[data-theme=light]_&]:block"
           />
           <span className="text-[1.5rem] bg-gradient-to-r from-accent to-blue bg-clip-text text-transparent">
             ChatVector
