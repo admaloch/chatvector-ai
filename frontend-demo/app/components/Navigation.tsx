@@ -92,6 +92,7 @@ export default function Navigation() {
   const [logoSrc, setLogoSrc] = useState<string>(getLogoSrc);
 
   useEffect(() => {
+    setLogoSrc(getLogoSrc());
     const observer = new MutationObserver(() => setLogoSrc(getLogoSrc()));
     observer.observe(document.documentElement, {
       attributes: true,
