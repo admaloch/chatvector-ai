@@ -7,7 +7,7 @@ const phases = [
     number: "Phase 1",
     title: "Stabilize & Optimize Core Engine",
     status: "Complete",
-    statusStyles: "bg-accent text-black",
+    statusStyles: "bg-accent text-background",
     description: "Core RAG backend hardened for reliability, observability, and performance. Shipped features include a robust ingestion pipeline, centralized retry logic, and built-in observability."
   },
   {

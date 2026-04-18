@@ -105,14 +105,18 @@ export default function MessageList({ messages, inflight, bottomRef }: Props) {
           >
             <div
               className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center ${
-                msg.sender === "ai" ? "bg-accent text-black" : "bg-surface border border-border"
+                msg.sender === "ai"
+                  ? "bg-accent text-background"
+                  : "bg-surface border border-border"
               }`}
             >
               {msg.sender === "ai" ? <Bot size={16} /> : <User size={16} />}
             </div>
             <div
               className={`max-w-[75%] md:max-w-[60%] whitespace-pre-wrap break-words px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                msg.sender === "ai" ? "bg-surface text-foreground rounded-bl-none" : "bg-accent text-black rounded-br-none"
+                msg.sender === "ai"
+                  ? "bg-surface text-foreground rounded-bl-none"
+                  : "bg-accent text-background rounded-br-none"
               }`}
             >
               {text}
@@ -137,7 +141,7 @@ export default function MessageList({ messages, inflight, bottomRef }: Props) {
       })}
       {inflight && (
         <div className="flex items-end gap-2">
-          <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-accent text-black">
+          <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-accent text-background">
             <Bot size={16} />
           </div>
           <div className="px-4 py-3 rounded-2xl rounded-bl-none bg-surface text-muted text-sm animate-pulse">

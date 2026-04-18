@@ -2,7 +2,7 @@ const FEATURES = [
   {
     icon: "⬆",
     color: "var(--accent)",
-    bg: "rgba(0,229,160,0.1)",
+    bg: "color-mix(in srgb, var(--accent) 10%, transparent)",
     title: "Multi-format ingestion",
     desc: "PDF, Markdown, HTML, DOCX, plain text. Drop a folder and go.",
     tag: "ingestion",

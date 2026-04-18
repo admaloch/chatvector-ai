@@ -13,8 +13,8 @@ function PipelineStep({
       <div
         className="flex size-7 shrink-0 items-center justify-center rounded-md border font-mono text-xs font-bold text-accent"
         style={{
-          background: "rgba(0,229,160,0.1)",
-          borderColor: "rgba(0,229,160,0.2)",
+          background: "color-mix(in srgb, var(--accent) 10%, transparent)",
+          borderColor: "color-mix(in srgb, var(--accent) 20%, transparent)",
         }}
       >
         {num}
