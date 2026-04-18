@@ -82,6 +82,8 @@ export default function Navigation() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
+  /** Desktop flyout: sync aria-expanded with hover / focus-within */
+  const [docsFlyoutOpen, setDocsFlyoutOpen] = useState(false);
 
   const docsActive = isDocsActive(pathname);
 
@@ -120,10 +122,22 @@ export default function Navigation() {
 
         <ul className="m-0 hidden list-none flex-1 flex-row flex-wrap items-center justify-center gap-8 p-0 md:flex">
           <NavLinks pathname={pathname} />
-          <li className="group relative">
+          <li
+            className="group relative"
+            onMouseEnter={() => setDocsFlyoutOpen(true)}
+            onMouseLeave={() => setDocsFlyoutOpen(false)}
+            onFocusCapture={() => setDocsFlyoutOpen(true)}
+            onBlurCapture={(e) => {
+              const next = e.relatedTarget;
+              if (next instanceof Node && e.currentTarget.contains(next)) return;
+              setDocsFlyoutOpen(false);
+            }}
+          >
             <button
               type="button"
               aria-haspopup="menu"
+              aria-expanded={docsFlyoutOpen}
+              aria-controls="docs-menu"
               className={`flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-[1.05rem] no-underline transition-colors duration-200 ${
                 docsActive
                   ? "text-accent"
@@ -138,6 +152,7 @@ export default function Navigation() {
             </button>
             <div className="pointer-events-none invisible absolute right-0 top-full z-50 pt-2 opacity-0 transition-[opacity,visibility] duration-200 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100">
               <div
+                id="docs-menu"
                 className="min-w-[180px] rounded-xl border border-border bg-surface py-2"
                 role="menu"
               >
@@ -182,7 +197,9 @@ export default function Navigation() {
             <li className="w-full text-center">
               <button
                 type="button"
+                aria-haspopup="menu"
                 aria-expanded={docsOpen}
+                aria-controls="docs-menu-mobile"
                 onClick={() => setDocsOpen((o) => !o)}
                 className={`inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-[1.05rem] no-underline transition-colors duration-200 ${
                   docsActive
@@ -199,7 +216,10 @@ export default function Navigation() {
                 />
               </button>
               {docsOpen ? (
-                <ul className="m-0 mt-3 flex list-none flex-col items-stretch gap-2 p-0 pl-4">
+                <ul
+                  id="docs-menu-mobile"
+                  className="m-0 mt-3 flex list-none flex-col items-stretch gap-2 p-0 pl-4"
+                >
                   {DOC_LINKS.map(({ label, href }) => (
                     <li key={href} className="w-full text-center">
                       <Link

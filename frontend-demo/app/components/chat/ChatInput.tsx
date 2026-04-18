@@ -95,6 +95,7 @@ export default function ChatInput({
             type="button"
             onClick={() => void handleSend()}
             disabled={sendDisabled}
+            aria-label="Send message"
             title={
               inflight
                 ? "Waiting for response..."

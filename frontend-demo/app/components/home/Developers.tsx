@@ -98,9 +98,9 @@ export default function Developers() {
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
                 <div>
-                  <h4 className="mb-0.5 text-[0.92rem] font-medium text-foreground">
+                  <h3 className="mb-0.5 text-[0.92rem] font-medium text-foreground">
                     {p.title}
-                  </h4>
+                  </h3>
                   <p className="m-0 text-[0.9rem] text-muted">{p.desc}</p>
                 </div>
               </div>

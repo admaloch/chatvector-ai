@@ -20,9 +20,9 @@ function PipelineStep({
         {num}
       </div>
       <div>
-        <h4 className="mb-0.5 text-[0.95rem] font-medium text-foreground">
+        <h3 className="mb-0.5 text-[0.95rem] font-medium text-foreground">
           {title}
-        </h4>
+        </h3>
         <p className="m-0 text-[0.9rem] text-muted">{desc}</p>
       </div>
     </div>
