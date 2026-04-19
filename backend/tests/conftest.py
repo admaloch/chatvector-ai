@@ -17,15 +17,17 @@ os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
 os.environ.setdefault("SUPABASE_KEY", "test-key-123")
 os.environ.setdefault("GEN_AI_KEY", "test-genai-key")
-os.environ.setdefault("LLM_PROVIDER", "gemini")
-os.environ.setdefault("EMBEDDING_PROVIDER", "gemini")
-os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
-os.environ.setdefault("OLLAMA_BASE_URL", "http://localhost:11434")
 os.environ.setdefault("LOG_LEVEL", "DEBUG")
 os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+psycopg://postgres:postgres@localhost:5432/postgres",
 )
+
+# Force logging setup BEFORE any app modules are imported.
+# This ensures all log output (including startup/shutdown) goes to test.log,
+# keeping app.log clean for development server traffic only.
+from logging_config.logging_config import setup_logging
+setup_logging()
 
 env_file = BACKEND_DIR / ".env"
 if not env_file.exists():
