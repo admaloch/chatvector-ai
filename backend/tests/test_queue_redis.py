@@ -10,14 +10,18 @@ They are skipped automatically if Redis is not reachable.
 """
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+_DEFAULT_REDIS_URL = "redis://localhost:6379/0"
+_REDIS_TEST_URL = (os.environ.get("REDIS_URL") or _DEFAULT_REDIS_URL).strip() or _DEFAULT_REDIS_URL
+
 try:
     import redis as redis_lib
-    REDIS_AVAILABLE = redis_lib.Redis.from_url("redis://localhost:6379/0").ping()
+    REDIS_AVAILABLE = redis_lib.Redis.from_url(_REDIS_TEST_URL).ping()
 except Exception:
     REDIS_AVAILABLE = False
 
@@ -29,7 +33,6 @@ pytestmark = [
 from services.queue_base import DLQEntry, QueueFull, QueueJob
 from services.queue_redis import (
     DLQ_REDIS_KEY,
-    RQ_QUEUE_NAME,
     TEMP_DIR,
     RedisIngestionQueue,
     _push_dlq_entry,
@@ -42,15 +45,11 @@ from services.queue_redis import (
 
 @pytest.fixture(autouse=True)
 def _clean_redis():
-    """Flush the test keys before and after each test."""
-    conn = redis_lib.Redis.from_url("redis://localhost:6379/0")
-    from rq import Queue as RQQueue
-    q = RQQueue(RQ_QUEUE_NAME, connection=conn)
-    q.empty()
-    conn.delete(DLQ_REDIS_KEY)
+    """Reset Redis state before and after each test (see tests service REDIS_URL / DB index)."""
+    conn = redis_lib.Redis.from_url(_REDIS_TEST_URL)
+    conn.flushdb()
     yield
-    q.empty()
-    conn.delete(DLQ_REDIS_KEY)
+    conn.flushdb()
 
 
 @pytest.fixture(autouse=True)
@@ -80,7 +79,7 @@ def _make_job(doc_id: str = "doc-redis-test") -> QueueJob:
 async def test_enqueue_adds_job_to_rq_queue(monkeypatch):
     """After enqueue, the RQ queue should contain one job."""
     monkeypatch.setattr("services.queue_redis.config.QUEUE_MAX_SIZE", 100)
-    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", _REDIS_TEST_URL)
     queue = RedisIngestionQueue()
 
     position = await queue.enqueue(_make_job("doc-rq-1"))
@@ -93,7 +92,7 @@ async def test_enqueue_adds_job_to_rq_queue(monkeypatch):
 async def test_enqueue_writes_temp_file(monkeypatch):
     """Enqueue should spill file_bytes to /tmp/chatvector/{doc_id}."""
     monkeypatch.setattr("services.queue_redis.config.QUEUE_MAX_SIZE", 100)
-    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", _REDIS_TEST_URL)
     queue = RedisIngestionQueue()
 
     await queue.enqueue(_make_job("doc-tmp"))
@@ -111,7 +110,7 @@ async def test_enqueue_writes_temp_file(monkeypatch):
 async def test_queue_full_raised_at_capacity(monkeypatch):
     """QueueFull is raised when the queue hits QUEUE_MAX_SIZE."""
     monkeypatch.setattr("services.queue_redis.config.QUEUE_MAX_SIZE", 2)
-    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", _REDIS_TEST_URL)
     queue = RedisIngestionQueue()
 
     await queue.enqueue(_make_job("doc-cap-1"))
@@ -129,7 +128,7 @@ async def test_queue_full_raised_at_capacity(monkeypatch):
 async def test_queue_size_returns_correct_count(monkeypatch):
     """queue_size() should reflect the number of enqueued jobs."""
     monkeypatch.setattr("services.queue_redis.config.QUEUE_MAX_SIZE", 100)
-    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", _REDIS_TEST_URL)
     queue = RedisIngestionQueue()
 
     assert queue.queue_size() == 0
@@ -144,7 +143,7 @@ async def test_queue_size_returns_correct_count(monkeypatch):
 async def test_queue_position_finds_job(monkeypatch):
     """queue_position() returns 1-indexed position for a known doc_id."""
     monkeypatch.setattr("services.queue_redis.config.QUEUE_MAX_SIZE", 100)
-    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", _REDIS_TEST_URL)
     queue = RedisIngestionQueue()
 
     await queue.enqueue(_make_job("doc-pos-a"))
@@ -162,7 +161,7 @@ async def test_queue_position_finds_job(monkeypatch):
 async def test_queue_position_returns_none_for_unknown(monkeypatch):
     """queue_position() returns None for a doc_id not in the queue."""
     monkeypatch.setattr("services.queue_redis.config.QUEUE_MAX_SIZE", 100)
-    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", _REDIS_TEST_URL)
     queue = RedisIngestionQueue()
 
     assert queue.queue_position("nonexistent") is None
@@ -174,7 +173,7 @@ async def test_queue_position_returns_none_for_unknown(monkeypatch):
 
 def test_dlq_entry_stored_in_redis(monkeypatch):
     """_push_dlq_entry persists a JSON entry in the chatvector:dlq list."""
-    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", _REDIS_TEST_URL)
 
     entry = DLQEntry(
         doc_id="doc-dlq-1",
@@ -185,7 +184,7 @@ def test_dlq_entry_stored_in_redis(monkeypatch):
     )
     _push_dlq_entry(entry)
 
-    conn = redis_lib.Redis.from_url("redis://localhost:6379/0")
+    conn = redis_lib.Redis.from_url(_REDIS_TEST_URL)
     raw = conn.lrange(DLQ_REDIS_KEY, 0, -1)
     assert len(raw) == 1
 
@@ -198,7 +197,7 @@ def test_dlq_entry_stored_in_redis(monkeypatch):
 def test_dlq_jobs_reads_entries(monkeypatch):
     """dlq_jobs() deserializes all entries from the Redis list."""
     monkeypatch.setattr("services.queue_redis.config.QUEUE_MAX_SIZE", 100)
-    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", _REDIS_TEST_URL)
 
     for i in range(3):
         _push_dlq_entry(DLQEntry(
@@ -225,7 +224,7 @@ def test_dlq_jobs_reads_entries(monkeypatch):
 async def test_temp_file_cleaned_after_successful_processing(monkeypatch):
     """After a successful job, the temp file should be deleted."""
     monkeypatch.setattr("services.queue_redis.config.QUEUE_MAX_SIZE", 100)
-    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setattr("services.queue_redis.config.REDIS_URL", _REDIS_TEST_URL)
 
     queue = RedisIngestionQueue()
     await queue.enqueue(_make_job("doc-cleanup"))
