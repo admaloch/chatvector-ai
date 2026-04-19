@@ -15,6 +15,12 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from dotenv import load_dotenv
+
+# Merge backend/.env before reading REDIS_URL so local pytest matches `core.config`.
+# Docker/Make inject env first; override=False keeps compose-injected values.
+_BACKEND_DIR = Path(__file__).resolve().parents[1]
+load_dotenv(_BACKEND_DIR / ".env", override=False)
 
 _DEFAULT_REDIS_URL = "redis://localhost:6379/0"
 _REDIS_TEST_URL = (os.environ.get("REDIS_URL") or _DEFAULT_REDIS_URL).strip() or _DEFAULT_REDIS_URL
@@ -42,6 +48,19 @@ from services.queue_redis import (
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _isolated_rq_queue_name(monkeypatch):
+    """Dedicated RQ queue name so ingestion workers from app lifespan/tests never drain these jobs.
+
+    When QUEUE_BACKEND=redis, FastAPI startup spawns workers on ``chatvector-ingestion``;
+    integration tests must enqueue to a different list or ``len(queue)`` is 0 after enqueue.
+    """
+    monkeypatch.setattr(
+        "services.queue_redis.RQ_QUEUE_NAME",
+        "chatvector-ingestion-pytest",
+    )
+
 
 @pytest.fixture(autouse=True)
 def _clean_redis():
