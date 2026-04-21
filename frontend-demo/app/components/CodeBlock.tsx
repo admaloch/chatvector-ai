@@ -13,7 +13,6 @@ const CodeBlock = ({
   language,
   code,
   className,
-  showLineNumbers,
 }: CodeBlockProps) => {
   if (filename) {
     return (
@@ -28,7 +27,9 @@ const CodeBlock = ({
           </span>
         </div>
         <pre
-          className={`text-white m-0 overflow-x-auto px-6 py-5 font-mono text-[0.82rem] leading-[1.75] ${className || ""}`}
+          className={`text-white m-0 overflow-x-auto px-6 py-5 font-mono text-[0.82rem] leading-[1.75] ${className || " "} ${
+            language ? `language-${language}` : ""
+          }`}
         >
           {children}
         </pre>
