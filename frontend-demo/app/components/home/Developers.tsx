@@ -1,4 +1,3 @@
-import { SYNTAX } from "../../lib/constants";
 import CodeBlock from "../CodeBlock";
 
 const DEV_POINTS = [

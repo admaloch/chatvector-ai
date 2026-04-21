@@ -53,8 +53,7 @@ export default function SdkPage() {
           question:
         </p>
         <CodeBlock language="python" filename="upload_and_chat.py">
-          <pre className="text-white mt-5 font-mono text-[0.82rem] p-4 overflow-x-auto">
-            <code>{`from chatvector import ChatVectorClient
+          <code>{`from chatvector import ChatVectorClient
 
 with ChatVectorClient("http://localhost:8000") as client:
     # Upload a document
@@ -71,7 +70,6 @@ with ChatVectorClient("http://localhost:8000") as client:
     # Print cited sources
     for source in answer.sources:
         print(source.file_name, source.page_number)`}</code>
-          </pre>
         </CodeBlock>
       </section>
 
@@ -132,8 +130,7 @@ with ChatVectorClient("http://localhost:8000") as client:
           ))}
         </div>
         <CodeBlock language="python" filename="error_handling.py">
-          <pre className="text-white mt-5  font-mono text-[0.82rem] p-4 overflow-x-auto">
-            <code>{`from chatvector.exceptions import (
+          <code>{`from chatvector.exceptions import (
     ChatVectorAPIError,
     ChatVectorAuthError,
     ChatVectorRateLimitError,
@@ -152,7 +149,6 @@ except ChatVectorTimeoutError:
     print("Document took too long to process.")
 except ChatVectorAPIError as e:
     print("SDK error:", e)`}</code>
-          </pre>
         </CodeBlock>
       </section>
 

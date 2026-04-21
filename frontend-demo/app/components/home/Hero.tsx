@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { GITHUB_REPO, SYNTAX } from "../../lib/constants";
+import { GITHUB_REPO } from "../../lib/constants";
 import CodeBlock from "../CodeBlock";
 
 function HeroCodeBlock() {

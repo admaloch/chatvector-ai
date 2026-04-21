@@ -7,27 +7,31 @@ interface CodeBlockProps {
   showLineNumbers?: boolean;
   className?: string;
 }
-const CodeBlock = (
-  { filename, children, language, code }: CodeBlockProps,
-  //   showLineNumbers?: boolean,
-  //   className?: string,
-) => {
+const CodeBlock = ({
+  filename,
+  children,
+  language,
+  code,
+  className,
+}: CodeBlockProps) => {
   if (filename) {
     return (
-      <pre className="m-0 overflow-x-auto px-6 py-5 font-mono text-[0.82rem] leading-[1.75]">
-        <div className="overflow-hidden rounded-xl border border-border bg-code-bg">
-          <div className="flex items-center gap-2 border-b border-border bg-[rgb(24,28,34)] px-4 py-3">
-            {/* macOS traffic-light dots — intentional non-token colors */}
-            <div className="size-2.5 rounded-full bg-[rgb(255,95,87)]" />
-            <div className="size-2.5 rounded-full bg-[rgb(254,188,46)]" />
-            <div className="size-2.5 rounded-full bg-[rgb(40,200,64)]" />
-            <span className="ml-auto font-mono text-xs text-muted">
-              {filename}
-            </span>
-          </div>
-          {children}
+      <div className="overflow-hidden rounded-xl border border-border bg-code-bg">
+        <div className="flex items-center gap-2 border-b border-border bg-[rgb(24,28,34)] px-4 py-3">
+          {/* macOS traffic-light dots — intentional non-token colors */}
+          <div className="size-2.5 rounded-full bg-[rgb(255,95,87)]" />
+          <div className="size-2.5 rounded-full bg-[rgb(254,188,46)]" />
+          <div className="size-2.5 rounded-full bg-[rgb(40,200,64)]" />
+          <span className="ml-auto font-mono text-xs text-muted">
+            {filename}
+          </span>
         </div>
-      </pre>
+        <pre
+          className={`text-white m-0 overflow-x-auto px-6 py-5 font-mono text-[0.82rem] leading-[1.75] ${className || ""}`}
+        >
+          {children}
+        </pre>
+      </div>
     );
   } else {
     return (
