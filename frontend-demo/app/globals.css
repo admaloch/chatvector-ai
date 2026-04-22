@@ -1,6 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@300;400;500;600&display=swap");
 @import "tailwindcss";
-
 
 /* =============================================
    ChatVector Design Tokens
@@ -19,7 +18,7 @@
   --foreground: #e8edf5;
   --surface: #111418;
   --border: #1e2530;
-  --muted: #96A2AB;
+  --muted: #96a2ab;
   --subtle: #3d4555;
   --accent: #00e5a0;
   --blue: #0080ff;
@@ -54,8 +53,8 @@
   --color-code-bg: var(--code-bg);
 
   /* Fonts */
-  --font-sans: 'DM Sans', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: "DM Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
 }
 
 body {
@@ -74,16 +73,23 @@ html {
   input:focus-visible,
   textarea:focus-visible,
   select:focus-visible,
-  [role='button']:focus-visible,
-  [role='link']:focus-visible,
-  [role='menuitem']:focus-visible,
-  [role='tab']:focus-visible,
-  [tabindex]:not([tabindex='-1']):focus-visible {
+  [role="button"]:focus-visible,
+  [role="link"]:focus-visible,
+  [role="menuitem"]:focus-visible,
+  [role="tab"]:focus-visible,
+  [tabindex]:not([tabindex="-1"]):focus-visible {
     @apply outline-none ring-2 ring-accent/50 ring-offset-2 ring-offset-background;
   }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.5; transform: scale(0.85); }
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
 }

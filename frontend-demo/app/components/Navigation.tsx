@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Github } from "lucide-react";
 import { useState } from "react";
 import ThemeToggle from "./ThemeToggle";
 
@@ -63,15 +63,21 @@ function NavLinks({
   );
 }
 
-function GitHubButton({ className }: { className?: string }) {
+function GitHubNavLink() {
   return (
     <a
       href={GITHUB_REPO}
       target="_blank"
       rel="noopener noreferrer"
-      className={`inline-flex text-[1rem] cursor-pointer items-center justify-center rounded-md border border-border bg-transparent px-[18px] py-[7px] text-base text-foreground no-underline transition-all duration-200 hover:border-accent hover:bg-accent/10 hover:text-accent ${className ?? ""}`}
+      aria-label="View ChatVector on GitHub"
+      className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-border bg-transparent p-2 text-base leading-none text-foreground no-underline transition-all duration-200 hover:border-accent hover:bg-accent/10 hover:text-accent md:px-[18px] md:py-2"
     >
-      GitHub
+      <Github
+        className="size-[1.1rem] shrink-0 md:hidden"
+        strokeWidth={1.75}
+        aria-hidden
+      />
+      <span className="hidden md:inline">GitHub</span>
     </a>
   );
 }
@@ -94,7 +100,7 @@ export default function Navigation() {
       <nav className="mx-auto flex min-h-[60px] max-w-[1100px] items-center justify-between gap-4 px-3 py-2">
         <Link
           href="/"
-          className="flex shrink-0 items-center font-mono text-[1.15rem] font-bold no-underline"
+          className="flex shrink-0 items-center gap-1.5 font-mono font-bold no-underline md:gap-2"
         >
           {/* Both images rendered; CSS shows/hides based on data-theme on <html> */}
           <Image
@@ -103,7 +109,7 @@ export default function Navigation() {
             width={70}
             height={70}
             unoptimized
-            className="size-12 shrink-0 [[data-theme=light]_&]:hidden"
+            className="size-9 shrink-0 md:size-10 lg:size-12 [[data-theme=light]_&]:hidden"
           />
           <Image
             src="/chatvector-logo-light.svg"
@@ -111,9 +117,9 @@ export default function Navigation() {
             width={70}
             height={70}
             unoptimized
-            className="size-12 shrink-0 hidden [[data-theme=light]_&]:block"
+            className="size-9 shrink-0 hidden md:size-10 lg:size-12 [[data-theme=light]_&]:block"
           />
-          <span className="text-[1.7rem] bg-gradient-to-r from-accent to-blue bg-clip-text text-transparent">
+          <span className="whitespace-nowrap text-[1.2rem] leading-tight text-transparent md:text-[1.45rem] lg:text-[1.7rem] bg-gradient-to-r from-accent to-blue bg-clip-text">
             ChatVector
           </span>
         </Link>
@@ -168,8 +174,8 @@ export default function Navigation() {
           </li>
         </ul>
 
-        <div className="flex shrink-0 items-center gap-3">
-          <GitHubButton className="hidden md:inline-flex" />
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <GitHubNavLink />
           <ThemeToggle />
           <button
             type="button"
@@ -235,9 +241,6 @@ export default function Navigation() {
               ) : null}
             </li>
           </ul>
-          <div className="flex justify-center">
-            <GitHubButton />
-          </div>
         </div>
       ) : null}
     </header>
