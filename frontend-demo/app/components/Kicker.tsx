@@ -1,5 +1,11 @@
 import { cn } from "@/lib/utils";
 
+const SPACING_CLASSES = {
+  sm: "mb-2",
+  md: "mb-3",
+  lg: "mb-4",
+} as const;
+
 interface KickerProps {
   children: React.ReactNode;
   variant?: "comment" | "numbered";
@@ -13,11 +19,6 @@ export function Kicker({
   spacing = "md",
   className,
 }: KickerProps) {
-  const spacingClasses = {
-    sm: "mb-2",
-    md: "mb-3",
-    lg: "mb-4",
-  };
 
   const content = variant === "comment" ? `// ${children}` : children;
 
@@ -25,7 +26,7 @@ export function Kicker({
     <p
       className={cn(
         "font-mono text-sm uppercase tracking-[2px] text-accent",
-        spacingClasses[spacing],
+        SPACING_CLASSES[spacing],
         className,
       )}
     >
