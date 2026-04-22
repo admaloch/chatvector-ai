@@ -191,13 +191,14 @@ class SQLAlchemyService(DatabaseService):
         async with self.async_session() as session:
             try:
                 async with session.begin():
+                    # Delete chunks first due to FK constraint
                     await session.execute(
                         delete(DocumentChunk).where(DocumentChunk.document_id == document_id)
                     )
                     await session.execute(
                         delete(Document).where(Document.id == document_id)
                     )
-                logger.info(f"[PostgreSQL] Deleted document {document_id} and its chunks")
+                logger.info(f"[PostgreSQL] Atomically deleted document {document_id}")
             except Exception:
                 logger.error(f"[PostgreSQL] Failed to delete document {document_id}")
                 raise

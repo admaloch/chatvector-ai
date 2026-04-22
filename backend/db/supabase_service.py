@@ -186,30 +186,15 @@ class SupabaseService(DatabaseService):
         logger.info(f"[Supabase] Deleted chunks for failed upload document {doc_id}")
 
     async def delete_document(self, document_id: str) -> None:
+        """Atomically delete a document and its chunks using RPC."""
         try:
-            # Delete chunks first to respect foreign key constraints. These are two
-            # separate PostgREST calls, not a single DB transaction: if the second
-            # call fails after the first succeeds, orphaned chunks are possible; operators
-            # may re-run delete or run a one-off cleanup. Full transactional delete belongs
-            # in a later migration/RPC, not a light hardening pass.
-            # Note: The two Supabase client calls (deleting chunks, then the document)
-            # do not strictly satisfy the 'atomic' docstring contract. We rely on the
-            # project's compensating-cleanup pattern instead.
             await self._run_io(
-                lambda: supabase_client.table("document_chunks")
-                .delete()
-                .eq("document_id", document_id)
-                .execute(),
-                operation_name="delete_document_chunks",
+                lambda: supabase_client.rpc(
+                    "delete_document_atomic", {"target_document_id": document_id}
+                ).execute(),
+                operation_name="delete_document_atomic",
             )
-            await self._run_io(
-                lambda: supabase_client.table("documents")
-                .delete()
-                .eq("id", document_id)
-                .execute(),
-                operation_name="delete_document",
-            )
-            logger.info(f"[Supabase] Deleted document {document_id} and its chunks")
+            logger.info(f"[Supabase] Atomically deleted document {document_id}")
         except Exception as e:
             logger.error(f"[Supabase] Deletion failed for document {document_id}: {e}")
             raise
