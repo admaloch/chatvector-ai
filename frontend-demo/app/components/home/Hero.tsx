@@ -1,48 +1,48 @@
 import Link from "next/link";
 
-import { GITHUB_REPO } from "../../lib/constants";
+import { GITHUB_REPO, SYNTAX } from "../../lib/constants";
 import CodeBlock from "../CodeBlock";
 
 function HeroCodeBlock() {
   const lines = [
-    { type: "keyword", text: "from " },
-    { type: "default", text: "chatvector " },
-    { type: "keyword", text: "import " },
-    { type: "function", text: "ChatVectorClient" },
+    { type: "kw", text: "from " },
+    { type: "plain", text: "chatvector " },
+    { type: "kw", text: "import " },
+    { type: "fn", text: "ChatVectorClient" },
     { type: "br" },
     { type: "br" },
-    { type: "comment", text: "# Point the client at your running instance" },
+    { type: "cm", text: "# Point the client at your running instance" },
     { type: "br" },
-    { type: "default", text: "cv = " },
-    { type: "function", text: "ChatVectorClient" },
-    { type: "default", text: "(" },
-    { type: "string", text: '"http://localhost:8000"' },
-    { type: "default", text: ")" },
-    { type: "br" },
-    { type: "br" },
-    { type: "comment", text: "# Upload a document" },
-    { type: "br" },
-    { type: "default", text: "doc = cv." },
-    { type: "function", text: "upload_document" },
-    { type: "default", text: "(" },
-    { type: "string", text: '"contract.pdf"' },
-    { type: "default", text: ")" },
-    { type: "br" },
-    { type: "default", text: "cv." },
-    { type: "function", text: "wait_for_ready" },
-    { type: "default", text: "(doc.document_id)" },
+    { type: "plain", text: "cv = " },
+    { type: "fn", text: "ChatVectorClient" },
+    { type: "plain", text: "(" },
+    { type: "str", text: '"http://localhost:8000"' },
+    { type: "plain", text: ")" },
     { type: "br" },
     { type: "br" },
-    { type: "comment", text: "# Get a grounded, cited answer" },
+    { type: "cm", text: "# Upload a document" },
     { type: "br" },
-    { type: "default", text: "answer = cv." },
-    { type: "function", text: "chat" },
-    { type: "default", text: "(" },
-    { type: "string", text: '"What are the payment terms?"' },
-    { type: "default", text: ", doc.document_id)" },
+    { type: "plain", text: "doc = cv." },
+    { type: "fn", text: "upload_document" },
+    { type: "plain", text: "(" },
+    { type: "str", text: '"contract.pdf"' },
+    { type: "plain", text: ")" },
     { type: "br" },
-    { type: "default", text: "print(answer.answer)  " },
-    { type: "comment", text: "# Cited, accurate" },
+    { type: "plain", text: "cv." },
+    { type: "fn", text: "wait_for_ready" },
+    { type: "plain", text: "(doc.document_id)" },
+    { type: "br" },
+    { type: "br" },
+    { type: "cm", text: "# Get a grounded, cited answer" },
+    { type: "br" },
+    { type: "plain", text: "answer = cv." },
+    { type: "fn", text: "chat" },
+    { type: "plain", text: "(" },
+    { type: "str", text: '"What are the payment terms?"' },
+    { type: "plain", text: ", doc.document_id)" },
+    { type: "br" },
+    { type: "plain", text: "print(answer.answer)  " },
+    { type: "cm", text: "# Cited, accurate" },
   ];
 
   return (
@@ -55,7 +55,10 @@ function HeroCodeBlock() {
             <span
               key={i}
               style={{
-                color: `var(--syntax-${t.type})`,
+                color:
+                  t.type === "val"
+                    ? "var(--accent)"
+                    : (SYNTAX[t.type as keyof typeof SYNTAX] ?? SYNTAX.plain),
               }}
             >
               {t.text}
