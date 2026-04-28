@@ -21,6 +21,20 @@ db_service = None
 _thread_local = threading.local()
 
 
+def _uses_local_sqlalchemy() -> bool:
+    """Use SQLAlchemy against DATABASE_URL in development and in CI tests.
+
+    Pytest sets APP_ENV=test with a local DATABASE_URL; without this, get_db_service
+    would select Supabase and integration tests would call HTTP with placeholder creds.
+    """
+    env = config.APP_ENV.lower()
+    if env == "development":
+        return True
+    if env == "test" and config.DATABASE_URL:
+        return True
+    return False
+
+
 def get_db_service():
     """Return singleton DB service, preferring thread-local override.
 
@@ -37,11 +51,14 @@ def get_db_service():
     if db_service is not None:
         return db_service
 
-    if config.APP_ENV.lower() == "development":
+    if _uses_local_sqlalchemy():
         from .sqlalchemy_service import SQLAlchemyService
 
         db_service = SQLAlchemyService()
-        logger.info("Using SQLAlchemy database service (development)")
+        logger.info(
+            "Using SQLAlchemy database service (%s)",
+            "development" if config.APP_ENV.lower() == "development" else "test",
+        )
     else:
         from .supabase_service import SupabaseService
 
@@ -55,7 +72,8 @@ def get_db_service():
 async def worker_db_context():
     """Install a fresh DB service on the current thread for RQ workers.
 
-    In development (SQLAlchemy), a new :class:`SQLAlchemyService` is
+    When using SQLAlchemy (development or tests with DATABASE_URL),
+    a new :class:`SQLAlchemyService` is
     created so its async engine is bound to the worker thread's event
     loop rather than the main thread's.  The engine is disposed on exit.
 
@@ -63,7 +81,7 @@ async def worker_db_context():
     because ``SupabaseService`` uses synchronous httpx under the hood
     and does not have the event loop binding issue.
     """
-    if config.APP_ENV.lower() != "development":
+    if not _uses_local_sqlalchemy():
         yield get_db_service()
         return
 

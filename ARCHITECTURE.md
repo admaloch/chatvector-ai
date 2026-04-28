@@ -54,6 +54,8 @@ This ensures:
 - Environment-specific behavior isolated to the implementation layer
 - Easy extension for future backends
 
+**Document deletion:** Removing a document and its rows in `document_chunks` must be atomic so a failed mid-delete cannot leave orphaned chunks. `SQLAlchemyService.delete_document()` runs both deletes in a single DB transaction. `SupabaseService` calls the Postgres RPC `delete_document_atomic` (see `backend/db/init/003_atomic_delete.sql`), which performs the same two deletes in one transaction. The factory continues to choose the implementation by environment; the public `delete_document` API is unchanged.
+
 ---
 
 ## LLM & Embedding Providers
