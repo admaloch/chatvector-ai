@@ -154,7 +154,11 @@ class SQLAlchemyService(DatabaseService):
         async with self.async_session() as session:
             document = await session.get(Document, doc_id)
             if not document:
-                raise ValueError(f"Document {doc_id} not found")
+                logger.warning(
+                    "[PostgreSQL] update_document_status: document %s not found, skipping",
+                    doc_id,
+                )
+                return
 
             document.status = status
             if error is not None:

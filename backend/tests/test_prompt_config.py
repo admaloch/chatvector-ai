@@ -10,16 +10,18 @@ def test_load_system_prompt_returns_stripped_content(tmp_path, monkeypatch):
     prompt_file = tmp_path / "custom_system.txt"
     prompt_file.write_text("  line one\nline two  \n", encoding="utf-8")
     monkeypatch.setattr(answer_service.config, "SYSTEM_PROMPT_PATH", str(prompt_file))
+    monkeypatch.setattr(answer_service, "_SYSTEM_PROMPT", None)
 
-    assert answer_service._load_system_prompt() == "line one\nline two"
+    assert answer_service._get_system_prompt() == "line one\nline two"
 
 
 def test_load_system_prompt_missing_file_raises_clear_file_not_found(tmp_path, monkeypatch):
     missing = tmp_path / "does_not_exist.txt"
     monkeypatch.setattr(answer_service.config, "SYSTEM_PROMPT_PATH", str(missing))
+    monkeypatch.setattr(answer_service, "_SYSTEM_PROMPT", None)
 
     with pytest.raises(FileNotFoundError) as exc_info:
-        answer_service._load_system_prompt()
+        answer_service._get_system_prompt()
 
     msg = str(exc_info.value)
     assert "System prompt file not found" in msg

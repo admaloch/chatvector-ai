@@ -1,8 +1,9 @@
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from core.auth import require_auth
 from core.config import config
 from middleware.rate_limit import limiter
 from pydantic import BaseModel, Field
@@ -34,7 +35,7 @@ class ChatRequest(BaseModel):
 
 @router.post("/chat")
 @limiter.limit(config.RATE_LIMIT_CHAT)
-async def chat(request: Request, payload: ChatRequest):
+async def chat(request: Request, payload: ChatRequest, auth: dict = Depends(require_auth)):
     logger.info(f"Chat request received for document {payload.doc_id}")
     return await answer_question_for_document(
         question=payload.question,
@@ -45,7 +46,7 @@ async def chat(request: Request, payload: ChatRequest):
 
 @router.post("/chat/batch")
 @limiter.limit(config.RATE_LIMIT_CHAT_BATCH)
-async def chat_batch(request: Request, payload: ChatBatchRequest):
+async def chat_batch(request: Request, payload: ChatBatchRequest, auth: dict = Depends(require_auth)):
     logger.info(f"Batch chat request received with {len(payload.queries)} queries")
 
     try:

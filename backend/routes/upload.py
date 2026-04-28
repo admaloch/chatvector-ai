@@ -1,7 +1,8 @@
 import logging
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
+from core.auth import require_auth
 from core.config import config
 from middleware.rate_limit import limiter
 
@@ -34,7 +35,7 @@ def _http_error(
 
 @router.post("/upload", status_code=202)
 @limiter.limit(config.RATE_LIMIT_UPLOAD)
-async def upload(request: Request, file: UploadFile = File(...)):
+async def upload(request: Request, file: UploadFile = File(...), auth: dict = Depends(require_auth)):
     """
     Accept a file upload, validate it, and enqueue it for background processing.
 

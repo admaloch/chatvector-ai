@@ -9,12 +9,13 @@ from pathlib import Path
 from typing import Any
 
 import psutil
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 import db
+from core.auth import require_auth
 from core.clients import redis_client
 from core.config import config
 from middleware.rate_limit import limiter
@@ -423,7 +424,7 @@ def _status_fallback_health_dict(exc: BaseException, label: str) -> dict:
 
 @router.get("/status")
 @limiter.limit(config.RATE_LIMIT_STATUS)
-async def status(request: Request):
+async def status(request: Request, auth: dict = Depends(require_auth)):
     start = getattr(request.app.state, "start_time", time.time())
     db_result, embedding_result, llm_result = await asyncio.gather(
         _database_connected_and_document_count(),

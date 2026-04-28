@@ -30,13 +30,21 @@ def build_context_from_chunks(chunks: list) -> str:
 
         addition = (sep_len + len(part)) if parts else len(part)
         if total_chars + addition > MAX_CONTEXT_CHARS:
+            if not parts:
+                # Single chunk exceeds cap; include it rather than returning empty context.
+                parts.append(part)
+                dropped = len(chunks) - i - 1
+                used = len(part)
+            else:
+                dropped = len(chunks) - i
+                used = total_chars
             logger.warning(
                 "Context truncated: dropped %d of %d chunks to stay within "
                 "MAX_CONTEXT_CHARS=%d (used %d chars)",
-                len(chunks) - i,
+                dropped,
                 len(chunks),
                 MAX_CONTEXT_CHARS,
-                total_chars,
+                used,
             )
             break
 
