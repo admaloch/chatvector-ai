@@ -1,17 +1,24 @@
 import pytest
 import uuid
-import asyncio
-import sys
-from db import get_db_service
+
+from core.config import get_embedding_dim
 from db.base import ChunkRecord
+from db.sqlalchemy_service import SQLAlchemyService
+
 
 @pytest.mark.asyncio
 async def test_delete_document_atomicity_integration():
     """
     Integration test to verify that deleting a document also removes its chunks.
-    This verifies atomicity (via transaction in SQLAlchemy or RPC in Supabase).
+
+    Uses SQLAlchemyService directly so this always exercises the transactional
+    delete path against local Postgres in CI (avoids coupling to APP_ENV after
+    other tests reload core.config). Supabase deletes are covered by the RPC migration.
     """
-    db = get_db_service()
+    pytest.importorskip("pgvector")
+    dim = get_embedding_dim()
+    filler = [0.1] * dim
+    db = SQLAlchemyService()
     file_name = f"test_atomicity_{uuid.uuid4()}.pdf"
     
     # 1. Create a document
@@ -21,7 +28,7 @@ async def test_delete_document_atomicity_integration():
     chunk_records = [
         ChunkRecord(
             chunk_text=f"Chunk {i}",
-            embedding=[0.1] * 1536, # Placeholder embedding
+            embedding=[0.1] * dim,
             chunk_index=i,
             page_number=1,
             character_offset_start=i * 10,
@@ -33,7 +40,7 @@ async def test_delete_document_atomicity_integration():
     
     # 3. Verify chunks exist (using a raw query or checking similarity search)
     # For simplicity, we use find_similar_chunks which we know works.
-    matches = await db.find_similar_chunks(doc_id, [0.1] * 1536, match_count=10)
+    matches = await db.find_similar_chunks(doc_id, filler, match_count=10)
     assert len(matches) == 3
     
     # 4. Delete the document
@@ -44,5 +51,5 @@ async def test_delete_document_atomicity_integration():
     assert doc is None
     
     # 6. Verify chunks are gone (orphans check)
-    matches_after = await db.find_similar_chunks(doc_id, [0.1] * 1536, match_count=10)
+    matches_after = await db.find_similar_chunks(doc_id, filler, match_count=10)
     assert len(matches_after) == 0
