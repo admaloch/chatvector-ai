@@ -41,6 +41,24 @@ jobs:
           cd backend
           pip install -r requirements.txt
 
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Apply database schema
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: postgres
+        run: |
+          set -euo pipefail
+          for f in backend/db/init/001_init.sql \
+                   backend/db/init/002_dimensionless_vector.sql \
+                   backend/db/init/003_atomic_delete.sql; do
+            psql -v ON_ERROR_STOP=1 -f "$f"
+          done
+
       - name: Run backend tests
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
