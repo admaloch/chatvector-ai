@@ -153,8 +153,9 @@ An async in-memory `asyncio.Queue` decouples upload from processing.
 Documents left in any in-progress state are bulk-updated to `failed`
 before workers start accepting new jobs.
 
-> **Note:** The queue will be replaced with Redis (#123) for job
-> durability and multi-instance support.
+> **Note:** The default queue is in-memory. A Redis-backed queue is
+> implemented (`QUEUE_BACKEND=redis`) and will become the production
+> default in Phase 3 for job durability and multi-instance support.
 
 ---
 
@@ -217,6 +218,7 @@ All external I/O is wrapped with retry logic via `backend/utils/retry.py`.
 - `asyncio.TimeoutError` caught by type and always treated as transient
 - 429/rate-limit errors from Gemini detected by type (`APIError`) before string matching
 - Non-transient errors (4xx validation failures) fail fast without retry
+- `max_retries` means retries *after* the first attempt — `max_retries=3` makes 4 total attempts
 
 **Timeout configuration:**
 | Surface | Timeout | Mechanism |
@@ -248,8 +250,9 @@ Per-IP HTTP rate limiting via `slowapi` on all public endpoints.
 All limits are configurable via env vars (`RATE_LIMIT_*`).
 429 responses return `{"detail": {"code": "rate_limited", "message": "..."}}`.
 
-Storage is in-memory for single-instance deployments. Migration to
-Redis-backed storage is planned when #123 lands.
+Storage is in-memory for single-instance deployments. Redis-backed
+rate limit storage will be introduced in Phase 3 alongside the Redis
+queue promotion.
 
 ---
 
@@ -273,7 +276,9 @@ rejected at startup when `allow_credentials=True`.
 
 **Input validation** — Pydantic field bounds on all chat endpoints:
 `max_length=2000` on questions, `le=20` on `match_count`, `max_length=20`
-on batch queries.
+on batch queries. Document IDs (`doc_id`, `document_id`) are validated
+as UUIDs at the route layer — invalid values return 422 before reaching
+the service or DB layer.
 
 **OpenAPI docs** — `/docs`, `/redoc`, and `/openapi.json` disabled when
 `APP_ENV=production`.
@@ -408,7 +413,7 @@ responses. Security headers on every response.
 The current architecture supports these extensions without major refactors:
 
 - ~~Pluggable LLM & embedding providers~~ (done — see LLM & Embedding Providers)
-- **Redis-backed queue** — drop-in replacement for in-memory queue (#123)
+- ~~Redis-backed queue~~ (implemented — `QUEUE_BACKEND=redis`; in-memory remains default until Phase 3)
 - **Authentication & multi-tenancy** — Phase 3
 - **Streaming LLM responses** — Server-Sent Events, Phase 3
 - **Specialized pipelines** — legal, academic, code document handling
