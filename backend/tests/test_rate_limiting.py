@@ -38,6 +38,9 @@ async def _rate_limit_exceeded_handler(
 _UPLOAD_WINDOW = 20
 _CHAT_WINDOW = 30
 
+# Valid document ID for POST /chat (Pydantic UUID validation).
+_CHAT_DOC_ID = "00000000-0000-0000-0000-000000000001"
+
 
 def _rate_limited_test_app() -> FastAPI:
     app = FastAPI()
@@ -77,7 +80,7 @@ def test_post_upload_returns_429_after_limit_exceeded(client):
 
 
 def test_post_chat_returns_429_after_limit_exceeded(client):
-    payload = {"question": "hello", "doc_id": "doc-1", "match_count": 5}
+    payload = {"question": "hello", "doc_id": _CHAT_DOC_ID, "match_count": 5}
     with patch(
         "routes.chat.answer_question_for_document",
         new=AsyncMock(return_value={"answer": "ok", "chunks": 0}),
@@ -106,7 +109,7 @@ def test_429_response_has_standard_error_shape(client):
 
 
 def test_429_includes_retry_after_header(client):
-    payload = {"question": "q", "doc_id": "doc-2", "match_count": 5}
+    payload = {"question": "q", "doc_id": _CHAT_DOC_ID, "match_count": 5}
     with patch(
         "routes.chat.answer_question_for_document",
         new=AsyncMock(return_value={"answer": "a", "chunks": 0}),
