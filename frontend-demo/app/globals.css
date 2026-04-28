@@ -22,6 +22,12 @@
   --subtle: #3d4555;
   --accent: #00e5a0;
   --blue: #0080ff;
+  --syntax-keyword: #ff7b72;
+  --syntax-string: #a5d6ff;
+  --syntax-function: #79c0ff;
+  --syntax-comment: #8b949e;
+  --syntax-default: #c9d1d9;
+  --syntax-variable: #ffa657;
   /* Theme-invariant token — code blocks always render on a dark surface */
   --code-bg: #111418;
   /* Nav scrim — 88% opacity background that tracks the active theme */
@@ -29,6 +35,7 @@
 }
 
 [data-theme="light"] {
+  /*currently syntax colors are same but can be changes in future */
   --background: #ffffff;
   --foreground: #0a0c10;
   --surface: #f4f5f7;
@@ -38,6 +45,12 @@
   --accent: #008059;
   --blue: #0070e0;
   --nav-bg: rgba(255, 255, 255, 0.88);
+  --syntax-keyword: #ff7b72;
+  --syntax-string: #a5d6ff;
+  --syntax-function: #79c0ff;
+  --syntax-comment: #8b949e;
+  --syntax-default: #c9d1d9;
+  --syntax-variable: #ffa657;
 }
 
 @theme inline {

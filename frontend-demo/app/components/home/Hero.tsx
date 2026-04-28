@@ -1,81 +1,84 @@
 import Link from "next/link";
 
 import { GITHUB_REPO, SYNTAX } from "../../lib/constants";
+import CodeBlock from "../CodeBlock";
 
 function HeroCodeBlock() {
-  const lines = [
-    { type: "kw", text: "from " },
-    { type: "plain", text: "chatvector " },
-    { type: "kw", text: "import " },
-    { type: "fn", text: "ChatVectorClient" },
-    { type: "br" },
-    { type: "br" },
-    { type: "cm", text: "# Point the client at your running instance" },
-    { type: "br" },
-    { type: "plain", text: "cv = " },
-    { type: "fn", text: "ChatVectorClient" },
-    { type: "plain", text: "(" },
-    { type: "str", text: '"http://localhost:8000"' },
-    { type: "plain", text: ")" },
-    { type: "br" },
-    { type: "br" },
-    { type: "cm", text: "# Upload a document" },
-    { type: "br" },
-    { type: "plain", text: "doc = cv." },
-    { type: "fn", text: "upload_document" },
-    { type: "plain", text: "(" },
-    { type: "str", text: '"contract.pdf"' },
-    { type: "plain", text: ")" },
-    { type: "br" },
-    { type: "plain", text: "cv." },
-    { type: "fn", text: "wait_for_ready" },
-    { type: "plain", text: "(doc.document_id)" },
-    { type: "br" },
-    { type: "br" },
-    { type: "cm", text: "# Get a grounded, cited answer" },
-    { type: "br" },
-    { type: "plain", text: "answer = cv." },
-    { type: "fn", text: "chat" },
-    { type: "plain", text: "(" },
-    { type: "str", text: '"What are the payment terms?"' },
-    { type: "plain", text: ", doc.document_id)" },
-    { type: "br" },
-    { type: "plain", text: "print(answer.answer)  " },
-    { type: "cm", text: "# Cited, accurate" },
-  ];
-
+ const codeLines = [
+  {
+    parts: [
+      { c: SYNTAX.kw, t: "from " },
+      { c: SYNTAX.plain, t: "chatvector " },
+      { c: SYNTAX.kw, t: "import " },
+      { c: SYNTAX.fn, t: "ChatVectorClient" },
+    ],
+  },
+  { parts: [{ c: SYNTAX.plain, t: " " }] },
+  {
+    parts: [{ c: SYNTAX.cm, t: "# Point the client at your running instance" }],
+  },
+  {
+    parts: [
+      { c: SYNTAX.plain, t: "cv = " },
+      { c: SYNTAX.fn, t: "ChatVectorClient" },
+      { c: SYNTAX.plain, t: "(" },
+      { c: SYNTAX.str, t: '"http://localhost:8000"' },
+      { c: SYNTAX.plain, t: ")" },
+    ],
+  },
+  { parts: [{ c: SYNTAX.plain, t: " " }] },
+  {
+    parts: [{ c: SYNTAX.cm, t: "# Upload a document" }],
+  },
+  {
+    parts: [
+      { c: SYNTAX.plain, t: "doc = cv." },
+      { c: SYNTAX.fn, t: "upload_document" },
+      { c: SYNTAX.plain, t: "(" },
+      { c: SYNTAX.str, t: '"contract.pdf"' },
+      { c: SYNTAX.plain, t: ")" },
+    ],
+  },
+  {
+    parts: [
+      { c: SYNTAX.plain, t: "cv." },
+      { c: SYNTAX.fn, t: "wait_for_ready" },
+      { c: SYNTAX.plain, t: "(doc.document_id)" },
+    ],
+  },
+  { parts: [{ c: SYNTAX.plain, t: " " }] },
+  {
+    parts: [{ c: SYNTAX.cm, t: "# Get a grounded, cited answer" }],
+  },
+  {
+    parts: [
+      { c: SYNTAX.plain, t: "answer = cv." },
+      { c: SYNTAX.fn, t: "chat" },
+      { c: SYNTAX.plain, t: "(" },
+      { c: SYNTAX.str, t: '"What are the payment terms?"' },
+      { c: SYNTAX.plain, t: ", doc.document_id)" },
+    ],
+  },
+  {
+    parts: [
+      { c: SYNTAX.plain, t: "print(answer.answer)  " },
+      { c: SYNTAX.cm, t: "# Cited, accurate" },
+    ],
+  },
+];
   return (
     <div className="relative z-[1] mt-12 w-full max-w-[700px]">
-      <div className="overflow-hidden rounded-xl border border-border bg-code-bg">
-        <div className="flex items-center gap-2 border-b border-border bg-[rgb(24,28,34)] px-4 py-3">
-          {/* macOS traffic-light dots — intentional non-token colors */}
-          <div className="size-2.5 rounded-full bg-[rgb(255,95,87)]" />
-          <div className="size-2.5 rounded-full bg-[rgb(254,188,46)]" />
-          <div className="size-2.5 rounded-full bg-[rgb(40,200,64)]" />
-          <span className="ml-auto font-mono text-xs text-muted">
-            quickstart.py
-          </span>
-        </div>
-        <pre className="m-0 overflow-x-auto px-6 py-5 font-mono text-[0.82rem] leading-[1.75]">
-          {lines.map((t, i) =>
-            t.type === "br" ? (
-              <br key={i} />
-            ) : (
-              <span
-                key={i}
-                style={{
-                  color:
-                    t.type === "val"
-                      ? "var(--accent)"
-                      : (SYNTAX[t.type as keyof typeof SYNTAX] ?? SYNTAX.plain),
-                }}
-              >
-                {t.text}
-              </span>
-            ),
-          )}
-        </pre>
-      </div>
+      <CodeBlock language="python" filename="quickstart.py">
+        {codeLines.map((line, i) => (
+              <div key={i}>
+                {line.parts.map((p, j) => (
+                  <span key={j} style={{ color: p.c }}>
+                    {p.t}
+                  </span>
+                ))}
+              </div>
+            ))}
+      </CodeBlock>
     </div>
   );
 }
