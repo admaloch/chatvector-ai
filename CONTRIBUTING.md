@@ -95,7 +95,8 @@ This document focuses on contribution rules and expectations.
 
 🎯 Before Submitting
 
-1. Test your changes manually using FastAPI /docs
-2. Verify existing functionality still works
-3. Check your code runs without errors
-4. Update documentation if needed
+1. Run the test suite and confirm it passes: `make tests` (Docker) or `cd backend && pytest tests/ -v`
+2. Test your changes manually using FastAPI `/docs`
+3. Verify existing functionality still works
+4. Check your code runs without errors
+5. Update documentation if needed

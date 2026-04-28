@@ -85,9 +85,9 @@ ChatVector is designed for:
 
 ## 🚀 Current Status
 
-### Phase 2 — Largely Complete
+### Phase 2 & 2.5 — Complete | Phase 3 — In Progress
 
-The core RAG backend and frontend demo are fully functional. Phase 2 focused on developer experience, retrieval quality, and production hardening.
+Phases 2 and 2.5 are complete. The core RAG backend and frontend demo are fully functional and hardened. Phase 3 is now underway, adding authentication, multi-tenancy, sessions, and streaming.
 
 **What's working today:**
 
@@ -99,11 +99,14 @@ The core RAG backend and frontend demo are fully functional. Phase 2 focused on 
 - ✅ Query transformations (rewrite, expand, stepback)
 - ✅ Configurable system prompt and LLM parameters
 - ✅ Background ingestion queue with rate limiting, retry, and DLQ
+- ✅ Redis-backed ingestion queue (implemented; in-memory remains the default)
 - ✅ Structured logging with request ID tracing
 - ✅ Health checks with TTL caching on /status
 - ✅ Per-IP rate limiting on all public endpoints
+- ✅ UUID validation on all document ID inputs
 - ✅ Security headers, CORS hardening, input validation
 - ✅ Production Compose config + GitHub Actions CI
+- ✅ Pluggable LLM & embedding providers (Gemini, OpenAI, Ollama)
 - ✅ Python client SDK
 
 **Frontend Demo**
@@ -113,10 +116,10 @@ The core RAG backend and frontend demo are fully functional. Phase 2 focused on 
 - ✅ Responsive design with dark developer aesthetic
 
 **In progress / Phase 3:**
-- 🚧 Redis-backed durable ingestion queue (#123)
-- ✅ Pluggable LLM & embedding providers (Gemini, OpenAI, Ollama)
-- 🚧 Authentication & multi-tenancy
-- 🚧 Streaming LLM responses
+- 🚧 Authentication & multi-tenancy (API key per tenant)
+- 🚧 Session-based chat with conversation memory
+- 🚧 Streaming LLM responses (SSE)
+- 🚧 Redis queue promoted to production default
 
 ---
 

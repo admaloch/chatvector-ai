@@ -193,8 +193,9 @@ Inspect the dead-letter queue at any time:
 curl http://localhost:8000/queue/stats
 ```
 
-> **Note:** The current queue is in-memory and does not persist across
-> restarts. Redis-backed durability is planned in [#123](https://github.com/chatvector-ai/chatvector-ai/issues/123).
+> **Note:** The current default queue is in-memory and does not persist across
+> restarts. A Redis-backed queue is implemented and available (`QUEUE_BACKEND=redis`);
+> it will become the production default in Phase 3.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for full queue and pipeline details.
 
@@ -214,8 +215,11 @@ docker compose run --rm tests
 
 ### Running Locally
 
-`backend/requirements.txt` installs `psycopg[binary]`, so local pytest
-collection does not require a separate system `libpq` installation.
+`backend/requirements.txt` installs `psycopg[binary]`, which bundles
+the Postgres client library for most platforms. On Python 3.13 or
+non-standard environments `psycopg_binary` may not be available; if you
+see `libpq library not found` errors, run tests via Docker instead
+(`make tests`) or install `libpq` and `psycopg[c]` manually.
 
 ```bash
 cd backend
@@ -281,6 +285,7 @@ Docker Compose expands `${VAR}` from your process environment or a
 | `POSTGRES_DB`         | **Required** | As above                                                        |
 | `LOG_LEVEL`           | Optional     | Default: `INFO`                                                 |
 | `LOG_FORMAT`          | Optional     | `TEXT` or `JSON` (default: `TEXT`; use `JSON` for log shipping) |
+| `MAX_CONTEXT_CHARS`   | Optional     | Max chars of retrieved context sent to LLM; default `32000`     |
 | `QUEUE_WORKER_COUNT`  | Optional     | Default: `3`                                                    |
 | `QUEUE_EMBEDDING_RPS` | Optional     | Default: `2.0`                                                  |
 | `LLM_HTTP_TIMEOUT_MS` | Optional     | Default: `60000`                                                |
@@ -322,8 +327,10 @@ docker compose up --build
 
 ### Queue persistence
 
-The current in-memory queue does not persist across restarts. Plan
-for this in production deployments until Redis (#123) lands.
+The default in-memory queue does not persist across restarts. For production
+deployments requiring durability, set `QUEUE_BACKEND=redis` and provide
+`REDIS_URL`. Redis queue support is implemented; it will become the default
+in Phase 3.
 
 ---
 
