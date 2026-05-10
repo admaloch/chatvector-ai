@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { X, Upload, AlertCircle } from "lucide-react";
+import { X, Upload, AlertCircle, FileText, Loader2 } from "lucide-react";
 import { uploadDocument } from "../lib/api";
 import IngestionPipeline from "./IngestionPipeline";
 
@@ -39,6 +39,8 @@ export default function UploadModal({
   const [uploadHttpFailed, setUploadHttpFailed] = useState(false);
   /** Until parent `attachment` reflects the new doc, avoid flashing the file picker after POST succeeds. */
   const [awaitingProcessing, setAwaitingProcessing] = useState(false);
+  /** Tracks whether the pipeline animation has visually reached "completed". */
+  const [pipelineVisuallyComplete, setPipelineVisuallyComplete] = useState(false);
 
   useEffect(() => {
     if (
@@ -64,6 +66,7 @@ export default function UploadModal({
     setLastFile(file);
     setIsUploading(true);
     setUploadHttpFailed(false);
+    setPipelineVisuallyComplete(false);
     try {
       if (onBeforeUpload) {
         await onBeforeUpload();
@@ -146,7 +149,7 @@ export default function UploadModal({
       }}
     >
       <div
-        className="w-full max-w-[460px] rounded-3xl border border-border bg-surface p-6 shadow-2xl shadow-black/50"
+        className="w-full max-w-[580px] rounded-3xl border border-border bg-surface p-6 shadow-2xl shadow-black/50"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
@@ -212,28 +215,68 @@ export default function UploadModal({
             className="hidden"
           />
           {showPipeline && (
-            <IngestionPipeline
-              currentStage={showUploading ? "uploading" : attachment?.stage}
-              completedStages={
-                showUploading
-                  ? []
-                  : (attachment?.completedStages ?? [])
-              }
-              failed={showServerFailed}
-              chunks={attachment?.chunks}
-            />
-          )}
-          {showServerFailed && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleRetry();
-              }}
-              className="mt-4 w-full rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:bg-surface"
-            >
-              Retry
-            </button>
+            <div className="flex gap-0">
+              {/* Left — stage list */}
+              <div className="min-w-0 flex-1">
+                <IngestionPipeline
+                  currentStage={showUploading ? "uploading" : attachment?.stage}
+                  completedStages={
+                    showUploading
+                      ? []
+                      : (attachment?.completedStages ?? [])
+                  }
+                  failed={showServerFailed}
+                  chunks={attachment?.chunks}
+                  onDisplayedStageChange={(s) => {
+                    if (s === "completed") setPipelineVisuallyComplete(true);
+                  }}
+                />
+                {showServerFailed && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRetry();
+                    }}
+                    className="mt-2 w-full rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:bg-surface"
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
+
+              {/* Right — document status panel */}
+              <div className="flex w-48 shrink-0 flex-col items-center justify-center gap-4 text-center">
+                {pipelineVisuallyComplete ? (
+                  <>
+                    <div className="flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500/15 ring-2 ring-emerald-400/30">
+                      <svg width="44" height="44" viewBox="0 0 20 20" fill="none" aria-hidden>
+                        <path
+                          d="M4 10l4.5 4.5L16 6"
+                          stroke="#34d399"
+                          strokeWidth="2.25"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </div>
+                    <p className="text-base font-semibold leading-snug text-emerald-400">
+                      Upload<br />Successful
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue/10 ring-1 ring-blue/20">
+                      <FileText size={28} className="text-blue" strokeWidth={1.75} aria-hidden />
+                    </div>
+                    <p className="w-full truncate text-sm font-medium text-foreground" title={lastFile?.name}>
+                      {lastFile?.name ?? "Document"}
+                    </p>
+                    <Loader2 size={28} className="animate-spin text-muted" strokeWidth={2} aria-hidden />
+                  </>
+                )}
+              </div>
+            </div>
           )}
           {showHttpFailed && (
             <div className="flex flex-col items-center gap-4 text-center">

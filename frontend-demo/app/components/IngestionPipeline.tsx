@@ -18,6 +18,8 @@ type Props = {
   failed?: boolean;
   /** Chunk info surfaced during embedding stage. */
   chunks?: { total: number; processed: number };
+  /** Fires each time the animated displayed stage advances, including the final "completed" tick. */
+  onDisplayedStageChange?: (stage: string | undefined) => void;
 };
 
 /**
@@ -186,8 +188,16 @@ export default function IngestionPipeline({
   currentStage,
   failed = false,
   chunks,
+  onDisplayedStageChange,
 }: Props) {
   const { displayedStage, displayedCompleted } = useAnimatedStage(currentStage, failed);
+
+  const onDisplayedStageChangeRef = useRef(onDisplayedStageChange);
+  onDisplayedStageChangeRef.current = onDisplayedStageChange;
+
+  useEffect(() => {
+    onDisplayedStageChangeRef.current?.(displayedStage);
+  }, [displayedStage]);
 
   return (
     <ul className="w-full" role="list" aria-label="Ingestion progress">
