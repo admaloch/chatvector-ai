@@ -37,6 +37,7 @@ export default function UploadModal({
   const [lastFile, setLastFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadHttpFailed, setUploadHttpFailed] = useState(false);
+  const [uploadErrorMessage, setUploadErrorMessage] = useState<string | null>(null);
   /** Until parent `attachment` reflects the new doc, avoid flashing the file picker after POST succeeds. */
   const [awaitingProcessing, setAwaitingProcessing] = useState(false);
   /** Tracks whether the pipeline animation has visually reached "completed". */
@@ -66,6 +67,7 @@ export default function UploadModal({
     setLastFile(file);
     setIsUploading(true);
     setUploadHttpFailed(false);
+    setUploadErrorMessage(null);
     setPipelineVisuallyComplete(false);
     try {
       if (onBeforeUpload) {
@@ -74,8 +76,9 @@ export default function UploadModal({
       const { documentId, statusEndpoint } = await uploadDocument(file);
       onUploadAccepted({ fileName: file.name, documentId, statusEndpoint });
       setAwaitingProcessing(true);
-    } catch {
+    } catch (err) {
       setUploadHttpFailed(true);
+      setUploadErrorMessage(err instanceof Error ? err.message : null);
       setAwaitingProcessing(false);
     } finally {
       setIsUploading(false);
@@ -122,7 +125,10 @@ export default function UploadModal({
     (attachment === null || attachment.status === "ready");
 
   const dropZoneInteractive = showPicker;
-  const showDismissWait = (showUploading || showProcessing) && !showSuccess;
+  // Keep "Dismiss and wait" visible until the animation visually reaches "completed",
+  // not just when the raw SSE status flips to ready.
+  const showDismissWait =
+    (showUploading || showProcessing || showSuccess) && !pipelineVisuallyComplete;
 
   const showPipeline = showUploading || showProcessing || showSuccess || showServerFailed;
 
@@ -149,30 +155,26 @@ export default function UploadModal({
       }}
     >
       <div
-        className="w-full max-w-[580px] rounded-3xl border border-border bg-surface p-6 shadow-2xl shadow-black/50"
+        className="w-full max-w-[460px] rounded-3xl border border-border bg-surface p-6 shadow-2xl shadow-black/50"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <h2 className="text-xl font-semibold tracking-tight text-foreground">
-              Upload document
-            </h2>
-            <p className="mt-1 text-base text-muted">PDF, TXT, or DOCX</p>
-            <div className="mt-1 flex min-h-[2.5rem] items-center">
-              <button
-                type="button"
-                onClick={onClose}
-                tabIndex={showDismissWait ? 0 : -1}
-                aria-hidden={!showDismissWait}
-                className={`inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium transition ${
-                  showDismissWait
-                    ? "cursor-pointer text-muted hover:bg-background hover:text-foreground"
-                    : "pointer-events-none invisible"
-                }`}
-              >
-                Dismiss and wait
-              </button>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <h2 className="text-xl font-semibold tracking-tight text-foreground">
+                Upload document
+              </h2>
+              {showDismissWait && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="inline-flex items-center justify-center rounded-lg px-2.5 py-1 text-sm font-medium text-muted transition hover:bg-background hover:text-foreground"
+                >
+                  Dismiss and wait
+                </button>
+              )}
             </div>
+            <p className="mt-1 mb-2 text-base text-muted">PDF, TXT, or DOCX</p>
           </div>
           <button
             type="button"
@@ -217,7 +219,7 @@ export default function UploadModal({
           {showPipeline && (
             <div className="flex gap-0">
               {/* Left — stage list */}
-              <div className="min-w-0 flex-1">
+              <div className="w-40 shrink-0">
                 <IngestionPipeline
                   currentStage={showUploading ? "uploading" : attachment?.stage}
                   completedStages={
@@ -284,7 +286,7 @@ export default function UploadModal({
                 <AlertCircle className="h-7 w-7 text-red-400" strokeWidth={1.75} aria-hidden />
               </div>
               <p className="max-w-[280px] text-base font-medium text-red-400">
-                Upload failed. Please try again.
+                {uploadErrorMessage ?? "Upload failed. Please try again."}
               </p>
               <button
                 type="button"

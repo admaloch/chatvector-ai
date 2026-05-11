@@ -159,7 +159,7 @@ function StageRow({
       </div>
 
       {/* Label */}
-      <div className="pb-4 pt-0.5">
+      <div className="relative pb-4 pt-0.5">
         <span
           className={[
             "text-sm font-medium leading-none transition-colors duration-200",
@@ -175,7 +175,7 @@ function StageRow({
           {label}
         </span>
         {showChunks && (
-          <p className="mt-1 text-xs text-muted">
+          <p className="absolute top-full -mt-3 text-xs text-muted">
             {chunks!.total} chunk{chunks!.total !== 1 ? "s" : ""}
           </p>
         )}

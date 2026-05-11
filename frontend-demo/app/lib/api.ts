@@ -166,11 +166,15 @@ export async function uploadDocument(
   });
   
   if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error("Too many requests — please wait a moment and try again.");
+    }
     let message = "Upload failed. Please try again.";
     try {
       const errBody = await res.json();
       const detail = errBody?.detail;
       if (typeof detail?.message === "string") message = detail.message;
+      else if (typeof detail === "string") message = detail;
     } catch {
       /* ignore */
     }
