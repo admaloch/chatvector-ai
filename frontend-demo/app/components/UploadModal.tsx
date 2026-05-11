@@ -37,11 +37,14 @@ export default function UploadModal({
   const [lastFile, setLastFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadHttpFailed, setUploadHttpFailed] = useState(false);
-  const [uploadErrorMessage, setUploadErrorMessage] = useState<string | null>(null);
+  const [uploadErrorMessage, setUploadErrorMessage] = useState<string | null>(
+    null,
+  );
   /** Until parent `attachment` reflects the new doc, avoid flashing the file picker after POST succeeds. */
   const [awaitingProcessing, setAwaitingProcessing] = useState(false);
   /** Tracks whether the pipeline animation has visually reached "completed". */
-  const [pipelineVisuallyComplete, setPipelineVisuallyComplete] = useState(false);
+  const [pipelineVisuallyComplete, setPipelineVisuallyComplete] =
+    useState(false);
 
   useEffect(() => {
     if (
@@ -57,11 +60,13 @@ export default function UploadModal({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
+  // Start the close timer only once the pipeline animation visually reaches
+  // "completed" — this guarantees the 2.5s border sweep has its full duration.
   useEffect(() => {
-    if (!showSuccess) return;
-    const timer = setTimeout(() => onCloseRef.current(), 2500);
+    if (!pipelineVisuallyComplete) return;
+    const timer = setTimeout(() => onCloseRef.current(), 1500);
     return () => clearTimeout(timer);
-  }, [showSuccess]);
+  }, [pipelineVisuallyComplete]);
 
   const handleFile = async (file: File) => {
     setLastFile(file);
@@ -128,9 +133,11 @@ export default function UploadModal({
   // Keep "Dismiss and wait" visible until the animation visually reaches "completed",
   // not just when the raw SSE status flips to ready.
   const showDismissWait =
-    (showUploading || showProcessing || showSuccess) && !pipelineVisuallyComplete;
+    (showUploading || showProcessing || showSuccess) &&
+    !pipelineVisuallyComplete;
 
-  const showPipeline = showUploading || showProcessing || showSuccess || showServerFailed;
+  const showPipeline =
+    showUploading || showProcessing || showSuccess || showServerFailed;
 
   const dropZoneClassName = [
     "relative rounded-2xl border-2 border-dashed transition-all duration-300 ease-out",
@@ -155,9 +162,42 @@ export default function UploadModal({
       }}
     >
       <div
-        className="w-full max-w-[460px] rounded-3xl border border-border bg-surface p-6 shadow-2xl shadow-black/50"
+        className="relative w-full max-w-[460px] rounded-3xl border border-border bg-surface p-6 shadow-2xl shadow-black/50"
         onClick={(e) => e.stopPropagation()}
       >
+        {pipelineVisuallyComplete && (
+          <>
+            <style>{`
+              @property --border-sweep {
+                syntax: '<angle>';
+                initial-value: 0deg;
+                inherits: false;
+              }
+              @keyframes border-sweep {
+                to { --border-sweep: 360deg; }
+              }
+              .modal-border-sweep {
+                animation: border-sweep 1.45s linear forwards;
+                background: conic-gradient(
+                  from 180deg at 50% 50%,
+                  #34d399 0deg,
+                  #34d399 var(--border-sweep),
+                  transparent var(--border-sweep)
+                );
+                -webkit-mask:
+                  linear-gradient(#fff 0 0) content-box,
+                  linear-gradient(#fff 0 0);
+                -webkit-mask-composite: destination-out;
+                mask-composite: exclude;
+                padding: 10px;
+              }
+            `}</style>
+            <div
+              className="modal-border-sweep pointer-events-none absolute inset-0 rounded-3xl"
+              aria-hidden
+            />
+          </>
+        )}
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -223,9 +263,7 @@ export default function UploadModal({
                 <IngestionPipeline
                   currentStage={showUploading ? "uploading" : attachment?.stage}
                   completedStages={
-                    showUploading
-                      ? []
-                      : (attachment?.completedStages ?? [])
+                    showUploading ? [] : (attachment?.completedStages ?? [])
                   }
                   failed={showServerFailed}
                   chunks={attachment?.chunks}
@@ -252,7 +290,13 @@ export default function UploadModal({
                 {pipelineVisuallyComplete ? (
                   <>
                     <div className="flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500/15 ring-2 ring-emerald-400/30">
-                      <svg width="44" height="44" viewBox="0 0 20 20" fill="none" aria-hidden>
+                      <svg
+                        width="44"
+                        height="44"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        aria-hidden
+                      >
                         <path
                           d="M4 10l4.5 4.5L16 6"
                           stroke="#34d399"
@@ -263,18 +307,33 @@ export default function UploadModal({
                       </svg>
                     </div>
                     <p className="text-base font-semibold leading-snug text-emerald-400">
-                      Upload<br />Successful
+                      Upload
+                      <br />
+                      Successful
                     </p>
                   </>
                 ) : (
                   <>
                     <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue/10 ring-1 ring-blue/20">
-                      <FileText size={28} className="text-blue" strokeWidth={1.75} aria-hidden />
+                      <FileText
+                        size={28}
+                        className="text-blue"
+                        strokeWidth={1.75}
+                        aria-hidden
+                      />
                     </div>
-                    <p className="w-full truncate text-sm font-medium text-foreground" title={lastFile?.name}>
+                    <p
+                      className="w-full truncate text-sm font-medium text-foreground"
+                      title={lastFile?.name}
+                    >
                       {lastFile?.name ?? "Document"}
                     </p>
-                    <Loader2 size={28} className="animate-spin text-muted" strokeWidth={2} aria-hidden />
+                    <Loader2
+                      size={28}
+                      className="animate-spin text-muted"
+                      strokeWidth={2}
+                      aria-hidden
+                    />
                   </>
                 )}
               </div>
@@ -283,7 +342,11 @@ export default function UploadModal({
           {showHttpFailed && (
             <div className="flex flex-col items-center gap-4 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10 ring-1 ring-red-500/20">
-                <AlertCircle className="h-7 w-7 text-red-400" strokeWidth={1.75} aria-hidden />
+                <AlertCircle
+                  className="h-7 w-7 text-red-400"
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
               </div>
               <p className="max-w-[280px] text-base font-medium text-red-400">
                 {uploadErrorMessage ?? "Upload failed. Please try again."}
