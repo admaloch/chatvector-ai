@@ -23,6 +23,38 @@ function stagesBefore(currentStage: string): string[] {
   return Array.from(PIPELINE_STAGES.slice(0, idx));
 }
 
+/**
+ * Resolve the display stage from a raw SSE/poll payload.
+ *
+ * - On failure: use error.stage (the pipeline step that failed) so the
+ *   pipeline list can highlight the correct row. Fall back to the last
+ *   known non-failure stage string.
+ * - "uploaded" is only emitted by the synchronous path and maps to "queued"
+ *   (the nearest PIPELINE_STAGES entry) to avoid an indexOf miss.
+ * - "failed" itself is not a pipeline step — handled via the `failed` flag.
+ */
+function resolveDisplayStage(payload: {
+  status: string;
+  stage?: string;
+  error?: { stage?: string } | null;
+}): string {
+  if (payload.status === "failed") {
+    const errorStage = payload.error?.stage;
+    if (errorStage && errorStage !== "failed" && PIPELINE_STAGES.indexOf(errorStage as never) >= 0) {
+      return errorStage;
+    }
+    // fall back to the last stage field the server sent, or a safe default
+    return payload.stage ?? "extracting";
+  }
+  if (payload.status === "uploaded" || payload.stage === "uploaded") {
+    return "queued";
+  }
+  if (typeof payload.stage === "string" && payload.stage.length > 0) {
+    return payload.stage;
+  }
+  return payload.status;
+}
+
 export function useDocumentPolling(
   documentId: string | undefined,
   statusEndpoint: string | undefined,
@@ -89,10 +121,7 @@ export function useDocumentPolling(
         try {
           const payload = JSON.parse(event.data);
 
-          const rawStage =
-            typeof payload.stage === "string" && payload.stage.length > 0
-              ? payload.stage
-              : payload.status;
+          const rawStage = resolveDisplayStage(payload);
           setStage(rawStage);
           setCompletedStages(stagesBefore(rawStage));
 
@@ -149,10 +178,7 @@ export function useDocumentPolling(
 
           setAwaitingProcessing(false);
 
-          const rawStage =
-            typeof payload.stage === "string" && payload.stage.length > 0
-              ? payload.stage
-              : payload.status;
+          const rawStage = resolveDisplayStage(payload);
           setStage(rawStage);
           setCompletedStages(stagesBefore(rawStage));
 

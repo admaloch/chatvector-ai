@@ -12,8 +12,6 @@ type StageState = "completed" | "active" | "pending" | "failed";
 type Props = {
   /** Current in-progress stage key (e.g. "chunking"). Undefined while awaiting first event. */
   currentStage: string | undefined;
-  /** Set of stage keys that have already finished. */
-  completedStages: string[];
   /** Whether the overall ingestion failed. */
   failed?: boolean;
   /** Chunk info surfaced during embedding stage. */

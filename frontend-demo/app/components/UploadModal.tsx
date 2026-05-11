@@ -14,7 +14,6 @@ export type UploadAcceptedPayload = {
 export type UploadModalAttachment = {
   status: "processing" | "ready" | "failed";
   stage?: string;
-  completedStages?: string[];
   chunks?: { total: number; processed: number };
 };
 
@@ -61,7 +60,7 @@ export default function UploadModal({
   onCloseRef.current = onClose;
 
   // Start the close timer only once the pipeline animation visually reaches
-  // "completed" — this guarantees the 2.5s border sweep has its full duration.
+  // "completed" — this guarantees the 1.5s border sweep has its full duration.
   useEffect(() => {
     if (!pipelineVisuallyComplete) return;
     const timer = setTimeout(() => onCloseRef.current(), 1500);
@@ -262,9 +261,6 @@ export default function UploadModal({
               <div className="w-40 shrink-0">
                 <IngestionPipeline
                   currentStage={showUploading ? "uploading" : attachment?.stage}
-                  completedStages={
-                    showUploading ? [] : (attachment?.completedStages ?? [])
-                  }
                   failed={showServerFailed}
                   chunks={attachment?.chunks}
                   onDisplayedStageChange={(s) => {
