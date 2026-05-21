@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
 import UploadModal from "../components/UploadModal";
 import MessageList from "../components/chat/MessageList";
 import ChatInput from "../components/chat/ChatInput";
@@ -31,10 +32,11 @@ export default function ChatPage() {
   if (!isLoaded) {
     return (
       <div 
-        className="flex h-full w-full items-center justify-center bg-background text-muted"
+        className="flex h-full w-full flex-col items-center justify-center gap-3 bg-background text-muted"
         style={{ height: "calc(100dvh - 60px)" }}
       >
-        Loading sessions...
+        <Loader2 className="h-6 w-6 animate-spin opacity-50" />
+        <span className="text-sm">Loading sessions...</span>
       </div>
     );
   }
