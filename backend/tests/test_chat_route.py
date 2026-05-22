@@ -50,7 +50,7 @@ def test_chat_batch_route_delegates_to_chat_service():
 
     assert result == payload
     mock_batch.assert_awaited_once_with(
-        [{"question": "q", "doc_ids": [_DOC_ID_1], "match_count": 5, "session_id": ANY, "scope": "session"}],
+        [{"question": "q", "doc_ids": [_DOC_ID_1], "match_count": 5, "session_id": ANY}],
         auth=ANY,
         scope="session",
     )

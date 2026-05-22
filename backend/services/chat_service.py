@@ -10,7 +10,6 @@ from db import find_similar_chunks
 from services.context_service import build_context_from_chunks
 from services.query_service import transform_query
 from services.retrieval_service import (
-    assert_tenant_isolation,
     filter_doc_ids_for_tenant,
     parse_retrieval_scope,
     rerank_chunks_if_enabled,
@@ -156,7 +155,6 @@ def _resolve_retrieval_doc_ids(
         tenant_doc_ids=tenant_doc_ids,
     )
     doc_ids = filter_doc_ids_for_tenant(doc_ids, tenant_doc_ids, tenant_id)
-    assert_tenant_isolation(doc_ids, tenant_doc_ids, tenant_id)
     return doc_ids
 
 

@@ -118,6 +118,10 @@ async def chat_batch(request: Request, payload: ChatBatchRequest, auth: AuthCont
         processed_queries = []
         for q in payload.queries:
             q_dict = q.model_dump(mode="json")
+            # Only keep per-item scope when explicitly provided by the caller.
+            # When unset, let the batch-level `scope` take effect in the service.
+            if "scope" not in q.model_fields_set:
+                q_dict.pop("scope", None)
             q_session = get_or_create_session(
                 session_id=q.session_id or batch_session_id,
                 tenant_id=auth.tenant_id,

@@ -25,13 +25,6 @@ def get_tenant_document_ids(tenant_id: str | None) -> list[str]:
     return sorted(_TENANT_DOCUMENTS.get(tenant_id, set()))
 
 
-def document_belongs_to_tenant(doc_id: str, tenant_id: str | None) -> bool:
-    """Return True when doc_id is registered to the tenant (or tenant is unset)."""
-    if not tenant_id:
-        return True
-    return doc_id in _TENANT_DOCUMENTS.get(tenant_id, set())
-
-
 def clear_tenant_registry() -> None:
     """Reset registry — for tests only."""
     _TENANT_DOCUMENTS.clear()
