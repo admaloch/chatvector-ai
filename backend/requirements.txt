@@ -31,6 +31,9 @@ google-genai==1.6.0
 # -------- OpenAI --------
 openai==2.31.0
 
+# -------- Anthropic --------
+anthropic==0.104.1
+
 # -------- LangChain / RAG --------
 langchain==1.0.5
 langchain-core==1.0.5

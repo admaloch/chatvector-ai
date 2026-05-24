@@ -96,6 +96,12 @@ class TestGetLLMProvider:
         assert isinstance(provider, LLMProvider)
         assert type(provider).__name__ == "OllamaLLMProvider"
 
+    def test_anthropic_selection(self, monkeypatch):
+        monkeypatch.setattr(providers_mod.config, "LLM_PROVIDER", "anthropic")
+        provider = providers_mod.get_llm_provider()
+        assert isinstance(provider, LLMProvider)
+        assert type(provider).__name__ == "AnthropicLLMProvider"
+
     def test_singleton_caching(self, monkeypatch):
         monkeypatch.setattr(providers_mod.config, "LLM_PROVIDER", "ollama")
         p1 = providers_mod.get_llm_provider()

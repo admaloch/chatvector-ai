@@ -431,6 +431,7 @@ export APP_ENV="development"
 export GEN_AI_KEY="your-key"
 # Or for OpenAI: export OPENAI_API_KEY="your-key" LLM_PROVIDER=openai EMBEDDING_PROVIDER=openai
 # Or for Ollama: export LLM_PROVIDER=ollama EMBEDDING_PROVIDER=ollama
+# Or for Anthropic: export ANTHROPIC_API_KEY="your-key" LLM_PROVIDER=anthropic
 
 uvicorn main:app --reload --port 8000
 ```
@@ -530,7 +531,7 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
 LOG_LEVEL=INFO
 
 # Provider selection (optional — defaults to gemini)
-# LLM_PROVIDER=gemini          # gemini | openai | ollama
+# LLM_PROVIDER=gemini          # gemini | openai | ollama | anthropic
 # EMBEDDING_PROVIDER=gemini    # gemini | openai | ollama
 # See backend/.env.example for all provider options
 ```

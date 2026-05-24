@@ -72,6 +72,8 @@ def _api_key_present() -> bool:
         key = config.GEN_AI_KEY
     elif provider == "openai":
         key = config.OPENAI_API_KEY
+    elif provider == "anthropic":
+        key = config.ANTHROPIC_API_KEY
     else:
         # Ollama typically needs no key.
         return True

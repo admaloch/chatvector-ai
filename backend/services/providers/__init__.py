@@ -84,10 +84,16 @@ def get_llm_provider() -> LLMProvider:
         _llm_provider = OllamaLLMProvider()
         logger.info("Using Ollama LLM provider")
 
+    elif name == "anthropic":
+        from services.providers.anthropic import AnthropicLLMProvider
+
+        _llm_provider = AnthropicLLMProvider()
+        logger.info("Using Anthropic LLM provider")
+
     else:
         raise ValueError(
             f"Unknown LLM_PROVIDER={name!r}. "
-            f"Expected one of: gemini, openai, ollama."
+            f"Expected one of: gemini, openai, ollama, anthropic."
         )
 
     return _llm_provider

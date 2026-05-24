@@ -24,7 +24,7 @@ else:
 STALE_INGESTION_STATUSES = ["queued", "retrying", "extracting", "chunking", "embedding", "storing"]
 VALID_CHUNKING_STRATEGIES = {"fixed", "paragraph", "semantic"}
 VALID_QUERY_TRANSFORMATION_STRATEGIES = {"rewrite", "expand", "stepback"}
-VALID_LLM_PROVIDERS = {"gemini", "openai", "ollama"}
+VALID_LLM_PROVIDERS = {"gemini", "openai", "ollama", "anthropic"}
 VALID_EMBEDDING_PROVIDERS = {"gemini", "openai", "ollama"}
 
 
@@ -89,6 +89,8 @@ class Settings:
     OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY") or None
     OPENAI_BASE_URL: str | None = os.getenv("OPENAI_BASE_URL") or None
     OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY") or None
+    ANTHROPIC_BASE_URL: str | None = os.getenv("ANTHROPIC_BASE_URL") or None
 
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
     LOG_USE_UTC: bool = os.getenv("LOG_USE_UTC", "false").lower() in ("1", "true", "yes")

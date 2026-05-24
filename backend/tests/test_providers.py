@@ -130,6 +130,164 @@ class TestOpenAIErrorClassification:
 
 
 # ---------------------------------------------------------------------------
+# Anthropic error classification
+# ---------------------------------------------------------------------------
+
+
+class TestAnthropicErrorClassification:
+    """Verify _classify_anthropic_error maps SDK exceptions correctly."""
+
+    @staticmethod
+    def _make_response(status_code: int):
+        import httpx
+        return httpx.Response(status_code, request=httpx.Request("POST", "https://api.anthropic.com"))
+
+    def test_rate_limit(self):
+        from services.providers.anthropic import _classify_anthropic_error
+        import anthropic
+
+        exc = anthropic.RateLimitError(
+            "rate limited", response=self._make_response(429), body=None
+        )
+        result = _classify_anthropic_error(exc)
+        assert isinstance(result, ProviderRateLimitError)
+
+    def test_auth_error(self):
+        from services.providers.anthropic import _classify_anthropic_error
+        import anthropic
+
+        exc = anthropic.AuthenticationError(
+            "invalid key", response=self._make_response(401), body=None
+        )
+        result = _classify_anthropic_error(exc)
+        assert isinstance(result, ProviderAuthError)
+
+    def test_permission_error(self):
+        from services.providers.anthropic import _classify_anthropic_error
+        import anthropic
+
+        exc = anthropic.PermissionDeniedError(
+            "permission denied", response=self._make_response(403), body=None
+        )
+        result = _classify_anthropic_error(exc)
+        assert isinstance(result, ProviderAuthError)
+
+    def test_timeout(self):
+        from services.providers.anthropic import _classify_anthropic_error
+        import anthropic, httpx
+
+        exc = anthropic.APITimeoutError(request=httpx.Request("POST", "https://api.anthropic.com"))
+        result = _classify_anthropic_error(exc)
+        assert isinstance(result, ProviderTimeoutError)
+
+    def test_connection_error(self):
+        from services.providers.anthropic import _classify_anthropic_error
+        import anthropic, httpx
+
+        exc = anthropic.APIConnectionError(
+            message="connection failed",
+            request=httpx.Request("POST", "https://api.anthropic.com"),
+        )
+        result = _classify_anthropic_error(exc)
+        assert isinstance(result, ProviderConnectionError)
+
+    def test_generic_api_error(self):
+        from services.providers.anthropic import _classify_anthropic_error
+        import anthropic
+
+        exc = anthropic.InternalServerError(
+            "internal error", response=self._make_response(500), body=None
+        )
+        result = _classify_anthropic_error(exc)
+        assert isinstance(result, ProviderError)
+        assert not isinstance(result, ProviderAuthError)
+        assert not isinstance(result, ProviderRateLimitError)
+
+
+# ---------------------------------------------------------------------------
+# Anthropic generate() / generate_stream() response parsing
+# ---------------------------------------------------------------------------
+
+
+class TestAnthropicGenerateParsing:
+    """Verify AnthropicLLMProvider.generate() extracts content[0].text."""
+
+    async def test_returns_text_content(self):
+        from unittest.mock import AsyncMock, MagicMock
+        from services.providers.anthropic import AnthropicLLMProvider
+
+        provider = AnthropicLLMProvider(api_key="test-key")
+
+        fake_text_block = MagicMock()
+        fake_text_block.type = "text"
+        fake_text_block.text = "Hello from Claude"
+
+        fake_response = MagicMock()
+        fake_response.content = [fake_text_block]
+        provider._client.messages.create = AsyncMock(return_value=fake_response)
+
+        result = await provider.generate(
+            "hi",
+            system_instruction="be helpful",
+            temperature=0.2,
+            max_output_tokens=64,
+        )
+
+        assert result == "Hello from Claude"
+
+    async def test_skips_non_text_blocks_and_falls_back(self):
+        from unittest.mock import AsyncMock, MagicMock
+        from services.providers.anthropic import AnthropicLLMProvider
+
+        provider = AnthropicLLMProvider(api_key="test-key")
+
+        tool_use_block = MagicMock()
+        tool_use_block.type = "tool_use"
+        tool_use_block.name = "get_weather"
+
+        fake_response = MagicMock()
+        fake_response.content = [tool_use_block]
+        provider._client.messages.create = AsyncMock(return_value=fake_response)
+
+        result = await provider.generate(
+            "hi",
+            system_instruction="be helpful",
+            temperature=0.2,
+            max_output_tokens=64,
+        )
+
+        assert result == "No response."
+
+    async def test_streaming_yields_text(self):
+        from unittest.mock import AsyncMock, MagicMock
+        from services.providers.anthropic import AnthropicLLMProvider
+
+        provider = AnthropicLLMProvider(api_key="test-key")
+
+        fake_stream = MagicMock()
+        fake_text_stream = AsyncMock()
+        fake_text_stream.__aiter__.return_value = iter(["Hello", " ", "from", " ", "Claude"])
+        type(fake_stream).text_stream = fake_text_stream
+
+        fake_stream_manager = MagicMock()
+        fake_stream_manager.__aenter__.return_value = fake_stream
+        fake_stream_manager.__aexit__.return_value = None
+
+        provider._client.messages.stream = MagicMock(return_value=fake_stream_manager)
+
+        tokens = []
+        async for token in provider.generate_stream(
+            "hi",
+            system_instruction="be helpful",
+            temperature=0.2,
+            max_output_tokens=64,
+        ):
+            tokens.append(token)
+
+        assert "".join(tokens) == "Hello from Claude"
+
+
+# ---------------------------------------------------------------------------
 # Ollama error classification
 # ---------------------------------------------------------------------------
 
