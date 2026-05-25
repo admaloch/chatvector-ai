@@ -96,6 +96,22 @@ class TestGetLLMProvider:
         assert isinstance(provider, LLMProvider)
         assert type(provider).__name__ == "OllamaLLMProvider"
 
+    def test_anthropic_selection(self, monkeypatch):
+        monkeypatch.setattr(providers_mod.config, "LLM_PROVIDER", "anthropic")
+        provider = providers_mod.get_llm_provider()
+        assert isinstance(provider, LLMProvider)
+        assert type(provider).__name__ == "AnthropicLLMProvider"
+
+    def test_anthropic_llm_doesnt_affect_embedding(self, monkeypatch):
+        monkeypatch.setattr(providers_mod.config, "LLM_PROVIDER", "anthropic")
+        monkeypatch.setattr(providers_mod.config, "EMBEDDING_PROVIDER", "gemini")
+        llm = providers_mod.get_llm_provider()
+        emb = providers_mod.get_embedding_provider()
+        assert isinstance(llm, LLMProvider)
+        assert isinstance(emb, EmbeddingProvider)
+        assert type(llm).__name__ == "AnthropicLLMProvider"
+        assert llm is not emb
+
     def test_singleton_caching(self, monkeypatch):
         monkeypatch.setattr(providers_mod.config, "LLM_PROVIDER", "ollama")
         p1 = providers_mod.get_llm_provider()
