@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Kicker } from "@/app/components/Kicker";
-import Footer from "../components/home/Footer";
 
 export default function AboutPage() {
   return (
@@ -13,7 +12,12 @@ export default function AboutPage() {
             A developer-focused RAG engine you can deploy as a service.
           </h1>
           <p className="text-muted text-lg leading-relaxed mb-6">
-            Most RAG implementations today are fragile, vendor-locked, or require significant plumbing to productionize. ChatVector solves this by providing a clean, extensible backend foundation for document intelligence. It handles the full document Q&A lifecycle—from ingestion and semantic chunking to vector storage and cited response generation—all through a clean HTTP API.
+            Most RAG implementations today are fragile, vendor-locked, or
+            require significant plumbing to productionize. ChatVector solves
+            this by providing a clean, extensible backend foundation for
+            document intelligence. It handles the full document Q&A
+            lifecycle—from ingestion and semantic chunking to vector storage and
+            cited response generation—all through a clean HTTP API.
           </p>
         </section>
 
@@ -66,7 +70,9 @@ export default function AboutPage() {
               <thead>
                 <tr className="border-b border-border bg-background/30 text-foreground">
                   <th className="px-5 py-4 font-bold">Aspect</th>
-                  <th className="px-5 py-4 font-bold text-accent">ChatVector</th>
+                  <th className="px-5 py-4 font-bold text-accent">
+                    ChatVector
+                  </th>
                   <th className="px-5 py-4 font-bold">General Framework</th>
                 </tr>
               </thead>
@@ -131,7 +137,6 @@ export default function AboutPage() {
           </Link>
         </div>
       </div>
-      <Footer />
     </div>
   );
 }

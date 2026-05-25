@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Navigation from "./components/Navigation";
+import Footer from "./components/home/Footer";
 
 export const metadata: Metadata = {
   title: "ChatVector",
@@ -26,6 +27,7 @@ export default function RootLayout({
       <body className="flex min-h-screen flex-col antialiased">
         <Navigation />
         <main className="flex min-h-0 flex-1 flex-col">{children}</main>
+        <Footer />
       </body>
     </html>
   );

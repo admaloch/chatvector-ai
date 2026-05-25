@@ -1,5 +1,7 @@
+"use client";
 import Image from "next/image";
 import { GITHUB_REPO } from "../../lib/constants";
+import { usePathname } from "next/navigation";
 
 const FOOTER_LINKS: { label: string; href: string; external?: boolean }[] = [
   { label: "GitHub", href: GITHUB_REPO, external: true },
@@ -14,6 +16,10 @@ const FOOTER_LINKS: { label: string; href: string; external?: boolean }[] = [
 ];
 
 export default function Footer() {
+  const pathname = usePathname();
+  if (pathname.startsWith("/chat")) {
+    return null;
+  }
   return (
     <footer className="border-t border-border px-8 py-10">
       <div className="mx-auto flex max-w-[1100px] flex-col items-center gap-6 text-center md:flex-row md:flex-wrap md:justify-between md:text-left">
