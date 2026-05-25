@@ -110,9 +110,19 @@ class Settings:
     ).lower() in ("1", "true", "yes")
     QUERY_TRANSFORMATION_STRATEGY: str = _get_query_transformation_strategy()
     RETRIEVAL_MAX_CONCURRENCY: int = max(1, int(os.getenv("RETRIEVAL_MAX_CONCURRENCY", "8")))
+    ENABLE_RERANKING: bool = os.getenv("ENABLE_RERANKING", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    RERANKER_PROVIDER: str = os.getenv("RERANKER_PROVIDER", "similarity").strip().lower()
+    HYBRID_RETRIEVAL_ENABLED: bool = os.getenv(
+        "HYBRID_RETRIEVAL_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
     SUPABASE_IO_CONCURRENCY: int = max(1, int(os.getenv("SUPABASE_IO_CONCURRENCY", "16")))
     CHAT_BATCH_MAX_ITEMS: int = max(1, int(os.getenv("CHAT_BATCH_MAX_ITEMS", "20")))
     CHAT_MAX_DOC_IDS_PER_QUERY: int = max(1, int(os.getenv("CHAT_MAX_DOC_IDS_PER_QUERY", "10")))
+    MAX_SESSION_HISTORY_MESSAGES: int = max(1, int(os.getenv("MAX_SESSION_HISTORY_MESSAGES", "20")))
     SQLALCHEMY_POOL_SIZE: int = max(1, int(os.getenv("SQLALCHEMY_POOL_SIZE", "5")))
     SQLALCHEMY_MAX_OVERFLOW: int = max(0, int(os.getenv("SQLALCHEMY_MAX_OVERFLOW", "10")))
     SQLALCHEMY_POOL_TIMEOUT_SEC: int = max(1, int(os.getenv("SQLALCHEMY_POOL_TIMEOUT_SEC", "30")))
@@ -123,7 +133,10 @@ class Settings:
 
     # Queue backend selection
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    QUEUE_BACKEND: str = os.getenv("QUEUE_BACKEND", "memory").strip().lower()
+    QUEUE_BACKEND: str = os.getenv(
+        "QUEUE_BACKEND", 
+        "redis" if APP_ENV.lower() == "production" else "memory"
+    ).strip().lower()
 
     # Background ingestion queue
     QUEUE_WORKER_COUNT: int = max(1, min(5, int(os.getenv("QUEUE_WORKER_COUNT", "3"))))

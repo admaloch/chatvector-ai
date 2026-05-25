@@ -4,7 +4,7 @@ import { Kicker } from "@/app/components/Kicker";
 export default function AboutPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <div className="max-w-[720px] mx-auto px-4 py-16 flex-1">
+      <div className="mx-auto w-full max-w-[720px] px-4 py-16 flex-1">
         {/* Section 1: What is ChatVector */}
         <section className="mb-20">
           <Kicker spacing="lg">what is chatvector</Kicker>

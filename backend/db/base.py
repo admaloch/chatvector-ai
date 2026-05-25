@@ -65,8 +65,9 @@ class DatabaseService(ABC):
         query_embedding: list[float],
         match_count: int = 5,
         session_id: Optional[str] = None,
+        query_text: Optional[str] = None,
     ) -> list[ChunkMatch]:
-        """Run vector similarity search for chunks."""
+        """Run vector similarity search for chunks (optionally hybrid with keyword search)."""
         pass
 
     @abstractmethod
@@ -113,4 +114,25 @@ class DatabaseService(ABC):
 
         Returns the set of document IDs that were updated.
         """
+        pass
+
+    @abstractmethod
+    async def store_chat_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        tenant_id: Optional[str] = None,
+    ) -> str:
+        """Store a single chat message (user or AI)."""
+        pass
+
+    @abstractmethod
+    async def get_session_history(
+        self,
+        session_id: str,
+        limit: int = 20,
+        tenant_id: Optional[str] = None,
+    ) -> list[dict]:
+        """Retrieve recent chat history for a session."""
         pass
