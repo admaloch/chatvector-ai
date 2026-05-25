@@ -19,6 +19,7 @@ from services.providers.base import (
 
 logger = logging.getLogger(__name__)
 
+# See https://docs.anthropic.com/en/docs/about-claude/models
 _DEFAULT_LLM_MODEL = "claude-sonnet-4-20250514"
 
 

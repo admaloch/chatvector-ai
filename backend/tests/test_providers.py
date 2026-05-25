@@ -286,6 +286,29 @@ class TestAnthropicGenerateParsing:
 
         assert "".join(tokens) == "Hello from Claude"
 
+    async def test_missing_api_key_raises_auth_error(self):
+        from unittest.mock import AsyncMock
+        from services.providers.anthropic import AnthropicLLMProvider
+        from services.providers.base import ProviderAuthError
+        import anthropic, httpx
+
+        provider = AnthropicLLMProvider(api_key=None)
+
+        req = httpx.Request("POST", "https://api.anthropic.com")
+        provider._client.messages.create = AsyncMock(
+            side_effect=anthropic.AuthenticationError(
+                "invalid API key", response=httpx.Response(401, request=req), body=None
+            )
+        )
+
+        with pytest.raises(ProviderAuthError):
+            await provider.generate(
+                "hi",
+                system_instruction="be helpful",
+                temperature=0.2,
+                max_output_tokens=64,
+            )
+
 
 # ---------------------------------------------------------------------------
 # Ollama error classification
