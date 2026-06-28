@@ -59,7 +59,8 @@ async def test_answer_question_for_document_orchestrates_flow():
     ) as mock_find, patch(
         "services.chat_service.build_context_from_chunks", return_value="combined context"
     ) as mock_context, patch(
-        "services.chat_service.generate_answer", new=AsyncMock(return_value="final answer")
+        "services.chat_service.generate_answer",
+        new=AsyncMock(return_value=("final answer", 123, "test-model")),
     ) as mock_answer:
         result = await answer_question_for_document(
                 question="What is this about?",
@@ -72,6 +73,8 @@ async def test_answer_question_for_document_orchestrates_flow():
     assert result["doc_id"] == "doc-123"
     assert result["chunks"] == 2
     assert result["answer"] == "final answer"
+    assert result["latency_ms"] == 123
+    assert result["model"] == "test-model"
     assert result["sources"] == [
         {"file_name": "doc.pdf", "page_number": 1, "chunk_index": 0, "score": 0.85},
         {"file_name": "doc.pdf", "page_number": 2, "chunk_index": 1, "score": 0.85},
@@ -99,7 +102,8 @@ async def test_answer_question_for_document_passes_session_id():
     ) as mock_find, patch(
         "services.chat_service.build_context_from_chunks", return_value="combined context"
     ), patch(
-        "services.chat_service.generate_answer", new=AsyncMock(return_value="final answer")
+        "services.chat_service.generate_answer",
+        new=AsyncMock(return_value=("final answer", 0, "test-model")),
     ), patch("db.get_session_history", new=AsyncMock(return_value=[])) as mock_history, patch(
         "db.store_chat_message", new=AsyncMock()
     ):
@@ -130,7 +134,8 @@ async def test_answer_question_soft_llm_error_matches_batch_error_shape():
     ), patch("services.chat_service.find_similar_chunks", new=AsyncMock(return_value=[])), patch(
         "services.chat_service.build_context_from_chunks", return_value="ctx"
     ), patch(
-        "services.chat_service.generate_answer", new=AsyncMock(return_value=LLM_MSG_RATE_LIMIT)
+        "services.chat_service.generate_answer",
+        new=AsyncMock(return_value=(LLM_MSG_RATE_LIMIT, 0, "")),
     ):
         result = await answer_question_for_document(question="Q?", doc_id="doc-1", match_count=3
         )
@@ -170,7 +175,7 @@ async def test_answer_questions_for_documents_batch_processes_queries():
         side_effect=lambda chunks, session_context=None: "|".join([c.chunk_text for c in chunks]),
     ) as mock_context, patch(
         "services.chat_service.generate_answer",
-        new=AsyncMock(side_effect=lambda question, context: f"{question}:{context}"),
+        new=AsyncMock(side_effect=lambda question, context: (f"{question}:{context}", 50, "m")),
     ) as mock_answer:
         result = await answer_questions_for_documents_batch(queries)
     assert [item["status"] for item in result] == ["ok", "ok"]
@@ -225,7 +230,7 @@ async def test_answer_questions_for_documents_batch_respects_retrieval_concurren
         return_value="ctx",
     ), patch(
         "services.chat_service.generate_answer",
-        new=AsyncMock(return_value="answer"),
+        new=AsyncMock(return_value=("answer", 0, "m")),
     ):
         result = await answer_questions_for_documents_batch(queries)
 
@@ -240,10 +245,10 @@ async def test_answer_questions_for_documents_batch_returns_partial_failures():
         {"question": "Q2", "doc_ids": ["doc-b"]},
     ]
 
-    async def fake_generate_answer(question: str, context: str) -> str:
+    async def fake_generate_answer(question: str, context: str) -> tuple[str, int, str]:
         if question == "Q2":
             raise RuntimeError("LLM timeout")
-        return f"{question}:{context}"
+        return f"{question}:{context}", 10, "m"
 
     with patch(
         "services.chat_service.get_embeddings",
@@ -318,7 +323,8 @@ async def test_answer_question_for_document_includes_sources_with_correct_shape(
     ), patch(
         "services.chat_service.build_context_from_chunks", return_value="ctx"
     ), patch(
-        "services.chat_service.generate_answer", new=AsyncMock(return_value="ans")
+        "services.chat_service.generate_answer",
+        new=AsyncMock(return_value=("ans", 0, "m")),
     ):
         result = await answer_question_for_document(question="Q?", doc_id="doc-1")
 
@@ -351,7 +357,8 @@ async def test_answer_question_for_document_sources_none_fields_for_txt():
     ), patch(
         "services.chat_service.build_context_from_chunks", return_value="ctx"
     ), patch(
-        "services.chat_service.generate_answer", new=AsyncMock(return_value="ans")
+        "services.chat_service.generate_answer",
+        new=AsyncMock(return_value=("ans", 0, "m")),
     ):
         result = await answer_question_for_document(question="Q?", doc_id="doc-txt")
 
@@ -384,7 +391,8 @@ async def test_batch_answer_includes_sources_in_ok_responses():
     ), patch(
         "services.chat_service.build_context_from_chunks", return_value="ctx"
     ), patch(
-        "services.chat_service.generate_answer", new=AsyncMock(return_value="answer")
+        "services.chat_service.generate_answer",
+        new=AsyncMock(return_value=("answer", 0, "m")),
     ):
         result = await answer_questions_for_documents_batch(queries)
 
@@ -405,7 +413,8 @@ async def test_batch_soft_llm_error_uses_same_error_codes_as_single_chat():
     ), patch("services.chat_service.find_similar_chunks", new=AsyncMock(return_value=[])), patch(
         "services.chat_service.build_context_from_chunks", return_value="ctx"
     ), patch(
-        "services.chat_service.generate_answer", new=AsyncMock(return_value=LLM_MSG_MISSING_API_KEY)
+        "services.chat_service.generate_answer",
+        new=AsyncMock(return_value=(LLM_MSG_MISSING_API_KEY, 0, "")),
     ):
         result = await answer_questions_for_documents_batch(queries)
 
@@ -463,3 +472,61 @@ async def test_answer_question_stream_for_document_error():
         assert len(chunks) == 1
         assert chunks[0] == f"event: error\ndata: \"{LLM_MSG_RATE_LIMIT}\"\n\n"
 
+
+# ---------------------------------------------------------------------------
+# latency_ms and model fields (Issue #325)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_answer_question_for_document_includes_latency_and_model():
+    """latency_ms and model must be present and valid on a successful /chat response."""
+    with patch(
+        "services.chat_service.get_embeddings", new=AsyncMock(return_value=[[0.1]])
+    ), patch(
+        "services.chat_service.find_similar_chunks", new=AsyncMock(return_value=[])
+    ), patch(
+        "services.chat_service.build_context_from_chunks", return_value="ctx"
+    ), patch(
+        "services.chat_service.generate_answer",
+        new=AsyncMock(return_value=("the answer", 456, "gemini-2.5-flash")),
+    ):
+        result = await answer_question_for_document(question="Q?", doc_id="doc-1")
+
+    assert result["status"] == "ok"
+    assert result["latency_ms"] == 456
+    assert result["latency_ms"] > 0
+    assert result["model"] == "gemini-2.5-flash"
+
+
+@pytest.mark.asyncio
+async def test_batch_includes_latency_and_model_per_query():
+    """Each batch result must carry its own latency_ms and model, not a shared total."""
+    queries = [
+        {"question": "Q1", "doc_ids": ["doc-a"]},
+        {"question": "Q2", "doc_ids": ["doc-b"]},
+    ]
+
+    call_count = 0
+
+    async def fake_generate(question: str, context: str) -> tuple[str, int, str]:
+        nonlocal call_count
+        call_count += 1
+        return f"answer-{call_count}", call_count * 100, f"model-{call_count}"
+
+    with patch(
+        "services.chat_service.get_embeddings", new=AsyncMock(return_value=[[0.1], [0.2]])
+    ), patch(
+        "services.chat_service.find_similar_chunks", new=AsyncMock(return_value=[])
+    ), patch(
+        "services.chat_service.build_context_from_chunks", return_value="ctx"
+    ), patch(
+        "services.chat_service.generate_answer", new=AsyncMock(side_effect=fake_generate)
+    ):
+        result = await answer_questions_for_documents_batch(queries)
+
+    assert len(result) == 2
+    for item in result:
+        assert "latency_ms" in item
+        assert "model" in item
+        assert item["latency_ms"] > 0
