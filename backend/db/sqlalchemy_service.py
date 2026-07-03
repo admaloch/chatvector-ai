@@ -66,6 +66,7 @@ class SQLAlchemyService(DatabaseService):
             document = Document(
                 id=doc_id,
                 file_name=filename,
+                tenant_id=tenant_id,
                 status="uploaded",
                 chunks={"total": 0, "processed": 0},
             )
@@ -108,12 +109,17 @@ class SQLAlchemyService(DatabaseService):
 
     async def get_document(self, doc_id: str, tenant_id: Optional[str] = None) -> dict | None:
         async with self.async_session() as session:
-            document = await session.get(Document, doc_id)
+            stmt = select(Document).where(Document.id == doc_id)
+            if tenant_id is not None:
+                stmt = stmt.where(Document.tenant_id == tenant_id)
+            result = await session.execute(stmt)
+            document = result.scalar_one_or_none()
             if not document:
                 return None
             return {
                 "id": str(document.id),
                 "file_name": document.file_name,
+                "tenant_id": document.tenant_id,
                 "status": document.status,
                 "chunks": document.chunks,
                 "error": document.error,
@@ -137,6 +143,7 @@ class SQLAlchemyService(DatabaseService):
                     document = Document(
                         id=doc_id,
                         file_name=file_name,
+                        tenant_id=tenant_id,
                         status="completed",
                         chunks={"total": len(chunk_records), "processed": len(chunk_records)},
                     )
@@ -173,7 +180,11 @@ class SQLAlchemyService(DatabaseService):
         tenant_id: Optional[str] = None,
     ) -> None:
         async with self.async_session() as session:
-            document = await session.get(Document, doc_id)
+            stmt = select(Document).where(Document.id == doc_id)
+            if tenant_id is not None:
+                stmt = stmt.where(Document.tenant_id == tenant_id)
+            result = await session.execute(stmt)
+            document = result.scalar_one_or_none()
             if not document:
                 logger.warning(
                     "[PostgreSQL] update_document_status: document %s not found, skipping",
@@ -193,7 +204,11 @@ class SQLAlchemyService(DatabaseService):
 
     async def get_document_status(self, doc_id: str, tenant_id: Optional[str] = None) -> dict | None:
         async with self.async_session() as session:
-            document = await session.get(Document, doc_id)
+            stmt = select(Document).where(Document.id == doc_id)
+            if tenant_id is not None:
+                stmt = stmt.where(Document.tenant_id == tenant_id)
+            result = await session.execute(stmt)
+            document = result.scalar_one_or_none()
             if not document:
                 return None
 
@@ -216,6 +231,20 @@ class SQLAlchemyService(DatabaseService):
         async with self.async_session() as session:
             try:
                 async with session.begin():
+                    # Verify ownership before deleting
+                    stmt = select(Document).where(Document.id == document_id)
+                    if tenant_id is not None:
+                        stmt = stmt.where(Document.tenant_id == tenant_id)
+                    result = await session.execute(stmt)
+                    document = result.scalar_one_or_none()
+                    if not document:
+                        logger.warning(
+                            "[PostgreSQL] delete_document: document %s not found for tenant %s",
+                            document_id,
+                            tenant_id,
+                        )
+                        return
+
                     # Delete chunks first due to FK constraint
                     await session.execute(
                         delete(DocumentChunk).where(DocumentChunk.document_id == document_id)
