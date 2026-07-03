@@ -121,7 +121,7 @@ db:
 sync:
 	git fetch upstream
 	git rebase upstream/main
-	git push --force-with-lease
+	git push --force-with-lease origin HEAD
 	@echo "$(GREEN)🔄 Synced with upstream/main$(RESET)"
 
 cleanup:
