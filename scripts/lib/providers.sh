@@ -269,11 +269,16 @@ check_ollama_host_reachable() {
 
 check_ollama_container_reachable() {
   local docker_url="$1"
+
+  if docker_compose exec -T api curl -sf "${docker_url}/api/tags" >/dev/null 2>&1; then
+    return 0
+  fi
+
   docker_compose run --rm --no-deps --entrypoint curl api \
     -sf "${docker_url}/api/tags" >/dev/null 2>&1
 }
 
-check_ollama_reachability() {
+check_ollama_host_and_models() {
   local docker_base_url="$1"
   local llm_model="$2"
   local embed_model="$3"
@@ -288,13 +293,32 @@ check_ollama_reachability() {
     return 1
   fi
 
-  if ! check_ollama_models_present "${tags_url}" "${llm_model}" "${embed_model}"; then
-    return 1
+  check_ollama_models_present "${tags_url}" "${llm_model}" "${embed_model}"
+}
+
+verify_ollama_docker_connectivity() {
+  local docker_url llm emb host_url
+
+  llm="$(effective_llm_provider)"
+  emb="$(effective_embedding_provider)"
+  if [[ "${llm}" != "ollama" && "${emb}" != "ollama" ]]; then
+    return 0
   fi
 
-  if ! check_ollama_container_reachable "${docker_base_url}"; then
-    echo "Ollama is reachable on the host at ${host_url}, but not from the API container at ${docker_base_url}." >&2
-    echo "Ensure docker-compose.yml maps host.docker.internal for the api service (extra_hosts: host-gateway)." >&2
+  docker_url="$(read_env_value "${BACKEND_ENV}" "OLLAMA_BASE_URL")"
+  if [[ -z "${docker_url}" ]]; then
+    docker_url="$(default_ollama_docker_base_url)"
+  fi
+  host_url="$(ollama_host_check_url "${docker_url}")"
+
+  if ! check_ollama_container_reachable "${docker_url}"; then
+    if check_ollama_host_reachable "${host_url}"; then
+      echo "Ollama is reachable on the host at ${host_url}, but not from the API container at ${docker_url}." >&2
+      echo "Ensure docker-compose.yml maps host.docker.internal for the api service (extra_hosts: host-gateway)." >&2
+    else
+      echo "Ollama is not reachable from the API container at ${docker_url}." >&2
+      echo "Install and start Ollama on your host, then rerun: make" >&2
+    fi
     return 1
   fi
 
@@ -320,8 +344,8 @@ apply_ollama_preset() {
 
   echo "Configured Ollama for generation and embeddings."
 
-  if ! check_ollama_reachability "${docker_base_url}" "${llm_model}" "${embed_model}"; then
-    echo "Ollama settings were saved, but readiness checks failed." >&2
+  if ! check_ollama_host_and_models "${docker_base_url}" "${llm_model}" "${embed_model}"; then
+    echo "Ollama settings were saved, but host readiness checks failed." >&2
     echo "Fix Ollama on your host, then run: make" >&2
     return 0
   fi

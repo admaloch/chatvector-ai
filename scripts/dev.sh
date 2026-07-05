@@ -84,6 +84,10 @@ main() {
     exit 1
   fi
 
+  if ! verify_ollama_docker_connectivity; then
+    exit 1
+  fi
+
   start_frontend
 
   if ! wait_for_frontend; then
