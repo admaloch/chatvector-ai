@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
     # Resolve documents that were in-flight during the previous server run before
     # any workers start, so clients polling for status get a definitive answer.
     try:
-        stale_doc_ids = await db.fail_stale_documents(STALE_INGESTION_STATUSES)
+        stale_doc_ids = await db.fail_stale_documents_global(STALE_INGESTION_STATUSES)
         if stale_doc_ids:
             logger.warning(
                 f"Marked {len(stale_doc_ids)} stale document(s) as failed "

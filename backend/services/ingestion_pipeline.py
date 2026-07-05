@@ -73,6 +73,7 @@ except ImportError:  # pragma: no cover - lightweight fallback for constrained e
 import db
 from core.config import config
 from db.base import ChunkRecord
+from db.tenant_scope import require_tenant_id
 from services.embedding_service import get_embeddings
 from services.extraction_service import PageBoundary, extract_text_with_metadata
 from services.text_cleaning_service import clean_text
@@ -756,16 +757,18 @@ class IngestionPipeline:
         self,
         doc_id: str,
         status: str,
+        tenant_id: str,
+        *,
         error: dict | None = None,
         chunks: dict | None = None,
-        tenant_id: Optional[str] = None,
     ) -> None:
+        tenant_id = require_tenant_id(tenant_id, method="update_document_status")
         await db.update_document_status(
             doc_id=doc_id,
             status=status,
+            tenant_id=tenant_id,
             error=error,
             chunks=chunks,
-            tenant_id=tenant_id,
         )
 
     async def _handle_error(
@@ -773,18 +776,19 @@ class IngestionPipeline:
         doc_id: str,
         stage: str,
         message: str,
-        tenant_id: Optional[str] = None,
+        tenant_id: str,
     ) -> None:
+        tenant_id = require_tenant_id(tenant_id, method="delete_document_chunks")
         try:
             await self._update_status(
                 doc_id=doc_id,
                 status="failed",
+                tenant_id=tenant_id,
                 error={
                     "stage": stage,
                     "code": "pipeline_error",
                     "message": "An error occurred during document processing."
                 },
-                tenant_id=tenant_id,
             )
         except Exception as status_error:
             logger.error(f"Failed to mark document {doc_id} as failed: {status_error}")
@@ -797,8 +801,9 @@ class IngestionPipeline:
     async def process_document(
         self,
         file: UploadFile,
-        tenant_id: Optional[str] = None,
+        tenant_id: str,
     ) -> dict:
+        tenant_id = require_tenant_id(tenant_id, method="create_document")
         safe_filename = _sanitize_filename(file.filename or "")
         logger.info(f"Starting upload for file: {safe_filename} ({file.content_type})")
 
@@ -915,9 +920,10 @@ class IngestionPipeline:
         file_name: str,
         content_type: str,
         file_bytes: bytes,
-        tenant_id: Optional[str] = None,
+        tenant_id: str,
         rate_limiter=None,
     ) -> None:
+        tenant_id = require_tenant_id(tenant_id, method="update_document_status")
         """
         Run the extraction→chunking→embedding→storing pipeline stages for a
         document that was already created and queued by the upload endpoint.

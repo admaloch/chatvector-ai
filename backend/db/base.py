@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 # Abstract base class that defines WHAT database operations we need.
@@ -38,9 +38,11 @@ class ChunkMatch:
 class DatabaseService(ABC):
     """Abstract base class for database services."""
 
+    # ── Tenant-scoped document operations ──────────────────────────────────────
+
     @abstractmethod
-    async def create_document(self, filename: str, tenant_id: Optional[str] = None) -> str:
-        """Create a document record and return document ID."""
+    async def create_document(self, filename: str, tenant_id: str) -> str:
+        """Create a document record owned by tenant_id and return document ID."""
         pass
 
     @abstractmethod
@@ -48,14 +50,14 @@ class DatabaseService(ABC):
         self,
         doc_id: str,
         chunk_records: list[ChunkRecord],
-        tenant_id: Optional[str] = None,
+        tenant_id: str,
     ) -> list[str]:
-        """Insert chunks/embeddings and return chunk IDs."""
+        """Insert chunks/embeddings for a tenant-owned document."""
         pass
 
     @abstractmethod
-    async def get_document(self, doc_id: str, tenant_id: Optional[str] = None) -> Optional[dict]:
-        """Fetch a document by ID."""
+    async def get_document(self, doc_id: str, tenant_id: str) -> Optional[dict]:
+        """Fetch a document by ID, scoped to tenant_id."""
         pass
 
     @abstractmethod
@@ -63,17 +65,13 @@ class DatabaseService(ABC):
         self,
         doc_id: str,
         query_embedding: list[float],
-        match_count: int = 5,
+        match_count: int,
+        *,
+        tenant_id: str,
         session_id: Optional[str] = None,
         query_text: Optional[str] = None,
-        tenant_id: Optional[str] = None,
     ) -> list[ChunkMatch]:
-        """Run vector similarity search for chunks (optionally hybrid with keyword search).
-
-        When tenant_id is supplied, the query enforces document ownership at
-        the database layer so that chunks from another tenant's document are
-        never returned even if the caller presents a valid doc_id.
-        """
+        """Run tenant-scoped vector/hybrid search for chunks."""
         pass
 
     @abstractmethod
@@ -81,9 +79,9 @@ class DatabaseService(ABC):
         self,
         file_name: str,
         chunk_records: list[ChunkRecord],
-        tenant_id: Optional[str] = None,
+        tenant_id: str,
     ) -> tuple[str, list[str]]:
-        """Atomically create document with chunk records."""
+        """Atomically create a tenant-owned document with chunk records."""
         pass
 
     @abstractmethod
@@ -91,44 +89,41 @@ class DatabaseService(ABC):
         self,
         doc_id: str,
         status: str,
+        tenant_id: str,
+        *,
         error: Optional[dict] = None,
         chunks: Optional[dict] = None,
-        tenant_id: Optional[str] = None,
     ) -> None:
-        """Update upload status/progress metadata."""
+        """Update upload status/progress metadata for a tenant-owned document."""
         pass
 
     @abstractmethod
-    async def get_document_status(self, doc_id: str, tenant_id: Optional[str] = None) -> Optional[dict]:
-        """Get document upload status payload for polling."""
+    async def get_document_status(self, doc_id: str, tenant_id: str) -> Optional[dict]:
+        """Get document upload status payload for a tenant-owned document."""
         pass
 
     @abstractmethod
-    async def delete_document_chunks(self, doc_id: str, tenant_id: Optional[str] = None) -> None:
-        """Delete all chunks for a document (cleanup on failures)."""
+    async def delete_document_chunks(self, doc_id: str, tenant_id: str) -> None:
+        """Delete chunks for a tenant-owned document (cleanup on failures)."""
         pass
 
     @abstractmethod
-    async def delete_document(self, document_id: str, tenant_id: Optional[str] = None) -> None:
-        """Delete a document and all its associated chunks atomically."""
+    async def delete_document(self, document_id: str, tenant_id: str) -> None:
+        """Delete a tenant-owned document and all its chunks."""
         pass
 
-    @abstractmethod
-    async def fail_stale_documents(self, statuses: list[str], tenant_id: Optional[str] = None) -> set[str]:
-        """
-        Mark documents in any of the given statuses as failed.
+    # ── Administrative / cross-tenant operations ──────────────────────────────
 
-        Returns the set of document IDs that were updated.
-        """
+    @abstractmethod
+    async def fail_stale_documents_global(self, statuses: list[str]) -> set[str]:
+        """Mark in-progress documents as failed across all tenants on startup."""
         pass
 
     async def list_tenant_documents(self, tenant_id: str) -> list[str]:
-        """Return IDs of all documents owned by tenant_id.
-
-        Default implementation returns an empty list; backends that support
-        tenant-scoped document listing should override this.
-        """
+        """Return IDs of all documents owned by tenant_id."""
         return []
+
+    # ── Tenant-scoped chat history ────────────────────────────────────────────
 
     @abstractmethod
     async def store_chat_message(
@@ -136,17 +131,18 @@ class DatabaseService(ABC):
         session_id: str,
         role: str,
         content: str,
-        tenant_id: Optional[str] = None,
+        tenant_id: str,
     ) -> str:
-        """Store a single chat message (user or AI)."""
+        """Store a single chat message owned by tenant_id."""
         pass
 
     @abstractmethod
     async def get_session_history(
         self,
         session_id: str,
+        tenant_id: str,
+        *,
         limit: int = 20,
-        tenant_id: Optional[str] = None,
     ) -> list[dict]:
-        """Retrieve recent chat history for a session."""
+        """Retrieve recent chat history for a tenant-owned session."""
         pass

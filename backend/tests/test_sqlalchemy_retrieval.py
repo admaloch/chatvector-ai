@@ -66,8 +66,8 @@ async def test_find_similar_chunks_respects_service_retrieval_limit():
     service.async_session = lambda: _FakeSession(on_execute)
 
     await asyncio.gather(
-        service.find_similar_chunks("doc-1", [0.1, 0.2], 1),
-        service.find_similar_chunks("doc-1", [0.1, 0.2], 1),
+        service.find_similar_chunks("doc-1", [0.1, 0.2], 1, tenant_id="dev"),
+        service.find_similar_chunks("doc-1", [0.1, 0.2], 1, tenant_id="dev"),
     )
 
     assert max_active_calls <= 1
@@ -84,6 +84,6 @@ async def test_find_similar_chunks_logs_errors():
 
     with patch("db.sqlalchemy_service.logger.exception") as mock_log:
         with pytest.raises(RuntimeError, match="db error"):
-            await service.find_similar_chunks("doc-1", [0.1, 0.2], 1)
+            await service.find_similar_chunks("doc-1", [0.1, 0.2], 1, tenant_id="dev")
 
     mock_log.assert_called_once()

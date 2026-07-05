@@ -53,7 +53,7 @@ async def test_upload_route_maps_validation_error_to_http_exception():
         ),
     ):
         with pytest.raises(HTTPException) as exc_info:
-            await upload(make_test_request("POST", "/upload"), mock_file, auth=AuthContext())
+            await upload(make_test_request("POST", "/upload"), mock_file, auth=AuthContext(tenant_id="dev"))
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail["code"] == "invalid_file_type"

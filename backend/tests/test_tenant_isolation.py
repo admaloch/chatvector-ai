@@ -637,3 +637,67 @@ def test_session_tenant_a_can_access_own_session():
         assert gone is None
     finally:
         _SESSIONS.clear()
+
+
+# ---------------------------------------------------------------------------
+# Required tenant_id contract enforcement
+# ---------------------------------------------------------------------------
+
+
+@_requires_db
+@pytest.mark.asyncio
+async def test_get_document_rejects_missing_tenant_id():
+    svc = SQLAlchemyService()
+    with pytest.raises(ValueError, match="requires a non-empty tenant_id"):
+        await svc.get_document("00000000-0000-0000-0000-000000000001", tenant_id="")
+
+
+@_requires_db
+@pytest.mark.asyncio
+async def test_find_similar_chunks_rejects_none_tenant_id():
+    svc = SQLAlchemyService()
+    with pytest.raises(ValueError, match="requires a non-empty tenant_id"):
+        await svc.find_similar_chunks(
+            "00000000-0000-0000-0000-000000000001",
+            [0.1, 0.2],
+            5,
+            tenant_id=None,  # type: ignore[arg-type]
+        )
+
+
+@_requires_db
+@pytest.mark.asyncio
+async def test_fail_stale_documents_global_marks_all_tenants():
+    """Administrative global sweep updates documents regardless of tenant."""
+    svc = SQLAlchemyService()
+    tid_a = f"test-global-a-{uuid4().hex[:6]}"
+    tid_b = f"test-global-b-{uuid4().hex[:6]}"
+    try:
+        await create_tenant("Global A", tenant_id=tid_a)
+        await create_tenant("Global B", tenant_id=tid_b)
+        doc_a = await svc.create_document("a.pdf", tenant_id=tid_a)
+        doc_b = await svc.create_document("b.pdf", tenant_id=tid_b)
+        await svc.update_document_status(doc_a, "extracting", tenant_id=tid_a)
+        await svc.update_document_status(doc_b, "chunking", tenant_id=tid_b)
+
+        updated = await svc.fail_stale_documents_global(["extracting", "chunking"])
+        assert doc_a in updated
+        assert doc_b in updated
+
+        status_a = await svc.get_document_status(doc_a, tenant_id=tid_a)
+        status_b = await svc.get_document_status(doc_b, tenant_id=tid_b)
+        assert status_a["status"] == "failed"
+        assert status_b["status"] == "failed"
+    finally:
+        await _cleanup_tenant(tid_a, svc)
+        await _cleanup_tenant(tid_b, svc)
+
+
+def test_require_current_tenant_rejects_empty_auth_context():
+    from core.auth import AuthContext, require_current_tenant
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        require_current_tenant(AuthContext())
+    assert exc.value.status_code == 401
+    assert exc.value.detail["code"] == "missing_tenant"

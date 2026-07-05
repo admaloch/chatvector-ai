@@ -15,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from core.models import Document, DocumentChunk
 from core.config import config
 from db.base import ChunkMatch, ChunkRecord, DatabaseService
+from db.tenant_scope import require_tenant_id
 from services.retrieval_service import merge_chunk_matches, reciprocal_rank_fusion
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,30 @@ def _is_missing_content_tsv_error(exc: BaseException) -> bool:
     if orig is not None and orig is not exc:
         return _is_missing_content_tsv_error(orig)
     return False
+
+
+def _document_row_to_dict(document: Document) -> dict:
+    return {
+        "id": str(document.id),
+        "file_name": document.file_name,
+        "tenant_id": document.tenant_id,
+        "status": document.status,
+        "chunks": document.chunks,
+        "error": document.error,
+        "created_at": str(document.created_at) if document.created_at else None,
+        "updated_at": str(document.updated_at) if document.updated_at else None,
+    }
+
+
+def _document_status_payload(document: Document) -> dict:
+    return {
+        "document_id": str(document.id),
+        "status": document.status,
+        "chunks": document.chunks,
+        "error": document.error,
+        "created_at": str(document.created_at) if document.created_at else None,
+        "updated_at": str(document.updated_at) if document.updated_at else None,
+    }
 
 
 class SQLAlchemyService(DatabaseService):
@@ -60,7 +85,19 @@ class SQLAlchemyService(DatabaseService):
         )
         self._retrieval_semaphore = asyncio.Semaphore(config.SQLALCHEMY_RETRIEVAL_CONCURRENCY)
 
-    async def create_document(self, filename: str, tenant_id: Optional[str] = None) -> str:
+    async def _document_owned_by_tenant(
+        self, session: AsyncSession, doc_id: str, tenant_id: str
+    ) -> bool:
+        result = await session.execute(
+            select(Document.id).where(
+                Document.id == doc_id,
+                Document.tenant_id == tenant_id,
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def create_document(self, filename: str, tenant_id: str) -> str:
+        tenant_id = require_tenant_id(tenant_id, method="create_document")
         async with self.async_session() as session:
             doc_id = str(uuid.uuid4())
             document = Document(
@@ -79,9 +116,15 @@ class SQLAlchemyService(DatabaseService):
         self,
         doc_id: str,
         chunk_records: list[ChunkRecord],
-        tenant_id: Optional[str] = None,
+        tenant_id: str,
     ) -> list[str]:
+        tenant_id = require_tenant_id(tenant_id, method="store_chunks_with_embeddings")
         async with self.async_session() as session:
+            if not await self._document_owned_by_tenant(session, doc_id, tenant_id):
+                raise ValueError(
+                    f"store_chunks_with_embeddings: document {doc_id} not found for tenant {tenant_id}"
+                )
+
             chunk_rows = []
             chunk_ids = []
 
@@ -107,33 +150,27 @@ class SQLAlchemyService(DatabaseService):
             logger.info(f"[PostgreSQL] Inserted {len(chunk_ids)} chunks for document {doc_id}")
             return chunk_ids
 
-    async def get_document(self, doc_id: str, tenant_id: Optional[str] = None) -> dict | None:
+    async def get_document(self, doc_id: str, tenant_id: str) -> dict | None:
+        tenant_id = require_tenant_id(tenant_id, method="get_document")
         async with self.async_session() as session:
-            stmt = select(Document).where(Document.id == doc_id)
-            if tenant_id is not None:
-                stmt = stmt.where(Document.tenant_id == tenant_id)
-            result = await session.execute(stmt)
+            result = await session.execute(
+                select(Document).where(
+                    Document.id == doc_id,
+                    Document.tenant_id == tenant_id,
+                )
+            )
             document = result.scalar_one_or_none()
             if not document:
                 return None
-            return {
-                "id": str(document.id),
-                "file_name": document.file_name,
-                "tenant_id": document.tenant_id,
-                "status": document.status,
-                "chunks": document.chunks,
-                "error": document.error,
-                "created_at": str(document.created_at) if document.created_at else None,
-                "updated_at": str(document.updated_at) if document.updated_at else None,
-            }
+            return _document_row_to_dict(document)
 
     async def create_document_with_chunks_atomic(
         self,
         file_name: str,
         chunk_records: list[ChunkRecord],
-        tenant_id: Optional[str] = None,
+        tenant_id: str,
     ) -> tuple[str, list[str]]:
-        """Atomic document+chunk creation with transaction."""
+        tenant_id = require_tenant_id(tenant_id, method="create_document_with_chunks_atomic")
         async with self.async_session() as session:
             chunk_ids: list[str] = []
             doc_id = str(uuid.uuid4())
@@ -175,20 +212,25 @@ class SQLAlchemyService(DatabaseService):
         self,
         doc_id: str,
         status: str,
+        tenant_id: str,
+        *,
         error: dict | None = None,
         chunks: dict | None = None,
-        tenant_id: Optional[str] = None,
     ) -> None:
+        tenant_id = require_tenant_id(tenant_id, method="update_document_status")
         async with self.async_session() as session:
-            stmt = select(Document).where(Document.id == doc_id)
-            if tenant_id is not None:
-                stmt = stmt.where(Document.tenant_id == tenant_id)
-            result = await session.execute(stmt)
+            result = await session.execute(
+                select(Document).where(
+                    Document.id == doc_id,
+                    Document.tenant_id == tenant_id,
+                )
+            )
             document = result.scalar_one_or_none()
             if not document:
                 logger.warning(
-                    "[PostgreSQL] update_document_status: document %s not found, skipping",
+                    "[PostgreSQL] update_document_status: document %s not found for tenant %s",
                     doc_id,
+                    tenant_id,
                 )
                 return
 
@@ -202,40 +244,45 @@ class SQLAlchemyService(DatabaseService):
             await session.commit()
             logger.debug(f"[PostgreSQL] Updated status for {doc_id} -> {status}")
 
-    async def get_document_status(self, doc_id: str, tenant_id: Optional[str] = None) -> dict | None:
+    async def get_document_status(self, doc_id: str, tenant_id: str) -> dict | None:
+        tenant_id = require_tenant_id(tenant_id, method="get_document_status")
         async with self.async_session() as session:
-            stmt = select(Document).where(Document.id == doc_id)
-            if tenant_id is not None:
-                stmt = stmt.where(Document.tenant_id == tenant_id)
-            result = await session.execute(stmt)
+            result = await session.execute(
+                select(Document).where(
+                    Document.id == doc_id,
+                    Document.tenant_id == tenant_id,
+                )
+            )
             document = result.scalar_one_or_none()
             if not document:
                 return None
+            return _document_status_payload(document)
 
-            return {
-                "document_id": str(document.id),
-                "status": document.status,
-                "chunks": document.chunks,
-                "error": document.error,
-                "created_at": str(document.created_at) if document.created_at else None,
-                "updated_at": str(document.updated_at) if document.updated_at else None,
-            }
-
-    async def delete_document_chunks(self, doc_id: str, tenant_id: Optional[str] = None) -> None:
+    async def delete_document_chunks(self, doc_id: str, tenant_id: str) -> None:
+        tenant_id = require_tenant_id(tenant_id, method="delete_document_chunks")
         async with self.async_session() as session:
+            if not await self._document_owned_by_tenant(session, doc_id, tenant_id):
+                logger.warning(
+                    "[PostgreSQL] delete_document_chunks: document %s not found for tenant %s",
+                    doc_id,
+                    tenant_id,
+                )
+                return
             await session.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc_id))
             await session.commit()
-            logger.info(f"[PostgreSQL] Deleted chunks for failed upload document {doc_id}")
+            logger.info(f"[PostgreSQL] Deleted chunks for document {doc_id}")
 
-    async def delete_document(self, document_id: str, tenant_id: Optional[str] = None) -> None:
+    async def delete_document(self, document_id: str, tenant_id: str) -> None:
+        tenant_id = require_tenant_id(tenant_id, method="delete_document")
         async with self.async_session() as session:
             try:
                 async with session.begin():
-                    # Verify ownership before deleting
-                    stmt = select(Document).where(Document.id == document_id)
-                    if tenant_id is not None:
-                        stmt = stmt.where(Document.tenant_id == tenant_id)
-                    result = await session.execute(stmt)
+                    result = await session.execute(
+                        select(Document).where(
+                            Document.id == document_id,
+                            Document.tenant_id == tenant_id,
+                        )
+                    )
                     document = result.scalar_one_or_none()
                     if not document:
                         logger.warning(
@@ -245,23 +292,21 @@ class SQLAlchemyService(DatabaseService):
                         )
                         return
 
-                    # Delete chunks first due to FK constraint
                     await session.execute(
                         delete(DocumentChunk).where(DocumentChunk.document_id == document_id)
                     )
-                    # Delete document constraining by BOTH id and tenant_id (defense-in-depth:
-                    # the WHERE clause itself prevents cross-tenant deletion even if this
-                    # method is called without the ownership pre-check above).
-                    doc_delete_stmt = delete(Document).where(Document.id == document_id)
-                    if tenant_id is not None:
-                        doc_delete_stmt = doc_delete_stmt.where(Document.tenant_id == tenant_id)
-                    await session.execute(doc_delete_stmt)
+                    await session.execute(
+                        delete(Document).where(
+                            Document.id == document_id,
+                            Document.tenant_id == tenant_id,
+                        )
+                    )
                 logger.info(f"[PostgreSQL] Atomically deleted document {document_id}")
             except Exception:
                 logger.error(f"[PostgreSQL] Failed to delete document {document_id}")
                 raise
 
-    async def fail_stale_documents(self, statuses: list[str], tenant_id: Optional[str] = None) -> set[str]:
+    async def fail_stale_documents_global(self, statuses: list[str]) -> set[str]:
         async with self.async_session() as session:
             rows = await session.execute(
                 select(Document.id).where(Document.status.in_(statuses))
@@ -274,7 +319,10 @@ class SQLAlchemyService(DatabaseService):
                     .where(Document.id.in_(doc_ids))
                     .values(
                         status="failed",
-                        error={"stage": "server_restart", "message": "Server restarted while document was being processed."},
+                        error={
+                            "stage": "server_restart",
+                            "message": "Server restarted while document was being processed.",
+                        },
                         updated_at=datetime.utcnow(),
                     )
                 )
@@ -359,21 +407,16 @@ class SQLAlchemyService(DatabaseService):
             for chunk, file_name, _rank in rows
         ]
 
-    async def find_similar_chunks(
+    async def _search_similar_chunks(
         self,
         doc_id: str,
         query_embedding: list[float],
-        match_count: int = 5,
+        match_count: int,
+        *,
         session_id: Optional[str] = None,
         query_text: Optional[str] = None,
         tenant_id: Optional[str] = None,
     ) -> list[ChunkMatch]:
-        """Find chunks via vector search; optionally fuse with PostgreSQL full-text search.
-
-        When tenant_id is supplied, both vector and keyword queries add a
-        ``Document.tenant_id`` filter so chunks from another tenant cannot be
-        returned even if the caller supplies a valid doc_id.
-        """
         del session_id  # reserved for future session-scoped retrieval
         start = time.perf_counter()
         use_hybrid = (
@@ -432,8 +475,28 @@ class SQLAlchemyService(DatabaseService):
             )
             raise
 
+    async def find_similar_chunks(
+        self,
+        doc_id: str,
+        query_embedding: list[float],
+        match_count: int,
+        *,
+        tenant_id: str,
+        session_id: Optional[str] = None,
+        query_text: Optional[str] = None,
+    ) -> list[ChunkMatch]:
+        tenant_id = require_tenant_id(tenant_id, method="find_similar_chunks")
+        return await self._search_similar_chunks(
+            doc_id,
+            query_embedding,
+            match_count,
+            session_id=session_id,
+            query_text=query_text,
+            tenant_id=tenant_id,
+        )
+
     async def list_tenant_documents(self, tenant_id: str) -> list[str]:
-        """Return document IDs belonging to tenant_id, ordered by creation time."""
+        tenant_id = require_tenant_id(tenant_id, method="list_tenant_documents")
         async with self.async_session() as session:
             rows = await session.execute(
                 select(Document.id)
@@ -447,8 +510,9 @@ class SQLAlchemyService(DatabaseService):
         session_id: str,
         role: str,
         content: str,
-        tenant_id: Optional[str] = None,
+        tenant_id: str,
     ) -> str:
+        tenant_id = require_tenant_id(tenant_id, method="store_chat_message")
         async with self.async_session() as session:
             from core.models import ChatMessage
             msg_id = str(uuid.uuid4())
@@ -467,20 +531,26 @@ class SQLAlchemyService(DatabaseService):
     async def get_session_history(
         self,
         session_id: str,
+        tenant_id: str,
+        *,
         limit: int = 20,
-        tenant_id: Optional[str] = None,
     ) -> list[dict]:
+        tenant_id = require_tenant_id(tenant_id, method="get_session_history")
         async with self.async_session() as session:
             from core.models import ChatMessage
-            stmt = select(ChatMessage).where(ChatMessage.session_id == session_id)
-            if tenant_id:
-                stmt = stmt.where(ChatMessage.tenant_id == tenant_id)
-            stmt = stmt.order_by(ChatMessage.created_at.desc()).limit(limit)
-            
+            stmt = (
+                select(ChatMessage)
+                .where(
+                    ChatMessage.session_id == session_id,
+                    ChatMessage.tenant_id == tenant_id,
+                )
+                .order_by(ChatMessage.created_at.desc())
+                .limit(limit)
+            )
+
             result = await session.execute(stmt)
             messages = result.scalars().all()
-            
-            # Return ordered ascending (chronological)
+
             return [
                 {
                     "id": str(msg.id),

@@ -58,7 +58,8 @@ async def test_find_similar_chunks_vector_only_when_hybrid_disabled():
         results = await service.find_similar_chunks(
             "doc-1",
             [0.1, 0.2],
-            match_count=5,
+            5,
+            tenant_id="dev",
             query_text="exact keyword",
         )
 
@@ -93,7 +94,8 @@ async def test_find_similar_chunks_hybrid_invokes_both_paths():
         results = await service.find_similar_chunks(
             "doc-1",
             [0.1, 0.2],
-            match_count=5,
+            5,
+            tenant_id="dev",
             query_text="beta",
         )
 
@@ -129,7 +131,8 @@ async def test_find_similar_chunks_hybrid_fusion_order():
         results = await service.find_similar_chunks(
             "doc-1",
             [0.1, 0.2],
-            match_count=3,
+            3,
+            tenant_id="dev",
             query_text="lookup",
         )
 
@@ -187,7 +190,11 @@ async def test_hybrid_keyword_finds_exact_term_integration():
     unique_token = f"HYBRID-EXACT-{uuid.uuid4().hex[:8]}"
     file_name = f"hybrid_test_{uuid.uuid4()}.pdf"
 
-    doc_id = await db.create_document(file_name)
+    tenant_id = f"hybrid-{uuid.uuid4()}"
+    from services.api_key_service import create_tenant, reset_session_factory
+    reset_session_factory()
+    await create_tenant("Hybrid test", tenant_id=tenant_id)
+    doc_id = await db.create_document(file_name, tenant_id=tenant_id)
     await db.store_chunks_with_embeddings(
         doc_id,
         [
@@ -206,6 +213,7 @@ async def test_hybrid_keyword_finds_exact_term_integration():
                 character_offset_end=80,
             ),
         ],
+        tenant_id=tenant_id,
     )
 
     with patch.object(config, "HYBRID_RETRIEVAL_ENABLED", True):
@@ -213,6 +221,7 @@ async def test_hybrid_keyword_finds_exact_term_integration():
             doc_id,
             filler,
             match_count=5,
+            tenant_id=tenant_id,
             query_text=unique_token,
         )
 

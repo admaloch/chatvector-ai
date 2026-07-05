@@ -134,7 +134,7 @@ async def test_process_document_success_tracks_status_and_returns_status_endpoin
     ) as mock_extract, patch(
         "services.ingestion_pipeline.get_embeddings", new=AsyncMock(return_value=[[0.1, 0.2], [0.3, 0.4]])
     ):
-        result = await pipeline.process_document(mock_file)
+        result = await pipeline.process_document(mock_file, tenant_id="dev")
 
     assert result["document_id"] == "doc123"
     assert result["chunks"] == 2
@@ -160,7 +160,7 @@ async def test_process_document_rejects_invalid_file_type():
     pipeline = IngestionPipeline(splitter_cls=_SingleChunkSplitter)
 
     with pytest.raises(UploadPipelineError) as excinfo:
-        await pipeline.process_document(mock_file)
+        await pipeline.process_document(mock_file, tenant_id="dev")
 
     assert excinfo.value.status_code == 400
     assert excinfo.value.code == "invalid_file_type"
@@ -180,7 +180,7 @@ async def test_process_document_rejects_file_too_large(monkeypatch):
     pipeline = IngestionPipeline()
 
     with pytest.raises(UploadPipelineError) as excinfo:
-        await pipeline.process_document(mock_file)
+        await pipeline.process_document(mock_file, tenant_id="dev")
 
     assert excinfo.value.status_code == 413
     assert excinfo.value.code == "file_too_large"
@@ -207,13 +207,13 @@ async def test_process_document_marks_failed_when_no_text_extracted(monkeypatch)
         new=AsyncMock(return_value=("   ", [])),
     ):
         with pytest.raises(UploadPipelineError) as excinfo:
-            await pipeline.process_document(mock_file)
+            await pipeline.process_document(mock_file, tenant_id="dev")
 
     assert excinfo.value.status_code == 422
     assert excinfo.value.code == "no_text_extracted"
     assert excinfo.value.document_id == "doc-no-text"
 
-    mock_cleanup.assert_awaited_once_with("doc-no-text", tenant_id=None)
+    mock_cleanup.assert_awaited_once_with("doc-no-text", tenant_id="dev")
     assert mock_update.await_args_list[-1].kwargs["status"] == "failed"
     assert mock_update.await_args_list[-1].kwargs["error"]["stage"] == "extracting"
 
@@ -242,14 +242,14 @@ async def test_process_document_marks_failed_on_storage_error(monkeypatch):
         "services.ingestion_pipeline.db.store_chunks_with_embeddings", new=AsyncMock(side_effect=RuntimeError("db down"))
     ):
         with pytest.raises(UploadPipelineError) as excinfo:
-            await pipeline.process_document(mock_file)
+            await pipeline.process_document(mock_file, tenant_id="dev")
 
     assert excinfo.value.status_code == 500
     assert excinfo.value.code == "upload_failed"
     assert excinfo.value.stage == "storing"
     assert excinfo.value.document_id == "doc-store-fail"
 
-    mock_cleanup.assert_awaited_once_with("doc-store-fail", tenant_id=None)
+    mock_cleanup.assert_awaited_once_with("doc-store-fail", tenant_id="dev")
     assert mock_update.await_args_list[-1].kwargs["status"] == "failed"
     assert mock_update.await_args_list[-1].kwargs["error"]["stage"] == "storing"
 
@@ -346,7 +346,7 @@ async def test_process_document_passes_chunk_records_to_store(monkeypatch):
         "services.ingestion_pipeline.get_embeddings",
         new=AsyncMock(return_value=[[0.1, 0.2], [0.3, 0.4]]),
     ):
-        await pipeline.process_document(mock_file)
+        await pipeline.process_document(mock_file, tenant_id="dev")
 
     mock_store.assert_awaited_once()
     _doc_id, records = mock_store.call_args.args

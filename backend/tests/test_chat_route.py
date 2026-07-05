@@ -29,7 +29,7 @@ def test_chat_route_delegates_to_chat_service():
             chat(
                 make_test_request("POST", "/chat"),
                 ChatRequest(question="q", doc_id=_DOC_ID_1),
-                auth=AuthContext(),
+                auth=AuthContext(tenant_id="dev"),
             )
         )
 
@@ -55,7 +55,7 @@ def test_chat_batch_route_delegates_to_chat_service():
         patch("routes.chat.db.get_document", new=AsyncMock(return_value=_FAKE_DOC)),
     ):
         result = asyncio.run(
-            chat_batch(make_test_request("POST", "/chat/batch"), batch_request, auth=AuthContext())
+            chat_batch(make_test_request("POST", "/chat/batch"), batch_request, auth=AuthContext(tenant_id="dev"))
         )
 
     assert result == payload
@@ -88,7 +88,7 @@ def test_chat_batch_route_counts_failures_and_successes():
         patch("routes.chat.db.get_document", new=AsyncMock(return_value=_FAKE_DOC)),
     ):
         result = asyncio.run(
-            chat_batch(make_test_request("POST", "/chat/batch"), batch_request, auth=AuthContext())
+            chat_batch(make_test_request("POST", "/chat/batch"), batch_request, auth=AuthContext(tenant_id="dev"))
         )
 
     assert result["count"] == 2
@@ -108,7 +108,7 @@ def test_chat_batch_route_returns_422_for_value_error():
     ):
         try:
             asyncio.run(
-                chat_batch(make_test_request("POST", "/chat/batch"), batch_request, auth=AuthContext())
+                chat_batch(make_test_request("POST", "/chat/batch"), batch_request, auth=AuthContext(tenant_id="dev"))
             )
             raise AssertionError("Expected HTTPException was not raised")
         except HTTPException as exc:
@@ -129,7 +129,7 @@ async def test_chat_stream_route_disabled():
             await chat_stream(
                 make_test_request("POST", "/chat/stream"),
                 ChatRequest(question="q", doc_id=_DOC_ID_1),
-                auth=AuthContext(),
+                auth=AuthContext(tenant_id="dev"),
             )
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail["code"] == "streaming_disabled"
@@ -149,7 +149,7 @@ async def test_chat_stream_route_enabled():
         response = await chat_stream(
             make_test_request("POST", "/chat/stream"),
             ChatRequest(question="q", doc_id=_DOC_ID_1),
-            auth=AuthContext(),
+            auth=AuthContext(tenant_id="dev"),
         )
 
         assert response.media_type == "text/event-stream"

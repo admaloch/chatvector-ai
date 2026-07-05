@@ -29,7 +29,7 @@ async def test_chat_route_stores_history_on_success():
         result = await chat(
             make_test_request("POST", "/chat"),
             ChatRequest(question="q", doc_id=_DOC_ID_1, session_id="test-session"),
-            auth=AuthContext(),
+            auth=AuthContext(tenant_id="dev"),
         )
 
     assert result == payload
@@ -48,11 +48,13 @@ async def test_db_message_persistence_and_retrieval():
     session_id = f"test-session-{uuid.uuid4()}"
     
     # Store messages
+    tenant_id = f"tenant-history-{uuid.uuid4()}"
+
     for i in range(25):
-        await db_service.store_chat_message(session_id, "user", f"Question {i}")
-        await db_service.store_chat_message(session_id, "assistant", f"Answer {i}")
-        
-    history = await db_service.get_session_history(session_id, limit=10)
+        await db_service.store_chat_message(session_id, "user", f"Question {i}", tenant_id=tenant_id)
+        await db_service.store_chat_message(session_id, "assistant", f"Answer {i}", tenant_id=tenant_id)
+
+    history = await db_service.get_session_history(session_id, tenant_id=tenant_id, limit=10)
     
     assert len(history) == 10
     # The limit is applied such that the most recent messages are returned, in chronological order
@@ -115,13 +117,19 @@ async def test_stream_finalization_persistence():
             
         mock_stream.side_effect = fake_stream
         
-        gen = answer_question_stream_for_document("Stream Q?", _DOC_ID_1, session_id=session_id)
+        gen = answer_question_stream_for_document(
+            "Stream Q?", _DOC_ID_1, session_id=session_id, auth=AuthContext(tenant_id="dev")
+        )
         chunks = [c async for c in gen]
         
         assert any("stream part 1 " in c for c in chunks)
         
         # Verify db persistence was called
-        mock_history.assert_called_once_with(session_id=session_id, limit=config.MAX_SESSION_HISTORY_MESSAGES, tenant_id=None)
+        mock_history.assert_called_once_with(
+            session_id=session_id,
+            tenant_id="dev",
+            limit=config.MAX_SESSION_HISTORY_MESSAGES,
+        )
         assert mock_store.call_count == 2
         
         # Check that user question and full assistant answer were stored

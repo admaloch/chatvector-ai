@@ -75,3 +75,11 @@ async def require_auth(request: Request) -> AuthContext:
 def get_current_tenant(auth: AuthContext) -> Optional[str]:
     """Extract tenant ID from the authentication context."""
     return auth.tenant_id
+
+
+def require_current_tenant(auth: AuthContext) -> str:
+    """Return a non-empty tenant ID or raise 401 for protected resource access."""
+    tenant_id = auth.tenant_id
+    if tenant_id is None or tenant_id == "":
+        raise _401("missing_tenant", "Authenticated tenant context is required.")
+    return tenant_id

@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 
-from core.auth import AuthContext, get_current_tenant, require_auth
+from core.auth import AuthContext, require_auth, require_current_tenant
 from core.config import config
 from middleware.rate_limit import limiter
 
@@ -22,7 +22,7 @@ router = APIRouter()
 @router.get("/documents/{document_id}/status")
 @limiter.limit(config.RATE_LIMIT_DOCUMENT_STATUS)
 async def get_document_status(request: Request, document_id: UUID, auth: AuthContext = Depends(require_auth)):
-    status_payload = await db.get_document_status(str(document_id), tenant_id=get_current_tenant(auth))
+    status_payload = await db.get_document_status(str(document_id), tenant_id=require_current_tenant(auth))
     if not status_payload:
         raise HTTPException(
             status_code=404,
@@ -64,7 +64,7 @@ async def get_document_status_stream(request: Request, document_id: UUID, auth: 
             },
         )
 
-    tenant_id = get_current_tenant(auth)
+    tenant_id = require_current_tenant(auth)
 
     async def event_generator():
         MAX_POLL_SECONDS = 300
@@ -116,7 +116,7 @@ async def get_document_status_stream(request: Request, document_id: UUID, auth: 
 @router.delete("/documents/{document_id}", status_code=204)
 @limiter.limit(config.RATE_LIMIT_DOCUMENT_DELETE)
 async def delete_document(request: Request, document_id: UUID, auth: AuthContext = Depends(require_auth)):
-    status_payload = await db.get_document_status(str(document_id), tenant_id=get_current_tenant(auth))
+    status_payload = await db.get_document_status(str(document_id), tenant_id=require_current_tenant(auth))
     if not status_payload:
         raise HTTPException(
             status_code=404,
@@ -150,9 +150,7 @@ async def delete_document(request: Request, document_id: UUID, auth: AuthContext
             },
         )
 
-    tenant_id = get_current_tenant(auth)
+    tenant_id = require_current_tenant(auth)
     await db.delete_document(str(document_id), tenant_id=tenant_id)
-    # Invalidate cache so subsequent tenant-scope retrieval does not include this doc.
-    if tenant_id:
-        invalidate_tenant_cache(tenant_id)
+    invalidate_tenant_cache(tenant_id)
     return Response(status_code=204)

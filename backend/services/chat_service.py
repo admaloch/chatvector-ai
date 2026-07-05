@@ -3,7 +3,7 @@ import asyncio
 import json
 from typing import Optional, AsyncGenerator
 
-from core.auth import AuthContext, get_current_tenant
+from core.auth import AuthContext, require_current_tenant
 from core.config import config
 from core.session import SessionContext
 from db import find_similar_chunks
@@ -169,9 +169,10 @@ async def _retrieve_chunks_for_documents(
     doc_ids: list[str],
     query_embedding: list[float],
     match_count: int,
+    tenant_id: str,
+    *,
     session_id: Optional[str] = None,
     query_text: Optional[str] = None,
-    tenant_id: Optional[str] = None,
 ) -> list:
     retrieval_semaphore = _get_retrieval_semaphore()
 
@@ -219,7 +220,8 @@ async def answer_question_for_document(
     question: str,
     doc_id: str,
     match_count: int = 5,
-    auth: Optional[AuthContext] = None,
+    *,
+    auth: AuthContext,
     session_id: Optional[str] = None,
     session_context: Optional[SessionContext] = None,
     scope: Optional[str] = None,
@@ -228,7 +230,7 @@ async def answer_question_for_document(
     Orchestrate the chat flow for a single question/document pair.
     """
     logger.info(f"Starting chat for document {doc_id} (session={session_id}, scope={scope or 'session'})")
-    tenant_id = get_current_tenant(auth) if auth else None
+    tenant_id = require_current_tenant(auth)
 
     doc_ids = await _resolve_retrieval_doc_ids(
         scope=scope,
@@ -261,9 +263,9 @@ async def answer_question_for_document(
             doc_ids=doc_ids,
             query_embedding=query_embedding,
             match_count=match_count,
+            tenant_id=tenant_id,
             session_id=session_id,
             query_text=question,
-            tenant_id=tenant_id,
         )
         for chunk in chunks:
             key = (chunk.document_id, chunk.chunk_index)
@@ -327,7 +329,8 @@ async def answer_question_stream_for_document(
     question: str,
     doc_id: str,
     match_count: int = 5,
-    auth: Optional[AuthContext] = None,
+    *,
+    auth: AuthContext,
     session_id: Optional[str] = None,
     session_context: Optional[SessionContext] = None,
     scope: Optional[str] = None,
@@ -337,7 +340,7 @@ async def answer_question_stream_for_document(
     a server-sent events (SSE) stream.
     """
     logger.info(f"Starting chat stream for document {doc_id} (scope={scope or 'session'})")
-    tenant_id = get_current_tenant(auth) if auth else None
+    tenant_id = require_current_tenant(auth)
 
     try:
         doc_ids = await _resolve_retrieval_doc_ids(
@@ -363,8 +366,8 @@ async def answer_question_stream_for_document(
                 doc_ids=doc_ids,
                 query_embedding=query_embedding,
                 match_count=match_count,
-                query_text=question,
                 tenant_id=tenant_id,
+                query_text=question,
             )
             for chunk in chunks:
                 key = (chunk.document_id, chunk.chunk_index)
@@ -418,7 +421,8 @@ async def answer_question_stream_for_document(
 
 async def answer_questions_for_documents_batch(
     queries: list[dict],
-    auth: Optional[AuthContext] = None,
+    *,
+    auth: AuthContext,
     session_context: Optional[SessionContext] = None,
     scope: Optional[str] = None,
 ) -> list[dict]:
@@ -431,7 +435,7 @@ async def answer_questions_for_documents_batch(
     if not queries:
         return []
 
-    tenant_id = get_current_tenant(auth) if auth else None
+    tenant_id = require_current_tenant(auth)
 
     if len(queries) > config.CHAT_BATCH_MAX_ITEMS:
         raise ValueError(
@@ -532,9 +536,9 @@ async def answer_questions_for_documents_batch(
                     doc_ids=doc_ids,
                     query_embedding=query_embedding,
                     match_count=query["match_count"],
+                    tenant_id=tenant_id,
                     session_id=session_id,
                     query_text=query["question"],
-                    tenant_id=tenant_id,
                 )
                 for chunk in chunks:
                     key = (chunk.document_id, chunk.chunk_index)

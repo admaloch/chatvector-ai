@@ -6,8 +6,26 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 import services.chat_service as chat_service_mod
+from core.auth import AuthContext
 from services.chat_service import answer_question_for_document
 from services.chat_service import answer_questions_for_documents_batch
+
+TEST_AUTH = AuthContext(tenant_id="dev")
+
+
+async def _passthrough_retrieval_doc_ids(**kwargs):
+    return list(kwargs["requested_doc_ids"])
+
+
+@pytest.fixture(autouse=True)
+def _passthrough_retrieval_scope(request, monkeypatch):
+    if "no_documents_in_scope" in request.node.name:
+        return
+    monkeypatch.setattr(
+        chat_service_mod,
+        "_resolve_retrieval_doc_ids",
+        _passthrough_retrieval_doc_ids,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -66,6 +84,7 @@ async def test_answer_question_for_document_orchestrates_flow():
                 question="What is this about?",
                 doc_id="doc-123",
                 match_count=7,
+                auth=TEST_AUTH,
         )
 
     assert result["question"] == "What is this about?"
@@ -86,7 +105,7 @@ async def test_answer_question_for_document_orchestrates_flow():
         match_count=7,
         session_id=None,
         query_text="What is this about?",
-        tenant_id=None,
+        tenant_id="dev",
     )
     mock_context.assert_called_once_with(chunks, session_context=None)
     mock_answer.assert_awaited_once_with("What is this about?", "combined context")
@@ -113,6 +132,7 @@ async def test_answer_question_for_document_passes_session_id():
                 doc_id="doc-session",
                 match_count=7,
                 session_id="session-abc",
+                auth=TEST_AUTH,
         )
 
     mock_find.assert_awaited_once_with(
@@ -121,7 +141,7 @@ async def test_answer_question_for_document_passes_session_id():
         match_count=7,
         session_id="session-abc",
         query_text="Q",
-        tenant_id=None,
+        tenant_id="dev",
     )
     mock_history.assert_awaited_once()
 
@@ -139,7 +159,8 @@ async def test_answer_question_soft_llm_error_matches_batch_error_shape():
         "services.chat_service.generate_answer",
         new=AsyncMock(return_value=(LLM_MSG_RATE_LIMIT, 0, "")),
     ):
-        result = await answer_question_for_document(question="Q?", doc_id="doc-1", match_count=3
+        result = await answer_question_for_document(
+            question="Q?", doc_id="doc-1", match_count=3, auth=TEST_AUTH
         )
 
     assert result["status"] == "error"
@@ -179,7 +200,7 @@ async def test_answer_questions_for_documents_batch_processes_queries():
         "services.chat_service.generate_answer",
         new=AsyncMock(side_effect=lambda question, context: (f"{question}:{context}", 50, "m")),
     ) as mock_answer:
-        result = await answer_questions_for_documents_batch(queries)
+        result = await answer_questions_for_documents_batch(queries, auth=TEST_AUTH)
     assert [item["status"] for item in result] == ["ok", "ok"]
     assert [item["question"] for item in result] == ["Q1", "Q2"]
     assert result[0]["doc_ids"] == ["doc-a", "doc-b"]
@@ -234,7 +255,7 @@ async def test_answer_questions_for_documents_batch_respects_retrieval_concurren
         "services.chat_service.generate_answer",
         new=AsyncMock(return_value=("answer", 0, "m")),
     ):
-        result = await answer_questions_for_documents_batch(queries)
+        result = await answer_questions_for_documents_batch(queries, auth=TEST_AUTH)
 
     assert len(result) == 3
     assert max_active_calls <= 2
@@ -269,7 +290,7 @@ async def test_answer_questions_for_documents_batch_returns_partial_failures():
         "services.chat_service.generate_answer",
         new=AsyncMock(side_effect=fake_generate_answer),
     ):
-        result = await answer_questions_for_documents_batch(queries)
+        result = await answer_questions_for_documents_batch(queries, auth=TEST_AUTH)
 
     assert len(result) == 2
     assert result[0]["status"] == "ok"
@@ -286,7 +307,7 @@ async def test_answer_questions_for_documents_batch_rejects_duplicate_doc_ids():
     ]
 
     try:
-        await answer_questions_for_documents_batch(queries)
+        await answer_questions_for_documents_batch(queries, auth=TEST_AUTH)
         raise AssertionError("Expected ValueError was not raised")
     except ValueError as exc:
         assert "duplicate doc IDs" in str(exc)
@@ -328,7 +349,9 @@ async def test_answer_question_for_document_includes_sources_with_correct_shape(
         "services.chat_service.generate_answer",
         new=AsyncMock(return_value=("ans", 0, "m")),
     ):
-        result = await answer_question_for_document(question="Q?", doc_id="doc-1")
+        result = await answer_question_for_document(
+            question="Q?", doc_id="doc-1", auth=TEST_AUTH
+        )
 
     assert "sources" in result
     assert result["status"] == "ok"
@@ -362,7 +385,9 @@ async def test_answer_question_for_document_sources_none_fields_for_txt():
         "services.chat_service.generate_answer",
         new=AsyncMock(return_value=("ans", 0, "m")),
     ):
-        result = await answer_question_for_document(question="Q?", doc_id="doc-txt")
+        result = await answer_question_for_document(
+            question="Q?", doc_id="doc-txt", auth=TEST_AUTH
+        )
 
     assert result["status"] == "ok"
     assert result["doc_id"] == "doc-txt"
@@ -396,7 +421,7 @@ async def test_batch_answer_includes_sources_in_ok_responses():
         "services.chat_service.generate_answer",
         new=AsyncMock(return_value=("answer", 0, "m")),
     ):
-        result = await answer_questions_for_documents_batch(queries)
+        result = await answer_questions_for_documents_batch(queries, auth=TEST_AUTH)
 
     assert result[0]["status"] == "ok"
     assert result[0]["sources"] == [
@@ -418,7 +443,7 @@ async def test_batch_soft_llm_error_uses_same_error_codes_as_single_chat():
         "services.chat_service.generate_answer",
         new=AsyncMock(return_value=(LLM_MSG_MISSING_API_KEY, 0, "")),
     ):
-        result = await answer_questions_for_documents_batch(queries)
+        result = await answer_questions_for_documents_batch(queries, auth=TEST_AUTH)
 
     assert result[0]["status"] == "error"
     assert result[0]["error"]["code"] == "llm_missing_api_key"
@@ -435,6 +460,7 @@ async def test_answer_question_stream_for_document_success():
         yield "part2"
 
     with (
+        patch("services.chat_service._resolve_retrieval_doc_ids", new=AsyncMock(return_value=["doc-1"])),
         patch("services.chat_service.transform_query", new=AsyncMock(return_value=["q"])),
         patch("services.chat_service.get_embeddings", new=AsyncMock(return_value=[[0.1, 0.2]])),
         patch("services.chat_service._retrieve_chunks_for_documents", new=AsyncMock(return_value=[])),
@@ -442,7 +468,7 @@ async def test_answer_question_stream_for_document_success():
         patch("services.chat_service.generate_answer_stream", new=mock_generate_stream)
     ):
         chunks = []
-        async for chunk in answer_question_stream_for_document("q", "doc-1", match_count=5, auth=AuthContext()):
+        async for chunk in answer_question_stream_for_document("q", "doc-1", match_count=5, auth=AuthContext(tenant_id="dev")):
             chunks.append(chunk)
 
         assert len(chunks) == 3
@@ -461,6 +487,7 @@ async def test_answer_question_stream_for_document_error():
         yield LLM_MSG_RATE_LIMIT
 
     with (
+        patch("services.chat_service._resolve_retrieval_doc_ids", new=AsyncMock(return_value=["doc-1"])),
         patch("services.chat_service.transform_query", new=AsyncMock(return_value=["q"])),
         patch("services.chat_service.get_embeddings", new=AsyncMock(return_value=[[0.1, 0.2]])),
         patch("services.chat_service._retrieve_chunks_for_documents", new=AsyncMock(return_value=[])),
@@ -468,7 +495,7 @@ async def test_answer_question_stream_for_document_error():
         patch("services.chat_service.generate_answer_stream", new=mock_generate_stream)
     ):
         chunks = []
-        async for chunk in answer_question_stream_for_document("q", "doc-1", match_count=5, auth=AuthContext()):
+        async for chunk in answer_question_stream_for_document("q", "doc-1", match_count=5, auth=AuthContext(tenant_id="dev")):
             chunks.append(chunk)
 
         assert len(chunks) == 1
@@ -493,7 +520,9 @@ async def test_answer_question_for_document_includes_latency_and_model():
         "services.chat_service.generate_answer",
         new=AsyncMock(return_value=("the answer", 456, "gemini-2.5-flash")),
     ):
-        result = await answer_question_for_document(question="Q?", doc_id="doc-1")
+        result = await answer_question_for_document(
+            question="Q?", doc_id="doc-1", auth=TEST_AUTH
+        )
 
     assert result["status"] == "ok"
     assert result["latency_ms"] == 456
@@ -529,7 +558,7 @@ async def test_batch_includes_latency_and_model_per_query():
     ), patch(
         "services.chat_service.generate_answer", new=AsyncMock(side_effect=fake_generate)
     ):
-        result = await answer_questions_for_documents_batch(queries)
+        result = await answer_questions_for_documents_batch(queries, auth=TEST_AUTH)
 
     assert len(result) == 2
     by_question = {item["question"]: item for item in result}
