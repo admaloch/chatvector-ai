@@ -69,10 +69,32 @@ prompt_hidden() {
   local prompt="$1"
   local var_name="$2"
   local input=""
+  local tty="/dev/tty"
 
-  printf '%s' "${prompt}" >&2
-  IFS= read -rs input || true
-  printf '\n' >&2
+  sanitize_prompt_input() {
+    input="${input//$'\r'/}"
+    input="${input//$'\n'/}"
+    input="${input#"${input%%[![:space:]]*}"}"
+    input="${input%"${input##*[![:space:]]}"}"
+  }
+
+  if [[ -r "${tty}" ]]; then
+    printf '%s' "${prompt}" >"${tty}"
+    if stty -echo 2>/dev/null <"${tty}"; then
+      # stty -echo is more reliable than read -s for pasted input in IDE terminals.
+      IFS= read -r input <"${tty}" || true
+      stty echo 2>/dev/null <"${tty}"
+    else
+      IFS= read -rs input <"${tty}" || true
+    fi
+    printf '\n' >"${tty}"
+  else
+    printf '%s' "${prompt}" >&2
+    IFS= read -rs input || true
+    printf '\n' >&2
+  fi
+
+  sanitize_prompt_input
   printf -v "${var_name}" '%s' "${input}"
 }
 
