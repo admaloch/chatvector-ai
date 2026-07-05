@@ -1,4 +1,7 @@
-.PHONY: help up build down reset logs db sync dev stop prod-up prod-down prod-build ci tests cleanup clean
+.PHONY: help setup dev quickstart backend frontend open stop up build down reset logs db sync prod-up prod-down prod-build ci tests cleanup clean
+
+# Default: most convenient local development experience
+.DEFAULT_GOAL := all
 
 # ==========================================
 # Auto-detect Docker Compose (v1 or v2)
@@ -24,90 +27,105 @@ RESET=\033[0m
 # ==========================================
 help:
 	@echo ""
-	@echo "$(CYAN)"
-	@echo "   ____ _           _   __     __          _            "
-	@echo " ██████╗██╗  ██╗ █████╗ ████████╗██╗   ██╗███████╗ ██████╗████████╗ ██████╗ ██████╗        █████╗ ██╗"
-	@echo "██╔════╝██║  ██║██╔══██╗╚══██╔══╝██║   ██║██╔════╝██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗      ██╔══██╗██║"
-	@echo "██║     ███████║███████║   ██║   ██║   ██║█████╗  ██║        ██║   ██║   ██║██████╔╝█████╗███████║██║"
-	@echo "██║     ██╔══██║██╔══██║   ██║   ╚██╗ ██╔╝██╔══╝  ██║        ██║   ██║   ██║██╔══██╗╚════╝██╔══██║██║"
-	@echo "╚██████╗██║  ██║██║  ██║   ██║    ╚████╔╝ ███████╗╚██████╗   ██║   ╚██████╔╝██║  ██║      ██║  ██║██║"
-	@echo " ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝     ╚═══╝  ╚══════╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝      ╚═╝  ╚═╝╚═╝"
-	@echo "$(RESET)"
+	@echo "$(CYAN)ChatVector — local development$(RESET)"
 	@echo ""
-	@echo "$(YELLOW)Available Commands$(RESET)"
-	@echo "-------------------------------------"
-	@echo "$(GREEN)make dev$(RESET)       ⚡ Start backend + frontend together"
-	@echo "$(GREEN)make up$(RESET)        🚀 Start containers"
-	@echo "$(GREEN)make build$(RESET)     🔧 Rebuild & start containers"
-	@echo "$(GREEN)make down$(RESET)      🛑 Stop containers"
-	@echo "$(GREEN)make reset$(RESET)     💣 Stop and remove volumes"
-	@echo "$(GREEN)make logs$(RESET)      📊 Follow API logs"
-	@echo "$(GREEN)make db$(RESET)        🐘 Open Postgres shell"
-	@echo "$(GREEN)make sync$(RESET)      🔄 Sync with upstream main"
-	@echo "$(GREEN)make prod-up$(RESET)   🚀 Start production stack (standalone compose)"
-	@echo "$(GREEN)make prod-down$(RESET) 🛑 Stop production stack"
-	@echo "$(GREEN)make prod-build$(RESET) 🔧 Rebuild & start production stack"
-	@echo "$(GREEN)make tests$(RESET)     ✅ Run tests via Docker (docker compose run --rm tests)"
-	@echo "$(GREEN)make cleanup$(RESET)   🌿 Delete all local branches except main"
-	@echo "$(GREEN)make clean$(RESET)     🧹 Remove containers, volumes, and orphans"
+	@echo "$(YELLOW)Quick start$(RESET)"
+	@echo "  $(GREEN)make quickstart$(RESET)  Configure provider, install/build, then start everything"
+	@echo "  $(GREEN)make$(RESET)             Start backend + frontend, open browser tabs (default)"
+	@echo "  $(GREEN)make setup$(RESET)       Configure env files, provider, dependencies, and Docker build"
+	@echo "  $(GREEN)make dev$(RESET)         Start backend + frontend without opening tabs"
+	@echo ""
+	@echo "$(YELLOW)Individual services$(RESET)"
+	@echo "  $(GREEN)make backend$(RESET)     Start only the backend Docker stack (attached logs)"
+	@echo "  $(GREEN)make frontend$(RESET)    Start only the frontend demo (non-containerized)"
+	@echo "  $(GREEN)make open$(RESET)          Open frontend and API docs in your browser"
+	@echo "  $(GREEN)make stop$(RESET)          Stop this repo's frontend process and Docker services"
+	@echo ""
+	@echo "$(YELLOW)Docker shortcuts$(RESET)"
+	@echo "  $(GREEN)make up$(RESET)            Start containers (detached)"
+	@echo "  $(GREEN)make build$(RESET)         Rebuild and start containers (detached)"
+	@echo "  $(GREEN)make down$(RESET)          Stop containers"
+	@echo "  $(GREEN)make reset$(RESET)         Stop containers and remove volumes"
+	@echo "  $(GREEN)make logs$(RESET)          Follow API logs"
+	@echo "  $(GREEN)make db$(RESET)            Open Postgres shell"
+	@echo "  $(GREEN)make tests$(RESET)         Run backend tests via Docker"
+	@echo "  $(GREEN)make clean$(RESET)         Remove containers, volumes, and orphans"
+	@echo ""
+	@echo "$(YELLOW)Other$(RESET)"
+	@echo "  $(GREEN)make prod-up$(RESET)       Start production stack"
+	@echo "  $(GREEN)make prod-down$(RESET)     Stop production stack"
+	@echo "  $(GREEN)make prod-build$(RESET)    Rebuild production stack"
+	@echo "  $(GREEN)make sync$(RESET)          Sync with upstream main"
+	@echo "  $(GREEN)make cleanup$(RESET)       Delete local branches except main"
 	@echo ""
 	@echo "Using: $(CYAN)$(DOCKER_COMPOSE)$(RESET)"
 	@echo ""
-	@echo "These are wrappers around docker compose commands."
-	@echo "Direct docker compose usage still works."
-	@echo ""
 
 # ==========================================
-# Dev (Backend + Frontend together)
+# Local development workflow
 # ==========================================
+setup:
+	@./scripts/setup.sh
+
 dev:
-	@echo "$(GREEN)⚡ Starting backend (detached) + frontend...$(RESET)"
-	@$(DOCKER_COMPOSE) up -d
-	@cd frontend-demo && npm run dev
+	@OPEN_BROWSER=0 ./scripts/dev.sh
+
+all:
+	@OPEN_BROWSER=1 ./scripts/dev.sh
+
+quickstart: setup
+	@OPEN_BROWSER=1 ./scripts/dev.sh
+
+backend:
+	@./scripts/backend.sh
+
+frontend:
+	@./scripts/frontend.sh
+
+open:
+	@./scripts/open-dev.sh
+
 stop:
-	@echo "$(YELLOW)🛑 Stopping frontend dev server...$(RESET)"
-	@pkill -f "npm run dev" || true
-	@$(DOCKER_COMPOSE) down
-	@echo "$(YELLOW)🛑 All services stopped$(RESET)"
+	@./scripts/stop.sh
 
 # ==========================================
 # Docker Commands
 # ==========================================
 up:
 	$(DOCKER_COMPOSE) up -d
-	@echo "$(GREEN)🚀 ChatVector services started$(RESET)"
+	@echo "$(GREEN)ChatVector services started$(RESET)"
 
 build:
 	$(DOCKER_COMPOSE) up --build -d
-	@echo "$(GREEN)🔧 Containers rebuilt & started$(RESET)"
+	@echo "$(GREEN)Containers rebuilt and started$(RESET)"
 
 down:
 	$(DOCKER_COMPOSE) down
-	@echo "$(YELLOW)🛑 Services stopped$(RESET)"
+	@echo "$(YELLOW)Services stopped$(RESET)"
 
 reset:
 	$(DOCKER_COMPOSE) down -v
-	@echo "$(YELLOW)💣 Containers and volumes removed$(RESET)"
+	@echo "$(YELLOW)Containers and volumes removed$(RESET)"
 
 prod-up:
 	$(DOCKER_COMPOSE) -f docker-compose.prod.yml up -d
-	@echo "$(GREEN)🚀 ChatVector production stack started$(RESET)"
+	@echo "$(GREEN)ChatVector production stack started$(RESET)"
 
 prod-down:
 	$(DOCKER_COMPOSE) -f docker-compose.prod.yml down
-	@echo "$(YELLOW)🛑 Production stack stopped$(RESET)"
+	@echo "$(YELLOW)Production stack stopped$(RESET)"
 
 prod-build:
 	$(DOCKER_COMPOSE) -f docker-compose.prod.yml up --build -d
-	@echo "$(GREEN)🔧 Production containers rebuilt & started$(RESET)"
+	@echo "$(GREEN)Production containers rebuilt and started$(RESET)"
 
 tests:
 	$(DOCKER_COMPOSE) run --rm tests
-	@echo "$(GREEN)✅ Tests complete$(RESET)"
+	@echo "$(GREEN)Tests complete$(RESET)"
 
 clean:
 	$(DOCKER_COMPOSE) down -v --remove-orphans
-	@echo "$(YELLOW)🧹 Containers, volumes, and orphans removed$(RESET)"
+	@echo "$(YELLOW)Containers, volumes, and orphans removed$(RESET)"
 
 logs:
 	$(DOCKER_COMPOSE) logs -f api
@@ -122,9 +140,9 @@ sync:
 	git fetch upstream
 	git rebase upstream/main
 	git push --force-with-lease origin HEAD
-	@echo "$(GREEN)🔄 Synced with upstream/main$(RESET)"
+	@echo "$(GREEN)Synced with upstream/main$(RESET)"
 
 cleanup:
-	@echo "$(YELLOW)🌿 Deleting all local branches except main...$(RESET)"
+	@echo "$(YELLOW)Deleting all local branches except main...$(RESET)"
 	@git branch | grep -v "^* main$$" | grep -v "^  main$$" | xargs -r git branch -D
-	@echo "$(GREEN)✅ Local branches cleaned up$(RESET)"
+	@echo "$(GREEN)Local branches cleaned up$(RESET)"
