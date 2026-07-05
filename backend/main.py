@@ -71,10 +71,29 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Failed to reset stale documents on startup — continuing anyway")
 
-    # ── Authentication bypass warning ────────────────────────────────────────
+    # ── Development tenant bootstrap + auth bypass warning ───────────────────
     if config.APP_ENV.lower() in ("development", "test"):
         import os as _os
-        dev_tenant = _os.getenv("DEV_TENANT_ID", "dev")
+
+        from services.api_key_service import (
+            DevelopmentTenantConfigError,
+            bootstrap_development_tenant,
+        )
+
+        try:
+            await bootstrap_development_tenant(config.APP_ENV)
+        except DevelopmentTenantConfigError as exc:
+            logger.error("%s Startup aborted.", exc)
+            raise
+        except Exception:
+            logger.exception(
+                "Failed to ensure development tenant exists. "
+                "Check DATABASE_URL connectivity and that migrations 005/006 "
+                "have been applied."
+            )
+            raise
+
+        dev_tenant = _os.getenv("DEV_TENANT_ID", "dev").strip()
         logger.warning(
             "⚠️  Authentication bypass is ACTIVE (APP_ENV=%s). "
             "All requests are treated as tenant=%r without API-key validation. "

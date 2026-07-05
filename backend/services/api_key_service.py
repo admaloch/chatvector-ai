@@ -25,10 +25,15 @@ import secrets
 from typing import Optional
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from core.models import ApiKey, Tenant
+
+
+class DevelopmentTenantConfigError(ValueError):
+    """Raised when DEV_TENANT_ID is invalid for development bootstrap."""
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +96,47 @@ def _parse_prefix(raw_key: str) -> Optional[str]:
     if dot <= 0:
         return None
     return rest[:dot]
+
+
+async def ensure_tenant_exists(tenant_id: str, name: str) -> bool:
+    """Ensure a tenant row exists with the given id.
+
+    Returns True if a new row was inserted, False if it already existed.
+    Safe under repeated startup and concurrent inserts (ON CONFLICT DO NOTHING).
+    Does not create API keys.
+    """
+    factory = _get_session_factory()
+    async with factory() as session:
+        async with session.begin():
+            stmt = (
+                insert(Tenant)
+                .values(id=tenant_id, name=name)
+                .on_conflict_do_nothing(index_elements=["id"])
+            )
+            result = await session.execute(stmt)
+            created = result.rowcount == 1
+
+    if created:
+        logger.info("Created tenant id=%s name=%r", tenant_id, name)
+    else:
+        logger.info("Tenant already exists: id=%s", tenant_id)
+    return created
+
+
+async def bootstrap_development_tenant(app_env: str) -> None:
+    """Ensure DEV_TENANT_ID exists when authentication bypass is active."""
+    if app_env.lower() not in ("development", "test"):
+        return
+
+    raw = os.getenv("DEV_TENANT_ID", "dev")
+    tenant_id = raw.strip()
+    if not tenant_id:
+        raise DevelopmentTenantConfigError(
+            "DEV_TENANT_ID must be non-empty when authentication bypass is active "
+            f"(APP_ENV={app_env})."
+        )
+
+    await ensure_tenant_exists(tenant_id, f"Development ({tenant_id})")
 
 
 async def create_tenant(name: str, tenant_id: Optional[str] = None) -> Tenant:

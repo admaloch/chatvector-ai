@@ -24,6 +24,12 @@ def _reload_app(monkeypatch, app_env: str):
 @pytest.fixture(autouse=True)
 def _restore_main_after_test(monkeypatch):
     yield
+    from services.api_key_service import reset_session_factory
+
+    reset_session_factory()
+    import db
+
+    db.db_service = None
     monkeypatch.setenv("APP_ENV", "test")
     import core.config
     import main
@@ -43,7 +49,10 @@ def test_docs_returns_404_when_app_env_production(monkeypatch):
 def test_docs_returns_200_when_app_env_development(monkeypatch):
     main = _reload_app(monkeypatch, "development")
 
-    with TestClient(main.app) as client:
+    with patch(
+        "services.api_key_service.bootstrap_development_tenant",
+        new_callable=AsyncMock,
+    ), TestClient(main.app) as client:
         assert client.get("/docs").status_code == 200
 
 
@@ -54,7 +63,10 @@ def test_global_exception_handler_masks_errors(monkeypatch):
     def force_error():
         raise RuntimeError("SENSITIVE_DB_PASSWORD_LEAK")
 
-    with TestClient(main.app, raise_server_exceptions=False) as client:
+    with patch(
+        "services.api_key_service.bootstrap_development_tenant",
+        new_callable=AsyncMock,
+    ), TestClient(main.app, raise_server_exceptions=False) as client:
         response = client.get("/force-error-for-test")
 
     assert response.status_code == 500

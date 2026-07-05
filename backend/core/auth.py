@@ -43,7 +43,7 @@ async def require_auth(request: Request) -> AuthContext:
 
     # ── Non-production bypass ────────────────────────────────────────────────
     if config.APP_ENV.lower() in ("development", "test"):
-        dev_tenant = os.getenv("DEV_TENANT_ID", "dev")
+        dev_tenant = os.getenv("DEV_TENANT_ID", "dev").strip()
         return AuthContext(tenant_id=dev_tenant)
 
     # ── Parse the Authorization header ──────────────────────────────────────

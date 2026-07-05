@@ -127,7 +127,17 @@ async def upload(request: Request, file: UploadFile = File(...), auth: AuthConte
                 },
                 tenant_id=tenant_id,
             )
-        logger.error(f"Unexpected error during upload of {safe_filename!r}: {e}")
+        log_msg = (
+            f"Unexpected error during upload of {safe_filename!r} "
+            f"(tenant_id={tenant_id!r}): {e}"
+        )
+        err_name = type(e).__name__
+        if "IntegrityError" in err_name or "ForeignKeyViolation" in str(e):
+            log_msg += (
+                ". This may indicate the development tenant was not bootstrapped "
+                "(check startup logs for DEV_TENANT_ID initialization)."
+            )
+        logger.error(log_msg, exc_info=True)
         raise _http_error(
             status_code=500,
             code="upload_failed",

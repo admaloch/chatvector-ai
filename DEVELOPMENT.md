@@ -615,11 +615,20 @@ LOG_LEVEL=INFO
 | `APP_ENV` | `development` | `development`/`test` bypass auth; `production` enforces Bearer key |
 | `DEV_TENANT_ID` | `dev` | Tenant ID attributed to all requests when auth bypass is active |
 
+In **development** and **test** mode, the backend automatically ensures a
+`tenants` row exists for `DEV_TENANT_ID` on startup (idempotent — safe across
+restarts). No API key is created and none is required while the bypass is
+active. A fresh `docker compose up` after `docker compose down -v` therefore
+works without running the tenant CLI first.
+
+In **production**, tenants and API keys are **not** auto-created. Use the CLI
+below before pointing clients at the API.
+
 > **Warning:** A startup log message (`⚠️ Authentication bypass is ACTIVE`) is
 > printed whenever `APP_ENV` is not `production`. If you see this message on a
 > shared or public server, set `APP_ENV=production` immediately.
 
-To generate a tenant and API key for a new environment:
+To generate a tenant and API key for production (or when testing real auth locally):
 
 ```bash
 cd backend
