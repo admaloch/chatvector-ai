@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPTS_DIR}/lib/common.sh"
 
 OPEN_BROWSER="${OPEN_BROWSER:-0}"
 
@@ -100,7 +100,7 @@ main() {
   fi
 
   if [[ "${OPEN_BROWSER}" == "1" ]]; then
-    "${SCRIPT_DIR}/open-dev.sh" || true
+    "${SCRIPTS_DIR}/open-dev.sh" || true
   fi
 
   echo ""
