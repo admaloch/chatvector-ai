@@ -35,7 +35,7 @@ async def test_startup_validation_redis_unreachable():
     
     with patch("main.config.QUEUE_BACKEND", "redis"), \
          patch("core.clients.redis_client.ping", new_callable=AsyncMock) as mock_ping, \
-         patch("main.db.fail_stale_documents", new_callable=AsyncMock, return_value=set()), \
+         patch("main.db.fail_stale_documents_global", new_callable=AsyncMock, return_value=set()), \
          patch("main.ingestion_queue.start", new_callable=AsyncMock), \
          patch("main.ingestion_queue.stop", new_callable=AsyncMock):
         

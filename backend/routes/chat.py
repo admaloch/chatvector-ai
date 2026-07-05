@@ -2,10 +2,11 @@ import logging
 from typing import Literal, Optional
 from uuid import UUID
 
+import db
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from core.auth import AuthContext, require_auth
+from core.auth import AuthContext, require_auth, require_current_tenant
 from core.config import config
 from middleware.rate_limit import limiter
 from pydantic import BaseModel, Field
@@ -22,6 +23,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 RetrievalScopeParam = Literal["session", "tenant"]
+
+
+async def _assert_document_owned(doc_id: str, tenant_id: str) -> None:
+    """Raise 404 if the document does not exist or belongs to a different tenant."""
+    doc = await db.get_document(doc_id, tenant_id=tenant_id)
+    if doc is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "document_not_found",
+                "message": "Document not found.",
+                "document_id": doc_id,
+            },
+        )
 
 
 class ChatBatchItem(BaseModel):
@@ -51,13 +66,16 @@ class ChatRequest(BaseModel):
 async def chat(request: Request, payload: ChatRequest, auth: AuthContext = Depends(require_auth)):
     logger.info(f"Chat request received for document {payload.doc_id}")
 
+    doc_id_str = str(payload.doc_id)
+    tenant_id = require_current_tenant(auth)
+    await _assert_document_owned(doc_id_str, tenant_id)
+
     # Initialize or retrieve session
     session = get_or_create_session(
-        session_id=payload.session_id, tenant_id=auth.tenant_id
+        session_id=payload.session_id, tenant_id=tenant_id
     )
-    doc_id_str = str(payload.doc_id)
-    register_session_document(session.id, doc_id_str, auth.tenant_id)
-    register_tenant_document(auth.tenant_id, doc_id_str)
+    register_session_document(session.id, doc_id_str, tenant_id)
+    register_tenant_document(tenant_id, doc_id_str)
 
     return await answer_question_for_document(
         question=payload.question,
@@ -83,13 +101,16 @@ async def chat_stream(request: Request, payload: ChatRequest, auth: AuthContext 
 
     logger.info(f"Chat stream request received for document {payload.doc_id}")
 
+    doc_id_str = str(payload.doc_id)
+    tenant_id = require_current_tenant(auth)
+    await _assert_document_owned(doc_id_str, tenant_id)
+
     # Initialize or retrieve session
     session = get_or_create_session(
-        session_id=payload.session_id, tenant_id=auth.tenant_id
+        session_id=payload.session_id, tenant_id=tenant_id
     )
-    doc_id_str = str(payload.doc_id)
-    register_session_document(session.id, doc_id_str, auth.tenant_id)
-    register_tenant_document(auth.tenant_id, doc_id_str)
+    register_session_document(session.id, doc_id_str, tenant_id)
+    register_tenant_document(tenant_id, doc_id_str)
 
     return StreamingResponse(
         answer_question_stream_for_document(
@@ -113,6 +134,8 @@ async def chat_batch(request: Request, payload: ChatBatchRequest, auth: AuthCont
     # Shared session for the batch if provided at top level, otherwise uses individual
     batch_session_id = payload.session_id
 
+    tenant_id = require_current_tenant(auth)
+
     try:
         # Pre-process queries to inject session_id if missing
         processed_queries = []
@@ -124,13 +147,14 @@ async def chat_batch(request: Request, payload: ChatBatchRequest, auth: AuthCont
                 q_dict.pop("scope", None)
             q_session = get_or_create_session(
                 session_id=q.session_id or batch_session_id,
-                tenant_id=auth.tenant_id,
+                tenant_id=tenant_id,
             )
             q_dict["session_id"] = q_session.id
             for doc_id in q.doc_ids:
                 doc_id_str = str(doc_id)
-                register_session_document(q_session.id, doc_id_str, auth.tenant_id)
-                register_tenant_document(auth.tenant_id, doc_id_str)
+                await _assert_document_owned(doc_id_str, tenant_id)
+                register_session_document(q_session.id, doc_id_str, tenant_id)
+                register_tenant_document(tenant_id, doc_id_str)
             processed_queries.append(q_dict)
 
         results = await answer_questions_for_documents_batch(

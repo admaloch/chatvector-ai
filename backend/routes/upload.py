@@ -2,7 +2,7 @@ import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
-from core.auth import AuthContext, get_current_tenant, require_auth
+from core.auth import AuthContext, require_auth, require_current_tenant
 from core.config import config
 from middleware.rate_limit import limiter
 
@@ -44,7 +44,7 @@ async def upload(request: Request, file: UploadFile = File(...), auth: AuthConte
     the client can poll /documents/{document_id}/status for progress.
     """
     doc_id: str | None = None
-    tenant_id = get_current_tenant(auth)
+    tenant_id = require_current_tenant(auth)
 
     try:
         safe_filename = _sanitize_filename(file.filename)
@@ -127,7 +127,17 @@ async def upload(request: Request, file: UploadFile = File(...), auth: AuthConte
                 },
                 tenant_id=tenant_id,
             )
-        logger.error(f"Unexpected error during upload of {safe_filename!r}: {e}")
+        log_msg = (
+            f"Unexpected error during upload of {safe_filename!r} "
+            f"(tenant_id={tenant_id!r}): {e}"
+        )
+        err_name = type(e).__name__
+        if "IntegrityError" in err_name or "ForeignKeyViolation" in str(e):
+            log_msg += (
+                ". This may indicate the development tenant was not bootstrapped "
+                "(check startup logs for DEV_TENANT_ID initialization)."
+            )
+        logger.error(log_msg, exc_info=True)
         raise _http_error(
             status_code=500,
             code="upload_failed",

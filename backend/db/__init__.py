@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from core.config import config
 from utils.retry import retry_async
 from .base import ChunkMatch, ChunkRecord
+from .tenant_scope import require_tenant_id
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,8 @@ async def worker_db_context():
             logger.warning("Failed to dispose worker DB engine")
 
 
-async def create_document(filename: str, tenant_id: str | None = None) -> str:
+async def create_document(filename: str, tenant_id: str) -> str:
+    tenant_id = require_tenant_id(tenant_id, method="create_document")
     service = get_db_service()
 
     async def _create():
@@ -118,8 +120,9 @@ async def create_document(filename: str, tenant_id: str | None = None) -> str:
 async def store_chunks_with_embeddings(
     doc_id: str,
     chunk_records: list[ChunkRecord],
-    tenant_id: str | None = None,
+    tenant_id: str,
 ) -> list[str]:
+    tenant_id = require_tenant_id(tenant_id, method="store_chunks_with_embeddings")
     service = get_db_service()
 
     async def _store():
@@ -137,7 +140,8 @@ async def store_chunks_with_embeddings(
     )
 
 
-async def get_document(doc_id: str, tenant_id: str | None = None) -> dict:
+async def get_document(doc_id: str, tenant_id: str) -> dict:
+    tenant_id = require_tenant_id(tenant_id, method="get_document")
     service = get_db_service()
 
     async def _get():
@@ -156,9 +160,9 @@ async def get_document(doc_id: str, tenant_id: str | None = None) -> dict:
 async def create_document_with_chunks_atomic(
     file_name: str,
     chunk_records: list[ChunkRecord],
-    tenant_id: str | None = None,
+    tenant_id: str,
 ) -> tuple[str, list[str]]:
-    """Atomic document+chunk creation with retry logic."""
+    tenant_id = require_tenant_id(tenant_id, method="create_document_with_chunks_atomic")
     service = get_db_service()
 
     async def _atomic():
@@ -179,11 +183,13 @@ async def create_document_with_chunks_atomic(
 async def find_similar_chunks(
     doc_id: str,
     query_embedding: list[float],
-    match_count: int = 5,
+    match_count: int,
+    *,
+    tenant_id: str,
     session_id: str | None = None,
     query_text: str | None = None,
 ) -> list[ChunkMatch]:
-    """Find similar chunks with retry logic."""
+    tenant_id = require_tenant_id(tenant_id, method="find_similar_chunks")
     service = get_db_service()
 
     async def _search():
@@ -191,6 +197,7 @@ async def find_similar_chunks(
             doc_id,
             query_embedding,
             match_count,
+            tenant_id=tenant_id,
             session_id=session_id,
             query_text=query_text,
         )
@@ -208,20 +215,21 @@ async def find_similar_chunks(
 async def update_document_status(
     doc_id: str,
     status: str,
+    tenant_id: str,
+    *,
     error: dict | None = None,
     chunks: dict | None = None,
-    tenant_id: str | None = None,
 ) -> None:
-    """Persist status/progress updates with retry logic."""
+    tenant_id = require_tenant_id(tenant_id, method="update_document_status")
     service = get_db_service()
 
     async def _update():
         await service.update_document_status(
             doc_id=doc_id,
             status=status,
+            tenant_id=tenant_id,
             error=error,
             chunks=chunks,
-            tenant_id=tenant_id,
         )
 
     await retry_async(
@@ -234,8 +242,8 @@ async def update_document_status(
     )
 
 
-async def get_document_status(doc_id: str, tenant_id: str | None = None) -> dict | None:
-    """Read status/progress payload for polling clients."""
+async def get_document_status(doc_id: str, tenant_id: str) -> dict | None:
+    tenant_id = require_tenant_id(tenant_id, method="get_document_status")
     service = get_db_service()
 
     async def _get_status():
@@ -251,8 +259,8 @@ async def get_document_status(doc_id: str, tenant_id: str | None = None) -> dict
     )
 
 
-async def delete_document_chunks(doc_id: str, tenant_id: str | None = None) -> None:
-    """Cleanup helper for failed uploads."""
+async def delete_document_chunks(doc_id: str, tenant_id: str) -> None:
+    tenant_id = require_tenant_id(tenant_id, method="delete_document_chunks")
     service = get_db_service()
 
     async def _cleanup():
@@ -268,8 +276,8 @@ async def delete_document_chunks(doc_id: str, tenant_id: str | None = None) -> N
     )
 
 
-async def delete_document(doc_id: str, tenant_id: str | None = None) -> None:
-    """Delete a document and all its chunks."""
+async def delete_document(doc_id: str, tenant_id: str) -> None:
+    tenant_id = require_tenant_id(tenant_id, method="delete_document")
     service = get_db_service()
 
     async def _delete():
@@ -285,18 +293,12 @@ async def delete_document(doc_id: str, tenant_id: str | None = None) -> None:
     )
 
 
-async def fail_stale_documents(
-    statuses: list[str], tenant_id: str | None = None
-) -> set[str]:
-    """
-    Bulk-fail documents left in an in-progress state by a previous restart.
-
-    Returns the set of document IDs that were updated.
-    """
+async def fail_stale_documents_global(statuses: list[str]) -> set[str]:
+    """Mark in-progress documents as failed across all tenants (startup maintenance)."""
     service = get_db_service()
 
     async def _fail_stale():
-        return await service.fail_stale_documents(statuses, tenant_id=tenant_id)
+        return await service.fail_stale_documents_global(statuses)
 
     return await retry_async(
         _fail_stale,
@@ -304,7 +306,24 @@ async def fail_stale_documents(
         base_delay=1.0,
         backoff=2.0,
         timeout=10.0,
-        func_name=f"{service.__class__.__name__}.fail_stale_documents",
+        func_name=f"{service.__class__.__name__}.fail_stale_documents_global",
+    )
+
+
+async def list_tenant_documents(tenant_id: str) -> list[str]:
+    tenant_id = require_tenant_id(tenant_id, method="list_tenant_documents")
+    service = get_db_service()
+
+    async def _list():
+        return await service.list_tenant_documents(tenant_id)
+
+    return await retry_async(
+        _list,
+        max_retries=3,
+        base_delay=0.5,
+        backoff=2.0,
+        timeout=10.0,
+        func_name=f"{service.__class__.__name__}.list_tenant_documents",
     )
 
 
@@ -312,12 +331,12 @@ async def store_chat_message(
     session_id: str,
     role: str,
     content: str,
-    tenant_id: str | None = None,
+    tenant_id: str,
 ) -> str:
-    """Store a single chat message (no retries to avoid duplicates)."""
+    tenant_id = require_tenant_id(tenant_id, method="store_chat_message")
     if role not in ("user", "assistant", "system"):
         raise ValueError(f"Invalid role: {role}")
-    
+
     service = get_db_service()
     return await service.store_chat_message(
         session_id=session_id, role=role, content=content, tenant_id=tenant_id
@@ -326,15 +345,16 @@ async def store_chat_message(
 
 async def get_session_history(
     session_id: str,
+    tenant_id: str,
+    *,
     limit: int = 20,
-    tenant_id: str | None = None,
 ) -> list[dict]:
-    """Retrieve recent chat history with retry logic."""
+    tenant_id = require_tenant_id(tenant_id, method="get_session_history")
     service = get_db_service()
 
     async def _get():
         return await service.get_session_history(
-            session_id=session_id, limit=limit, tenant_id=tenant_id
+            session_id=session_id, tenant_id=tenant_id, limit=limit
         )
 
     return await retry_async(
@@ -354,11 +374,12 @@ __all__ = [
     "get_document",
     "create_document_with_chunks_atomic",
     "find_similar_chunks",
+    "list_tenant_documents",
     "update_document_status",
     "get_document_status",
     "delete_document_chunks",
     "delete_document",
-    "fail_stale_documents",
+    "fail_stale_documents_global",
     "store_chat_message",
     "get_session_history",
     "ChunkMatch",

@@ -26,15 +26,15 @@ def sqlalchemy_service():
 @pytest.mark.asyncio
 async def test_create_document(sqlalchemy_service):
     """Test document creation."""
-    doc_id = await sqlalchemy_service.create_document("test.pdf")
+    doc_id = await sqlalchemy_service.create_document("test.pdf", tenant_id="dev")
     assert doc_id == "test-doc-id"
-    sqlalchemy_service.create_document.assert_called_once_with("test.pdf")
+    sqlalchemy_service.create_document.assert_called_once_with("test.pdf", tenant_id="dev")
 
 
 @pytest.mark.asyncio
 async def test_store_chunks_with_embeddings(sqlalchemy_service):
     """Test chunk storage."""
     chunks = [("text1", [0.1, 0.2]), ("text2", [0.3, 0.4])]
-    chunk_ids = await sqlalchemy_service.store_chunks_with_embeddings("doc123", chunks)
+    chunk_ids = await sqlalchemy_service.store_chunks_with_embeddings("doc123", chunks, tenant_id="dev")
     assert len(chunk_ids) == 2
-    sqlalchemy_service.store_chunks_with_embeddings.assert_called_once_with("doc123", chunks)
+    sqlalchemy_service.store_chunks_with_embeddings.assert_called_once_with("doc123", chunks, tenant_id="dev")

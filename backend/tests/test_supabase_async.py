@@ -40,7 +40,7 @@ def test_create_document_uses_async_io_wrapper():
     mock_run_io = AsyncMock(return_value=_FakeResult([{"id": "doc-123"}]))
 
     with patch.object(service, "_run_io", mock_run_io):
-        doc_id = asyncio.run(service.create_document("example.pdf"))
+        doc_id = asyncio.run(service.create_document("example.pdf", tenant_id="dev"))
 
     assert doc_id == "doc-123"
     mock_run_io.assert_awaited_once()
@@ -60,12 +60,15 @@ def test_find_similar_chunks_uses_async_io_wrapper_and_maps_payload():
         )
     )
 
-    with patch.object(service, "_run_io", mock_run_io):
+    with patch.object(service, "_run_io", mock_run_io), patch.object(
+        service, "get_document", AsyncMock(return_value={"id": "doc-7"})
+    ):
         matches = asyncio.run(
             service.find_similar_chunks(
                 doc_id="doc-7",
                 query_embedding=[0.1, 0.2],
                 match_count=4,
+                tenant_id="dev",
             )
         )
 

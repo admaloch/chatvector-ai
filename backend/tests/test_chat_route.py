@@ -14,15 +14,22 @@ _DOC_ID_2 = "00000000-0000-0000-0000-000000000002"
 from core.auth import AuthContext
 from unittest.mock import ANY
 
+_FAKE_DOC = {"id": _DOC_ID_1, "file_name": "test.pdf", "status": "completed"}
+_FAKE_DOC_2 = {"id": _DOC_ID_2, "file_name": "test2.pdf", "status": "completed"}
+
+
 def test_chat_route_delegates_to_chat_service():
     payload = {"question": "q", "chunks": 1, "answer": "a"}
 
-    with patch("routes.chat.answer_question_for_document", new=AsyncMock(return_value=payload)) as mock_chat:
+    with (
+        patch("routes.chat.answer_question_for_document", new=AsyncMock(return_value=payload)) as mock_chat,
+        patch("routes.chat.db.get_document", new=AsyncMock(return_value=_FAKE_DOC)),
+    ):
         result = asyncio.run(
             chat(
                 make_test_request("POST", "/chat"),
                 ChatRequest(question="q", doc_id=_DOC_ID_1),
-                auth=AuthContext(),
+                auth=AuthContext(tenant_id="dev"),
             )
         )
 
@@ -40,12 +47,15 @@ def test_chat_batch_route_delegates_to_chat_service():
     }
     batch_request = ChatBatchRequest(queries=[ChatBatchItem(question="q", doc_ids=[_DOC_ID_1])])
 
-    with patch(
-        "routes.chat.answer_questions_for_documents_batch",
-        new=AsyncMock(return_value=payload["results"]),
-    ) as mock_batch:
+    with (
+        patch(
+            "routes.chat.answer_questions_for_documents_batch",
+            new=AsyncMock(return_value=payload["results"]),
+        ) as mock_batch,
+        patch("routes.chat.db.get_document", new=AsyncMock(return_value=_FAKE_DOC)),
+    ):
         result = asyncio.run(
-            chat_batch(make_test_request("POST", "/chat/batch"), batch_request, auth=AuthContext())
+            chat_batch(make_test_request("POST", "/chat/batch"), batch_request, auth=AuthContext(tenant_id="dev"))
         )
 
     assert result == payload
@@ -59,23 +69,26 @@ def test_chat_batch_route_delegates_to_chat_service():
 def test_chat_batch_route_counts_failures_and_successes():
     batch_request = ChatBatchRequest(queries=[ChatBatchItem(question="q", doc_ids=[_DOC_ID_1])])
 
-    with patch(
-        "routes.chat.answer_questions_for_documents_batch",
-        new=AsyncMock(
-            return_value=[
-                {"status": "ok", "question": "q1", "doc_ids": [_DOC_ID_1], "chunks": 1, "answer": "a1"},
-                {
-                    "status": "error",
-                    "question": "q2",
-                    "doc_ids": [_DOC_ID_2],
-                    "chunks": 0,
-                    "error": {"code": "query_processing_failed", "message": "boom"},
-                },
-            ]
+    with (
+        patch(
+            "routes.chat.answer_questions_for_documents_batch",
+            new=AsyncMock(
+                return_value=[
+                    {"status": "ok", "question": "q1", "doc_ids": [_DOC_ID_1], "chunks": 1, "answer": "a1"},
+                    {
+                        "status": "error",
+                        "question": "q2",
+                        "doc_ids": [_DOC_ID_2],
+                        "chunks": 0,
+                        "error": {"code": "query_processing_failed", "message": "boom"},
+                    },
+                ]
+            ),
         ),
+        patch("routes.chat.db.get_document", new=AsyncMock(return_value=_FAKE_DOC)),
     ):
         result = asyncio.run(
-            chat_batch(make_test_request("POST", "/chat/batch"), batch_request, auth=AuthContext())
+            chat_batch(make_test_request("POST", "/chat/batch"), batch_request, auth=AuthContext(tenant_id="dev"))
         )
 
     assert result["count"] == 2
@@ -86,13 +99,16 @@ def test_chat_batch_route_counts_failures_and_successes():
 def test_chat_batch_route_returns_422_for_value_error():
     batch_request = ChatBatchRequest(queries=[ChatBatchItem(question="q", doc_ids=[_DOC_ID_1])])
 
-    with patch(
-        "routes.chat.answer_questions_for_documents_batch",
-        new=AsyncMock(side_effect=ValueError("invalid payload")),
+    with (
+        patch(
+            "routes.chat.answer_questions_for_documents_batch",
+            new=AsyncMock(side_effect=ValueError("invalid payload")),
+        ),
+        patch("routes.chat.db.get_document", new=AsyncMock(return_value=_FAKE_DOC)),
     ):
         try:
             asyncio.run(
-                chat_batch(make_test_request("POST", "/chat/batch"), batch_request, auth=AuthContext())
+                chat_batch(make_test_request("POST", "/chat/batch"), batch_request, auth=AuthContext(tenant_id="dev"))
             )
             raise AssertionError("Expected HTTPException was not raised")
         except HTTPException as exc:
@@ -113,7 +129,7 @@ async def test_chat_stream_route_disabled():
             await chat_stream(
                 make_test_request("POST", "/chat/stream"),
                 ChatRequest(question="q", doc_id=_DOC_ID_1),
-                auth=AuthContext(),
+                auth=AuthContext(tenant_id="dev"),
             )
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail["code"] == "streaming_disabled"
@@ -126,13 +142,14 @@ async def test_chat_stream_route_enabled():
 
     with (
         patch("routes.chat.config") as mock_config,
-        patch("routes.chat.answer_question_stream_for_document", new=mock_stream) as mock_answer
+        patch("routes.chat.answer_question_stream_for_document", new=mock_stream) as mock_answer,
+        patch("routes.chat.db.get_document", new=AsyncMock(return_value=_FAKE_DOC)),
     ):
         mock_config.ENABLE_STREAMING = True
         response = await chat_stream(
             make_test_request("POST", "/chat/stream"),
             ChatRequest(question="q", doc_id=_DOC_ID_1),
-            auth=AuthContext(),
+            auth=AuthContext(tenant_id="dev"),
         )
 
         assert response.media_type == "text/event-stream"

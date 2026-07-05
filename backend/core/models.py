@@ -12,11 +12,31 @@ from core.config import get_embedding_dim
 Base = declarative_base()
 
 
+class Tenant(Base):
+    __tablename__ = "tenants"
+
+    id = Column(String(255), primary_key=True)
+    name = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String(255), ForeignKey("tenants.id"), nullable=False, index=True)
+    prefix = Column(String(16), nullable=False, unique=True, index=True)
+    key_hash = Column(String(64), nullable=False)
+    status = Column(String(50), nullable=False, default="active")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Document(Base):
     __tablename__ = "documents"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     file_name = Column(String, nullable=False)
+    tenant_id = Column(String(255), nullable=True, index=True)
     status = Column(String, nullable=False, default="uploaded")
     chunks = Column(JSONB, nullable=False, default=lambda: {"total": 0, "processed": 0})
     error = Column(JSONB, nullable=True)

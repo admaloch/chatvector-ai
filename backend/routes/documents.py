@@ -6,13 +6,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 
-from core.auth import AuthContext, get_current_tenant, require_auth
+from core.auth import AuthContext, require_auth, require_current_tenant
 from core.config import config
 from middleware.rate_limit import limiter
 
 import db
 from core.config import STALE_INGESTION_STATUSES
 from services.queue_service import ingestion_queue
+from services.tenant_registry import invalidate_tenant_cache
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -21,7 +22,7 @@ router = APIRouter()
 @router.get("/documents/{document_id}/status")
 @limiter.limit(config.RATE_LIMIT_DOCUMENT_STATUS)
 async def get_document_status(request: Request, document_id: UUID, auth: AuthContext = Depends(require_auth)):
-    status_payload = await db.get_document_status(str(document_id), tenant_id=get_current_tenant(auth))
+    status_payload = await db.get_document_status(str(document_id), tenant_id=require_current_tenant(auth))
     if not status_payload:
         raise HTTPException(
             status_code=404,
@@ -53,7 +54,7 @@ async def get_document_status(request: Request, document_id: UUID, auth: AuthCon
 
 @router.get("/documents/{document_id}/status/stream")
 @limiter.limit(config.RATE_LIMIT_DOCUMENT_STATUS)
-async def get_document_status_stream(request: Request, document_id: UUID, auth: dict = Depends(require_auth)):
+async def get_document_status_stream(request: Request, document_id: UUID, auth: AuthContext = Depends(require_auth)):
     if not config.ENABLE_STREAMING:
         raise HTTPException(
             status_code=400,
@@ -63,6 +64,8 @@ async def get_document_status_stream(request: Request, document_id: UUID, auth: 
             },
         )
 
+    tenant_id = require_current_tenant(auth)
+
     async def event_generator():
         MAX_POLL_SECONDS = 300
         elapsed = 0
@@ -70,7 +73,7 @@ async def get_document_status_stream(request: Request, document_id: UUID, auth: 
             if await request.is_disconnected():
                 break
 
-            status_payload = await db.get_document_status(str(document_id))
+            status_payload = await db.get_document_status(str(document_id), tenant_id=tenant_id)
             if not status_payload:
                 yield f"event: error\ndata: {json.dumps({'message': 'Document not found.'})}\n\n"
                 break
@@ -113,7 +116,7 @@ async def get_document_status_stream(request: Request, document_id: UUID, auth: 
 @router.delete("/documents/{document_id}", status_code=204)
 @limiter.limit(config.RATE_LIMIT_DOCUMENT_DELETE)
 async def delete_document(request: Request, document_id: UUID, auth: AuthContext = Depends(require_auth)):
-    status_payload = await db.get_document_status(str(document_id), tenant_id=get_current_tenant(auth))
+    status_payload = await db.get_document_status(str(document_id), tenant_id=require_current_tenant(auth))
     if not status_payload:
         raise HTTPException(
             status_code=404,
@@ -147,5 +150,7 @@ async def delete_document(request: Request, document_id: UUID, auth: AuthContext
             },
         )
 
-    await db.delete_document(str(document_id), tenant_id=get_current_tenant(auth))
+    tenant_id = require_current_tenant(auth)
+    await db.delete_document(str(document_id), tenant_id=tenant_id)
+    invalidate_tenant_cache(tenant_id)
     return Response(status_code=204)

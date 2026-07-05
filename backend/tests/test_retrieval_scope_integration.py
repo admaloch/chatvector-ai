@@ -154,6 +154,7 @@ async def test_session_scope_backward_compatible_without_session_documents():
             question="Q?",
             doc_id="doc-legacy",
             scope="session",
+            auth=AuthContext(tenant_id="dev"),
         )
 
     assert result["status"] == "ok"
@@ -161,6 +162,7 @@ async def test_session_scope_backward_compatible_without_session_documents():
         doc_id="doc-legacy",
         query_embedding=[0.1, 0.2],
         match_count=5,
+        tenant_id="dev",
         session_id=None,
         query_text="Q?",
     )

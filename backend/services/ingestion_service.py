@@ -14,10 +14,16 @@ async def ingest_document_atomic(
     file_name: str,
     chunks: list[str],
     embeddings: list[list[float]],
+    tenant_id: str,
 ) -> tuple[str, list[str]]:
     """
     Persist document + chunks as one logical operation.
+
+    Test helper only — production ingestion uses IngestionPipeline + queue workers.
     """
+    from db.tenant_scope import require_tenant_id
+
+    tenant_id = require_tenant_id(tenant_id, method="create_document_with_chunks_atomic")
     if len(chunks) != len(embeddings):
         raise ValueError(
             f"Number of chunks ({len(chunks)}) does not match number of embeddings ({len(embeddings)})"
@@ -46,6 +52,7 @@ async def ingest_document_atomic(
     doc_id, inserted_chunk_ids = await db.create_document_with_chunks_atomic(
         file_name=file_name,
         chunk_records=chunk_records,
+        tenant_id=tenant_id,
     )
 
     logger.info(

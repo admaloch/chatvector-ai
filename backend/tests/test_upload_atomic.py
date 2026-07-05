@@ -60,6 +60,7 @@ async def test_create_document_with_chunks_atomic_supabase_success(monkeypatch):
     doc_id, chunk_ids = await create_document_with_chunks_atomic(
         file_name="example.pdf",
         chunk_records=_make_records("chunk a", "chunk b"),
+        tenant_id="dev",
     )
 
     assert doc_id == "doc-123"
@@ -100,6 +101,7 @@ async def test_create_document_with_chunks_atomic_supabase_failure_cleanup(monke
         await create_document_with_chunks_atomic(
             file_name="broken.pdf",
             chunk_records=_make_records("chunk"),
+            tenant_id="dev",
         )
 
     assert cleanup_calls == ["doc-rollback"]
@@ -116,15 +118,17 @@ async def test_ingest_document_atomic_rejects_mismatched_lengths():
             file_name="file.pdf",
             chunks=["only one chunk"],
             embeddings=[],
+            tenant_id="dev",
         )
 
 
 async def test_ingest_document_atomic_calls_atomic_db_path(monkeypatch):
     captured = {}
 
-    async def fake_atomic(file_name: str, chunk_records: list[ChunkRecord]):
+    async def fake_atomic(file_name: str, chunk_records: list[ChunkRecord], tenant_id: str):
         captured["file_name"] = file_name
         captured["payload"] = chunk_records
+        captured["tenant_id"] = tenant_id
         return "doc-789", ["chunk-abc"]
 
     monkeypatch.setattr("services.ingestion_service.db.create_document_with_chunks_atomic", fake_atomic)
@@ -133,10 +137,12 @@ async def test_ingest_document_atomic_calls_atomic_db_path(monkeypatch):
         file_name="notes.txt",
         chunks=["alpha"],
         embeddings=[[0.5, 0.6]],
+        tenant_id="dev",
     )
 
     assert doc_id == "doc-789"
     assert chunk_ids == ["chunk-abc"]
+    assert captured["tenant_id"] == "dev"
     assert captured["file_name"] == "notes.txt"
     records = captured["payload"]
     assert len(records) == 1

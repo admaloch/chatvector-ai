@@ -20,7 +20,7 @@ async def test_get_document_status_success():
 
     with patch("routes.documents.db.get_document_status", new=AsyncMock(return_value=payload)):
         result = await get_document_status(
-            make_test_request("GET", "/documents/doc-1/status"), "doc-1", auth=AuthContext()
+            make_test_request("GET", "/documents/doc-1/status"), "doc-1", auth=AuthContext(tenant_id="dev")
         )
 
     assert result["document_id"] == "doc-1"
@@ -36,7 +36,7 @@ async def test_get_document_status_not_found():
             await get_document_status(
                 make_test_request("GET", "/documents/missing-doc/status"),
                 "missing-doc",
-                auth=AuthContext(),
+                auth=AuthContext(tenant_id="dev"),
             )
 
     assert excinfo.value.status_code == 404
@@ -52,7 +52,7 @@ async def test_get_document_status_stream_disabled():
             await get_document_status_stream(
                 make_test_request("GET", "/documents/doc-1/status/stream"),
                 "doc-1",
-                auth=AuthContext(),
+                auth=AuthContext(tenant_id="dev"),
             )
         assert excinfo.value.status_code == 400
         assert excinfo.value.detail["code"] == "streaming_disabled"
@@ -65,7 +65,7 @@ async def test_get_document_status_stream_enabled_content_type():
         response = await get_document_status_stream(
             make_test_request("GET", "/documents/doc-1/status/stream"),
             "doc-1",
-            auth=AuthContext(),
+            auth=AuthContext(tenant_id="dev"),
         )
         assert isinstance(response, StreamingResponse)
         assert response.media_type == "text/event-stream"
@@ -80,7 +80,7 @@ async def test_get_document_status_stream_emits_status_and_closes_on_completed()
         {"document_id": "doc-1", "status": "completed", "chunks": {"total": 5, "processed": 5}, "error": None},
     ]
 
-    async def mock_get_document_status(doc_id):
+    async def mock_get_document_status(doc_id, **kwargs):
         if payloads:
             return payloads.pop(0)
         return None
@@ -91,7 +91,7 @@ async def test_get_document_status_stream_emits_status_and_closes_on_completed()
     with patch("routes.documents.config") as mock_config, \
          patch("routes.documents.db.get_document_status", new=AsyncMock(side_effect=mock_get_document_status)):
         mock_config.ENABLE_STREAMING = True
-        response = await get_document_status_stream(request, "doc-1", auth=AuthContext())
+        response = await get_document_status_stream(request, "doc-1", auth=AuthContext(tenant_id="dev"))
         
         chunks = []
         async for chunk in response.body_iterator:
