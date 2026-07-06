@@ -109,7 +109,7 @@ export default function StatusPage() {
           <div className="flex h-64 flex-col items-center justify-center rounded-xl border border-red-500/30 bg-red-500/10 text-red-500 gap-3 p-6 text-center">
             <ServerCrash className="h-10 w-10" />
             <h3 className="text-lg font-bold">Backend Unreachable</h3>
-            <p className="text-sm opacity-80 max-w-md">{error}</p>
+            <p className="text-sm opacity-80 max-w-md whitespace-pre-line">{error}</p>
           </div>
         )}
 
