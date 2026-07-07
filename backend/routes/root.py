@@ -27,6 +27,8 @@ links_html = (
 def _is_browser(request: Request) -> bool:
     # Prefer Accept header, then fall back to User-Agent heuristics.
     accept = request.headers.get("accept", "").lower()
+    if "application/json" in accept and "text/html" not in accept:
+        return False
     if "text/html" in accept:
         return True
     user_agent = request.headers.get("user-agent", "").lower()
