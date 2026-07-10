@@ -153,6 +153,7 @@ class Settings:
     CHAT_BATCH_MAX_ITEMS: int = max(1, int(os.getenv("CHAT_BATCH_MAX_ITEMS", "20")))
     CHAT_MAX_DOC_IDS_PER_QUERY: int = max(1, int(os.getenv("CHAT_MAX_DOC_IDS_PER_QUERY", "10")))
     MAX_SESSION_HISTORY_MESSAGES: int = max(1, int(os.getenv("MAX_SESSION_HISTORY_MESSAGES", "20")))
+    QUERY_TRANSFORMATION_HISTORY_WINDOW: int = max(1, int(os.getenv("QUERY_TRANSFORMATION_HISTORY_WINDOW", "6")))
     SQLALCHEMY_POOL_SIZE: int = max(1, int(os.getenv("SQLALCHEMY_POOL_SIZE", "5")))
     SQLALCHEMY_MAX_OVERFLOW: int = max(0, int(os.getenv("SQLALCHEMY_MAX_OVERFLOW", "10")))
     SQLALCHEMY_POOL_TIMEOUT_SEC: int = max(1, int(os.getenv("SQLALCHEMY_POOL_TIMEOUT_SEC", "30")))
@@ -242,6 +243,16 @@ def _validate_queue_backend(backend: str) -> None:
 
 config = Settings()
 _validate_queue_backend(config.QUEUE_BACKEND)
+
+if config.QUERY_TRANSFORMATION_HISTORY_WINDOW > config.MAX_SESSION_HISTORY_MESSAGES:
+    logger.warning(
+        "QUERY_TRANSFORMATION_HISTORY_WINDOW=%d exceeds MAX_SESSION_HISTORY_MESSAGES=%d. "
+        "The effective window will be capped at %d messages loaded from the session. "
+        "Lower QUERY_TRANSFORMATION_HISTORY_WINDOW or raise MAX_SESSION_HISTORY_MESSAGES.",
+        config.QUERY_TRANSFORMATION_HISTORY_WINDOW,
+        config.MAX_SESSION_HISTORY_MESSAGES,
+        config.MAX_SESSION_HISTORY_MESSAGES,
+    )
 
 
 def _validate_cors_origins(origins: list[str]) -> None:
