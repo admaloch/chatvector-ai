@@ -146,7 +146,12 @@ export function softFailureMessage(error?: ChatResponse["error"]): string {
 }
 
 async function throwChatHttpError(res: Response): Promise<never> {
-  const apiError = await backendApiErrorFromResponse(res);
+  const apiError = await backendApiErrorFromResponse(
+    res,
+    res.status === 404
+      ? "Document not found. It may have been deleted."
+      : undefined
+  );
   const { parsed } = apiError;
 
   if (res.status === 404) {

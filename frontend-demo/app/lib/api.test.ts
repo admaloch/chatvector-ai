@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { sendMessage, sendBatchMessage, sendSynthesizedBatchMessage, ChatError, getDocumentStatus } from "./api";
+import { sendMessage, sendBatchMessage, sendSynthesizedBatchMessage, ChatError, getDocumentStatus, uploadDocument } from "./api";
+import { BackendApiError } from "./apiErrors";
 
 const MOCK_RESPONSE = {
   question: "What is RAG?",
@@ -178,6 +179,17 @@ describe("sendMessage", () => {
       code: "no_document",
       message: "Document not found.",
       backendCode: "document_not_found",
+    });
+  });
+
+  it("throws no_document with a friendly fallback on bodyless 404", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(null, { status: 404 })
+    );
+
+    await expect(sendMessage("q", "bad-id")).rejects.toMatchObject({
+      code: "no_document",
+      message: "Document not found. It may have been deleted.",
     });
   });
 
@@ -431,6 +443,47 @@ describe("sendSynthesizedBatchMessage", () => {
         }),
       })
     );
+  });
+});
+
+describe("uploadDocument", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("throws BackendApiError with structured backend detail", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "unsupported_file_type",
+            message: "Only PDF, TXT, and DOCX files are supported.",
+          },
+        }),
+        { status: 422 }
+      )
+    );
+
+    const file = new File(["content"], "test.exe", {
+      type: "application/octet-stream",
+    });
+
+    await expect(uploadDocument(file)).rejects.toMatchObject({
+      name: "BackendApiError",
+      message: "Only PDF, TXT, and DOCX files are supported.",
+      httpStatus: 422,
+      parsed: {
+        code: "unsupported_file_type",
+        message: "Only PDF, TXT, and DOCX files are supported.",
+      },
+    });
+    await expect(uploadDocument(file)).rejects.toBeInstanceOf(BackendApiError);
   });
 });
 
