@@ -300,7 +300,9 @@ export default function BatchPage() {
                 <>
                   <strong className="text-foreground">Compare</strong> sends one
                   query per document and shows a separate answer card for each —
-                  useful for seeing what each file contributes.
+                  useful for seeing what each file contributes. Each document is
+                  answered independently from its own retrieved content; prior
+                  chat or batch turns in this session are not used.
                 </>
               ) : (
                 <>
