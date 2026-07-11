@@ -284,6 +284,47 @@ export async function sendBatchMessage(
   matchCount = 5,
   sessionIdOverride?: string | null
 ): Promise<BatchChatResponse> {
+  return postBatchChat(
+    {
+      queries: docIds.map((docId) => ({
+        question,
+        doc_ids: [docId],
+        match_count: matchCount,
+      })),
+    },
+    sessionIdOverride
+  );
+}
+
+/**
+ * Ask one question across multiple documents in a single batch query item.
+ * The backend retrieves from all `docIds` together and returns one synthesized
+ * answer with citations from every contributing document.
+ */
+export async function sendSynthesizedBatchMessage(
+  question: string,
+  docIds: string[],
+  matchCount = 5,
+  sessionIdOverride?: string | null
+): Promise<BatchChatResponse> {
+  return postBatchChat(
+    {
+      queries: [
+        {
+          question,
+          doc_ids: docIds,
+          match_count: matchCount,
+        },
+      ],
+    },
+    sessionIdOverride
+  );
+}
+
+async function postBatchChat(
+  body: Record<string, unknown>,
+  sessionIdOverride?: string | null
+): Promise<BatchChatResponse> {
   const sessionId =
     sessionIdOverride !== undefined ? sessionIdOverride : getSessionId();
 
@@ -295,15 +336,9 @@ export async function sendBatchMessage(
     headers["X-Session-Id"] = sessionId;
   }
 
-  const body: Record<string, unknown> = {
-    queries: docIds.map((docId) => ({
-      question,
-      doc_ids: [docId],
-      match_count: matchCount,
-    })),
-  };
+  const requestBody: Record<string, unknown> = { ...body };
   if (sessionId !== null) {
-    body.session_id = sessionId;
+    requestBody.session_id = sessionId;
   }
 
   let res: Response;
@@ -311,7 +346,7 @@ export async function sendBatchMessage(
     res = await fetch(`${API_BASE}/chat/batch`, {
       method: "POST",
       headers,
-      body: JSON.stringify(body),
+      body: JSON.stringify(requestBody),
     });
   } catch {
     throw new ChatError(
