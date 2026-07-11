@@ -85,6 +85,14 @@ export function formatBackendErrorMessage(parsed: ParsedBackendError): string {
   return lines.join("\n");
 }
 
+export function isGenericBackendError(parsed: ParsedBackendError): boolean {
+  return (
+    parsed.message === "An unexpected error occurred." &&
+    !parsed.code &&
+    !parsed.fields?.length
+  );
+}
+
 export async function backendApiErrorFromResponse(
   res: Response,
   fallbackMessage?: string
@@ -97,10 +105,9 @@ export async function backendApiErrorFromResponse(
   }
 
   const parsed = parseBackendErrorBody(body);
-  const message =
-    formatBackendErrorMessage(parsed) ||
-    fallbackMessage ||
-    `Server error (${res.status}). Please try again.`;
+  const message = isGenericBackendError(parsed)
+    ? fallbackMessage ?? `Server error (${res.status}). Please try again.`
+    : formatBackendErrorMessage(parsed);
 
   return new BackendApiError(message, parsed, res.status);
 }

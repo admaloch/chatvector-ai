@@ -1,4 +1,10 @@
 import {
+  backendApiErrorFromResponse,
+  formatBackendErrorMessage,
+  parseBackendErrorBody,
+  type BackendErrorField,
+} from "./apiErrors";
+import {
   clampMatchCount,
   DEFAULT_MATCH_COUNT,
   type RetrievalScope,
@@ -6,6 +12,8 @@ import {
 import { getSessionId } from "./session";
 
 export type { RetrievalScope } from "./retrievalSettings";
+export type { BackendErrorField } from "./apiErrors";
+export { BackendApiError } from "./apiErrors";
 
 export type ChatCallOptions = {
   matchCount?: number;
@@ -111,8 +119,12 @@ export class ChatError extends Error {
       | "no_document"
       | "backend_unreachable"
       | "unexpected"
+      | "api_error"
+      | "rate_limited"
       | ChatErrorCode,
-    message: string
+    message: string,
+    public readonly fields?: BackendErrorField[],
+    public readonly backendCode?: string
   ) {
     super(message);
     this.name = "ChatError";
@@ -131,6 +143,34 @@ export function softFailureMessage(error?: ChatResponse["error"]): string {
     return CHAT_ERROR_MESSAGES[error.code];
   }
   return error.message || CHAT_ERROR_MESSAGES.llm_unexpected;
+}
+
+async function throwChatHttpError(res: Response): Promise<never> {
+  const apiError = await backendApiErrorFromResponse(res);
+  const { parsed } = apiError;
+
+  if (res.status === 404) {
+    throw new ChatError(
+      "no_document",
+      apiError.message,
+      parsed.fields,
+      parsed.code
+    );
+  }
+  if (res.status === 429 || parsed.code === "rate_limited") {
+    throw new ChatError(
+      "rate_limited",
+      apiError.message,
+      parsed.fields,
+      parsed.code
+    );
+  }
+  throw new ChatError(
+    "api_error",
+    apiError.message,
+    parsed.fields,
+    parsed.code
+  );
 }
 
 export async function sendMessage(
@@ -173,18 +213,8 @@ export async function sendMessage(
     );
   }
 
-  if (res.status === 404) {
-    throw new ChatError(
-      "no_document",
-      "Document not found. It may have been deleted."
-    );
-  }
-
   if (!res.ok) {
-    throw new ChatError(
-      "unexpected",
-      `Server error (${res.status}). Please try again.`
-    );
+    await throwChatHttpError(res);
   }
 
   const response = (await res.json()) as ChatResponse;
@@ -205,8 +235,8 @@ export async function deleteDocument(
 
 export class DocumentNotFoundError extends Error {
   readonly code = "document_not_found" as const;
-  constructor() {
-    super("Document not found.");
+  constructor(message = "Document not found.") {
+    super(message);
     this.name = "DocumentNotFoundError";
   }
 }
@@ -260,8 +290,22 @@ export async function getDocumentStatus(
   statusEndpoint: string
 ): Promise<DocumentStatusPayload> {
   const res = await fetch(`${API_BASE}${statusEndpoint}`, { headers: authHeaders() });
-  if (res.status === 404) throw new DocumentNotFoundError();
-  if (!res.ok) throw new Error(`Status check failed: ${res.status}`);
+  if (res.status === 404) {
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      /* ignore non-JSON 404 bodies */
+    }
+    const parsed = parseBackendErrorBody(body);
+    throw new DocumentNotFoundError(formatBackendErrorMessage(parsed));
+  }
+  if (!res.ok) {
+    throw await backendApiErrorFromResponse(
+      res,
+      `Status check failed: ${res.status}`
+    );
+  }
   const data = (await res.json()) as Record<string, unknown>;
   const status = String(data?.status ?? "");
   const stageRaw = data?.stage;
@@ -398,18 +442,8 @@ async function postBatchChat(
     );
   }
 
-  if (res.status === 429) {
-    throw new ChatError(
-      "unexpected",
-      "Too many requests — please wait a moment and try again."
-    );
-  }
-
   if (!res.ok) {
-    throw new ChatError(
-      "unexpected",
-      `Server error (${res.status}). Please try again.`
-    );
+    await throwChatHttpError(res);
   }
 
   return (await res.json()) as BatchChatResponse;
@@ -434,19 +468,10 @@ export async function uploadDocument(
   });
   
   if (!res.ok) {
-    if (res.status === 429) {
-      throw new Error("Too many requests — please wait a moment and try again.");
-    }
-    let message = "Upload failed. Please try again.";
-    try {
-      const errBody = await res.json();
-      const detail = errBody?.detail;
-      if (typeof detail?.message === "string") message = detail.message;
-      else if (typeof detail === "string") message = detail;
-    } catch {
-      /* ignore */
-    }
-    throw new Error(message);
+    throw await backendApiErrorFromResponse(
+      res,
+      "Upload failed. Please try again."
+    );
   }
   const data = await res.json();
   const documentId = data?.document_id as string | undefined;

@@ -141,3 +141,18 @@ describe("BackendApiError", () => {
     expect(err.httpStatus).toBe(429);
   });
 });
+
+describe("isGenericBackendError", () => {
+  it("detects empty parsed errors", async () => {
+    const { isGenericBackendError } = await import("./apiErrors");
+    expect(
+      isGenericBackendError({ message: "An unexpected error occurred." })
+    ).toBe(true);
+    expect(
+      isGenericBackendError({
+        code: "validation_error",
+        message: "Request validation failed",
+      })
+    ).toBe(false);
+  });
+});

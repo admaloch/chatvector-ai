@@ -161,25 +161,56 @@ describe("sendMessage", () => {
     expect(result.answer).toBe(MOCK_RESPONSE.answer);
   });
 
-  it("throws no_document on 404", async () => {
+  it("throws no_document on 404 with structured backend detail", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
-      new Response(null, { status: 404 })
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "document_not_found",
+            message: "Document not found.",
+          },
+        }),
+        { status: 404 }
+      )
     );
 
-    await expect(sendMessage("q", "bad-id")).rejects.toThrow(ChatError);
     await expect(sendMessage("q", "bad-id")).rejects.toMatchObject({
       code: "no_document",
+      message: "Document not found.",
+      backendCode: "document_not_found",
     });
   });
 
-  it("throws unexpected on 422", async () => {
+  it("throws api_error with validation field hints on 422", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
-      new Response(null, { status: 422 })
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "validation_error",
+            message: "Request validation failed",
+            fields: [
+              {
+                loc: ["body", "question"],
+                msg: "ensure this value has at most 2000 characters",
+              },
+            ],
+          },
+        }),
+        { status: 422 }
+      )
     );
 
-    await expect(sendMessage("q", "bad-id")).rejects.toThrow(ChatError);
     await expect(sendMessage("q", "bad-id")).rejects.toMatchObject({
-      code: "unexpected",
+      code: "api_error",
+      backendCode: "validation_error",
+      message:
+        "Request validation failed\nquestion: ensure this value has at most 2000 characters",
+      fields: [
+        {
+          loc: ["body", "question"],
+          msg: "ensure this value has at most 2000 characters",
+        },
+      ],
     });
   });
 
@@ -192,14 +223,14 @@ describe("sendMessage", () => {
     });
   });
 
-  it("throws unexpected on 500", async () => {
+  it("throws api_error with a fallback message on 500", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       new Response(null, { status: 500 })
     );
 
-    await expect(sendMessage("q", "doc-123")).rejects.toThrow(ChatError);
     await expect(sendMessage("q", "doc-123")).rejects.toMatchObject({
-      code: "unexpected",
+      code: "api_error",
+      message: "Server error (500). Please try again.",
     });
   });
 });
@@ -302,12 +333,34 @@ describe("sendBatchMessage", () => {
     });
   });
 
-  it("throws unexpected on a 500 response", async () => {
+  it("throws rate_limited with the backend message on 429", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "rate_limited",
+            message: "Too many requests. Please slow down.",
+          },
+        }),
+        { status: 429 }
+      )
+    );
+
+    await expect(sendBatchMessage("q", ["doc-1"])).rejects.toMatchObject({
+      name: "ChatError",
+      code: "rate_limited",
+      message: "Too many requests. Please slow down.",
+      backendCode: "rate_limited",
+    });
+  });
+
+  it("throws api_error with a fallback message on a 500 response", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(new Response(null, { status: 500 }));
 
     await expect(sendBatchMessage("q", ["doc-1"])).rejects.toMatchObject({
       name: "ChatError",
-      code: "unexpected",
+      code: "api_error",
+      message: "Server error (500). Please try again.",
     });
   });
 });
