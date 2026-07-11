@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { sendMessage, sendBatchMessage, sendSynthesizedBatchMessage, ChatError, getDocumentStatus, uploadDocument } from "./api";
+import { sendMessage, sendBatchMessage, sendSynthesizedBatchMessage, ChatError, getDocumentStatus, uploadDocument, deleteDocument } from "./api";
 import { BackendApiError } from "./apiErrors";
 
 const MOCK_RESPONSE = {
@@ -366,6 +366,17 @@ describe("sendBatchMessage", () => {
     });
   });
 
+  it("throws rate_limited with a friendly fallback on bodyless 429", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(null, { status: 429 })
+    );
+
+    await expect(sendBatchMessage("q", ["doc-1"])).rejects.toMatchObject({
+      code: "rate_limited",
+      message: "Too many requests — please wait a moment and try again.",
+    });
+  });
+
   it("throws api_error with a fallback message on a 500 response", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(new Response(null, { status: 500 }));
 
@@ -485,6 +496,74 @@ describe("uploadDocument", () => {
     });
     await expect(uploadDocument(file)).rejects.toBeInstanceOf(BackendApiError);
   });
+
+  it("throws rate_limited with a friendly fallback on bodyless 429", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(null, { status: 429 })
+    );
+
+    const file = new File(["content"], "test.pdf", { type: "application/pdf" });
+
+    await expect(uploadDocument(file)).rejects.toMatchObject({
+      name: "BackendApiError",
+      message: "Too many requests — please wait a moment and try again.",
+      httpStatus: 429,
+    });
+  });
+});
+
+describe("deleteDocument", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("returns gone for 204 and 404 responses", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(null, { status: 204 })
+    );
+    await expect(deleteDocument("doc-1")).resolves.toEqual({ status: "gone" });
+
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(null, { status: 404 })
+    );
+    await expect(deleteDocument("doc-1")).resolves.toEqual({ status: "gone" });
+  });
+
+  it("returns conflict with structured backend detail on 409", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "document_in_use",
+            message: "Document cannot be deleted while in 'processing' state.",
+          },
+        }),
+        { status: 409 }
+      )
+    );
+
+    await expect(deleteDocument("doc-1")).resolves.toEqual({
+      status: "conflict",
+      message: "Document cannot be deleted while in 'processing' state.",
+    });
+  });
+
+  it("returns error with a fallback message on unexpected failures", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(null, { status: 500 })
+    );
+
+    await expect(deleteDocument("doc-1")).resolves.toEqual({
+      status: "error",
+      message: "Could not remove the document. Try again.",
+    });
+  });
 });
 
 describe("getDocumentStatus", () => {
@@ -496,6 +575,17 @@ describe("getDocumentStatus", () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+  });
+
+  it("throws DocumentNotFoundError with a friendly fallback on bodyless 404", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(null, { status: 404 })
+    );
+
+    await expect(getDocumentStatus("/documents/doc-123/status")).rejects.toMatchObject({
+      name: "DocumentNotFoundError",
+      message: "Document not found.",
+    });
   });
 
   it("returns numeric chunk progress from polling responses", async () => {

@@ -1,6 +1,7 @@
 import {
   backendApiErrorFromResponse,
   formatBackendErrorMessage,
+  isGenericBackendError,
   parseBackendErrorBody,
   type BackendErrorField,
 } from "./apiErrors";
@@ -135,6 +136,20 @@ function isChatErrorCode(code: unknown): code is ChatErrorCode {
   return typeof code === "string" && code in CHAT_ERROR_MESSAGES;
 }
 
+const DOCUMENT_NOT_FOUND_MESSAGE =
+  "Document not found. It may have been deleted.";
+const RATE_LIMITED_MESSAGE =
+  "Too many requests — please wait a moment and try again.";
+const DELETE_CONFLICT_MESSAGE =
+  "Can't remove while the document is queued or processing.";
+const DELETE_ERROR_MESSAGE = "Could not remove the document. Try again.";
+
+function httpErrorFallback(res: Response): string | undefined {
+  if (res.status === 404) return DOCUMENT_NOT_FOUND_MESSAGE;
+  if (res.status === 429) return RATE_LIMITED_MESSAGE;
+  return undefined;
+}
+
 export function softFailureMessage(error?: ChatResponse["error"]): string {
   if (!error) {
     return CHAT_ERROR_MESSAGES.llm_unexpected;
@@ -146,12 +161,7 @@ export function softFailureMessage(error?: ChatResponse["error"]): string {
 }
 
 async function throwChatHttpError(res: Response): Promise<never> {
-  const apiError = await backendApiErrorFromResponse(
-    res,
-    res.status === 404
-      ? "Document not found. It may have been deleted."
-      : undefined
-  );
+  const apiError = await backendApiErrorFromResponse(res, httpErrorFallback(res));
   const { parsed } = apiError;
 
   if (res.status === 404) {
@@ -226,16 +236,28 @@ export async function sendMessage(
   return response;
 }
 
+export type DeleteDocumentResult =
+  | { status: "gone" }
+  | { status: "conflict"; message: string }
+  | { status: "error"; message: string };
+
 export async function deleteDocument(
   documentId: string
-): Promise<"gone" | "conflict" | "error"> {
+): Promise<DeleteDocumentResult> {
   const res = await fetch(`${API_BASE}/documents/${documentId}`, {
     method: "DELETE",
     headers: authHeaders(),
   });
-  if (res.status === 204 || res.status === 404) return "gone";
-  if (res.status === 409) return "conflict";
-  return "error";
+  if (res.status === 204 || res.status === 404) return { status: "gone" };
+  if (res.status === 409) {
+    const apiError = await backendApiErrorFromResponse(
+      res,
+      DELETE_CONFLICT_MESSAGE
+    );
+    return { status: "conflict", message: apiError.message };
+  }
+  const apiError = await backendApiErrorFromResponse(res, DELETE_ERROR_MESSAGE);
+  return { status: "error", message: apiError.message };
 }
 
 export class DocumentNotFoundError extends Error {
@@ -303,7 +325,10 @@ export async function getDocumentStatus(
       /* ignore non-JSON 404 bodies */
     }
     const parsed = parseBackendErrorBody(body);
-    throw new DocumentNotFoundError(formatBackendErrorMessage(parsed));
+    const message = isGenericBackendError(parsed)
+      ? "Document not found."
+      : formatBackendErrorMessage(parsed);
+    throw new DocumentNotFoundError(message);
   }
   if (!res.ok) {
     throw await backendApiErrorFromResponse(
@@ -475,7 +500,7 @@ export async function uploadDocument(
   if (!res.ok) {
     throw await backendApiErrorFromResponse(
       res,
-      "Upload failed. Please try again."
+      res.status === 429 ? RATE_LIMITED_MESSAGE : "Upload failed. Please try again."
     );
   }
   const data = await res.json();
