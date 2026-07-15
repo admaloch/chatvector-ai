@@ -18,13 +18,42 @@ jobs:
         with:
           script: |
             const ASSIGNEE_REQUEST_PATTERNS = [
+              // Direct assign requests
               /\bassign\s+(this\s+)?to\s+me\b/i,
               /\bassign\s+me\b/i,
               /\bpls?\s+assign(\s+this)?(\s+to\s+me)?\b/i,
               /\bplease\s+assign(\s+this)?(\s+to\s+me)?\b/i,
-              /\bi(?:'d|\s+would)\s+like\s+to\s+(?:work\s+on|take|tackle)\b/i,
-              /\bi(?:'m|\s+am)\s+(?:working\s+on|starting(?:\s+on|\s+with)?|taking)\s+(?:this|it)\b/i,
+              /\bcan\s+(you\s+)?assign\s+(this\s+)?to\s+me\b/i,
+              /\bcould\s+(you\s+)?assign\s+(this\s+)?to\s+me\b/i,
+
+              // I'd like / I would like / I'd love
+              /\bi(?:'d|\s+would)\s+like\s+to\s+(?:work\s+on|take(?:\s+on)?|tackle|pick\s+up|help\s+(?:with|on))\b/i,
+              /\bi(?:'d|\s+would)\s+love\s+to\s+(?:work\s+on|take(?:\s+on)?|tackle|help\s+(?:with|on))\b/i,
+
+              // I'm / I am
+              /\bi(?:'m|\s+am)\s+(?:working\s+on|starting(?:\s+on|\s+with)?|taking(?:\s+on)?)\s+(?:this|it|this\s+issue)\b/i,
               /\bi(?:'m|\s+am)\s+starting\s+today\b/i,
+              /\bi(?:'m|\s+am)\s+interested\s+in\s+(?:working\s+on|taking(?:\s+on)?|this)\b/i,
+              /\bi(?:'m|\s+am)\s+happy\s+to\s+(?:work\s+on|take(?:\s+on)?|tackle|help\s+(?:with|on))\b/i,
+              /\bi(?:'m|\s+am)\s+on\s+it\b/i,
+
+              // I will / I'll
+              /\bi(?:'ll|\s+will)\s+(?:work\s+on|take(?:\s+on)?|tackle|pick\s+up|handle)\s+(?:this|it|this\s+issue)\b/i,
+
+              // I want / I can
+              /\bi\s+want\s+to\s+(?:work\s+on|take(?:\s+on)?|tackle|help\s+(?:with|on))\b/i,
+              /\bi\s+can\s+(?:work\s+on|take(?:\s+on)?|tackle|help\s+(?:with|on))\s+(?:this|it|this\s+issue)\b/i,
+
+              // Permission-seeking (first person)
+              /\bcan\s+i\s+(?:work\s+on|take(?:\s+on)?|tackle|pick\s+up|help\s+(?:with|on))\b/i,
+              /\bcould\s+i\s+(?:work\s+on|take(?:\s+on)?|tackle|pick\s+up|help\s+(?:with|on))\b/i,
+              /\bmay\s+i\s+(?:work\s+on|take(?:\s+on)?|tackle|pick\s+up|help\s+(?:with|on))\b/i,
+              /\bmind\s+if\s+i\s+(?:work\s+on|take(?:\s+on)?|tackle|pick\s+up)\b/i,
+
+              // Let me / volunteer phrases
+              /\blet\s+me\s+(?:work\s+on|take(?:\s+on)?|tackle|pick\s+up|handle)\s+(?:this|it|this\s+issue)\b/i,
+              /\bsign\s+me\s+up\b/i,
+              /\bcount\s+me\s+in\b/i,
             ];
 
             const comment = context.payload.comment;
