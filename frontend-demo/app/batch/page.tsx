@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { Layers, Loader2, FileText, AlertCircle } from "lucide-react";
+import { Layers, Loader2, FileText } from "lucide-react";
 import {
   sendBatchMessage,
   sendSynthesizedBatchMessage,
@@ -10,13 +9,21 @@ import {
   type BatchResultItem,
 } from "../lib/api";
 import { BatchResultCard } from "../components/batch/BatchResultCard";
+import BatchPageSkeleton from "../components/batch/BatchPageSkeleton";
 import RetrievalSettingsPanel from "../components/RetrievalSettingsPanel";
 import BatchResultSkeleton from "./BatchResultSkeleton";
+import { EmptyState } from "../components/ui/EmptyState";
+import { InlineAlert } from "../components/ui/InlineAlert";
+import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { getUploadedDocuments, type StoredDocument } from "../lib/documentStore";
 import { useRetrievalSettings } from "../lib/hooks/useRetrievalSettings";
-import { SkeletonBlock, SkeletonCard } from "../components/ui/Skeleton";
 
 type BatchMode = "compare" | "synthesize";
+
+const BATCH_MODE_OPTIONS: { value: BatchMode; label: string }[] = [
+  { value: "compare", label: "Compare" },
+  { value: "synthesize", label: "Synthesize" },
+];
 
 export default function BatchPage() {
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
@@ -121,92 +128,25 @@ export default function BatchPage() {
       </div>
 
       {!documentsLoaded || !retrievalLoaded ? (
-        <div className="flex flex-col gap-6" aria-busy="true">
-          <SkeletonCard className="p-4">
-            <SkeletonBlock className="mb-2 h-4 w-20" />
-            <SkeletonBlock className="h-28 w-full rounded-lg" />
-          </SkeletonCard>
-          <SkeletonCard className="p-4">
-            <SkeletonBlock className="mb-2 h-4 w-32" />
-            <div className="flex flex-col gap-2">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3"
-                >
-                  <SkeletonBlock className="h-4 w-4 rounded" />
-                  <SkeletonBlock className="h-4 w-4 rounded" />
-                  <SkeletonBlock className="h-4 w-40 rounded" />
-                  <SkeletonBlock className="ml-auto h-3 w-16 rounded" />
-                </div>
-              ))}
-            </div>
-          </SkeletonCard>
-          <SkeletonBlock className="h-10 w-40 rounded-lg" />
-        </div>
+        <BatchPageSkeleton />
       ) : documents.length === 0 ? (
-        <div className="rounded-xl border border-border bg-surface p-8 text-center">
-          <FileText className="mx-auto mb-3 text-muted" size={28} />
-          <p className="text-foreground">No documents yet.</p>
-          <p className="mt-1 text-sm text-muted">
-            Upload a document on the chat page first — it&apos;ll show up here
-            automatically.
-          </p>
-          <Link
-            href="/chat"
-            className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Go to chat
-          </Link>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="No documents yet."
+          description="Upload a document on the chat page first — it'll show up here automatically."
+          action={{ href: "/chat", label: "Go to chat" }}
+        />
       ) : (
         <div className="flex flex-col gap-6">
           <div>
             <p className="mb-2 text-sm font-medium">Mode</p>
-            <div
-              className="inline-flex rounded-lg border border-border bg-surface p-1"
-              role="radiogroup"
-              aria-label="Batch query mode"
-            >
-              <label className="cursor-pointer">
-                <input
-                  type="radio"
-                  name="batch-mode"
-                  value="compare"
-                  checked={mode === "compare"}
-                  onChange={() => setMode("compare")}
-                  className="sr-only"
-                />
-                <span
-                  className={`inline-block rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                    mode === "compare"
-                      ? "bg-accent text-surface"
-                      : "text-muted hover:text-foreground"
-                  }`}
-                >
-                  Compare
-                </span>
-              </label>
-              <label className="cursor-pointer">
-                <input
-                  type="radio"
-                  name="batch-mode"
-                  value="synthesize"
-                  checked={mode === "synthesize"}
-                  onChange={() => setMode("synthesize")}
-                  className="sr-only"
-                />
-                <span
-                  className={`inline-block rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                    mode === "synthesize"
-                      ? "bg-accent text-surface"
-                      : "text-muted hover:text-foreground"
-                  }`}
-                >
-                  Synthesize
-                </span>
-              </label>
-            </div>
+            <SegmentedControl
+              name="batch-mode"
+              ariaLabel="Batch query mode"
+              value={mode}
+              onChange={setMode}
+              options={BATCH_MODE_OPTIONS}
+            />
             <p className="mt-2 max-w-2xl text-sm text-muted">
               {mode === "compare" ? (
                 <>
@@ -298,12 +238,7 @@ export default function BatchPage() {
             </button>
           </div>
 
-          {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-500">
-              <AlertCircle size={16} className="mt-0.5 shrink-0" />
-              <span className="whitespace-pre-wrap">{error}</span>
-            </div>
-          )}
+          {error && <InlineAlert>{error}</InlineAlert>}
 
           {summary && mode === "compare" && (
             <div className="flex flex-wrap gap-4 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
