@@ -608,3 +608,111 @@ export async function uploadDocument(
   }
   return { documentId, statusEndpoint, queuePosition };
 }
+
+export type SessionResponse = {
+  id: string;
+  tenant_id?: string | null;
+  created_at: string;
+  last_active: string;
+  metadata: Record<string, unknown>;
+  document_ids: string[];
+};
+
+export type SessionListResponse = {
+  sessions: SessionResponse[];
+};
+
+function parseSessionResponse(data: unknown): SessionResponse {
+  if (!data || typeof data !== "object") {
+    throw new ChatError("unexpected", "Invalid session response from server.");
+  }
+  const record = data as Record<string, unknown>;
+  const id = record.id;
+  const createdAt = record.created_at;
+  const lastActive = record.last_active;
+  if (typeof id !== "string" || typeof createdAt !== "string" || typeof lastActive !== "string") {
+    throw new ChatError("unexpected", "Invalid session response from server.");
+  }
+  return {
+    id,
+    tenant_id: typeof record.tenant_id === "string" ? record.tenant_id : null,
+    created_at: createdAt,
+    last_active: lastActive,
+    metadata:
+      record.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata)
+        ? (record.metadata as Record<string, unknown>)
+        : {},
+    document_ids: Array.isArray(record.document_ids)
+      ? record.document_ids.filter((item): item is string => typeof item === "string")
+      : [],
+  };
+}
+
+async function sessionFetch(
+  path: string,
+  init: RequestInit
+): Promise<Response> {
+  try {
+    return await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        ...authHeaders(),
+        ...(init.headers ?? {}),
+      },
+    });
+  } catch {
+    throw new ChatError(
+      "backend_unreachable",
+      "Cannot reach the server. Check your connection."
+    );
+  }
+}
+
+export async function createSession(sessionId?: string): Promise<SessionResponse> {
+  const body: Record<string, string> = {};
+  if (sessionId) {
+    body.session_id = sessionId;
+  }
+
+  const res = await sessionFetch("/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    await throwChatHttpError(res);
+  }
+
+  return parseSessionResponse(await res.json());
+}
+
+export async function listSessions(): Promise<SessionListResponse> {
+  const res = await sessionFetch("/sessions", { method: "GET" });
+
+  if (!res.ok) {
+    await throwChatHttpError(res);
+  }
+
+  const data = (await res.json()) as { sessions?: unknown };
+  const sessions = Array.isArray(data.sessions)
+    ? data.sessions.map(parseSessionResponse)
+    : [];
+
+  return { sessions };
+}
+
+export async function deleteSession(sessionId: string): Promise<void> {
+  const res = await sessionFetch(
+    `/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE" }
+  );
+
+  if (res.status === 204 || res.status === 404) {
+    return;
+  }
+
+  if (!res.ok) {
+    await throwChatHttpError(res);
+  }
+}
