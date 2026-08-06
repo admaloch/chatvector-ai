@@ -770,14 +770,39 @@ The default in-memory queue does not persist across restarts. In production
 (`APP_ENV=production`), Redis is the default queue backend. For local development
 with Redis, set `QUEUE_BACKEND=redis` and provide `REDIS_URL`.
 
+### Redis queue integration tests
+
+`backend/tests/test_queue_redis.py` exercises the real Redis-backed ingestion
+queue. Tests are marked with `redis_integration` and skip automatically when
+Redis is not reachable.
+
+With Docker (same Redis URL and logical DB index as CI):
+
+```bash
+make tests
+# or only the Redis integration suite:
+docker compose run --rm tests pytest -m redis_integration -v
+```
+
+Without Docker (requires Postgres and Redis running locally):
+
+```bash
+cd backend && REDIS_URL=redis://localhost:6379/15 pytest -m redis_integration -v
+```
+
+Use logical DB `15` for test isolation (see `docker-compose.yml` `tests` service).
+Without `REDIS_URL`, tests default to `redis://localhost:6379/0`.
+
 ---
 
 ## CI
 
 Pull requests and pushes to `main` run the GitHub Actions workflow in
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml): backend tests
-against a real pgvector Postgres instance (with all [database migrations](#database-migrations)
-applied), plus a Docker build of the API image.
+against a real pgvector Postgres instance and Redis (with all
+[database migrations](#database-migrations) applied), including
+`redis_integration` tests in `test_queue_redis.py`, plus a Docker build of
+the API image.
 
 To run tests locally in the same Docker environment as CI:
 
