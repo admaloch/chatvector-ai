@@ -46,6 +46,11 @@ export function getUploadedDocuments(): StoredDocument[] {
   return read().sort((a, b) => b.uploadedAt - a.uploadedAt);
 }
 
+export function getUploadedDocument(documentId: string): StoredDocument | undefined {
+  if (!documentId) return undefined;
+  return read().find((doc) => doc.documentId === documentId);
+}
+
 export function saveUploadedDocument(doc: {
   documentId: string;
   fileName: string;

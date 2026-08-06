@@ -13,6 +13,7 @@ import {
   listSessions,
   deleteSession,
   getSessionHistory,
+  getSession,
 } from "./api";
 import { BackendApiError } from "./apiErrors";
 
@@ -959,6 +960,20 @@ describe("session API", () => {
     ]);
     expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/sessions/session-abc/history"),
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("getSession returns parsed session metadata", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(JSON.stringify(SESSION_PAYLOAD), { status: 200 })
+    );
+
+    const result = await getSession("session-abc");
+
+    expect(result).toEqual(SESSION_PAYLOAD);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/sessions/session-abc"),
       expect.objectContaining({ method: "GET" })
     );
   });

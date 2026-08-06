@@ -702,6 +702,19 @@ export async function listSessions(): Promise<SessionListResponse> {
   return { sessions };
 }
 
+export async function getSession(sessionId: string): Promise<SessionResponse> {
+  const res = await sessionFetch(
+    `/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "GET" }
+  );
+
+  if (!res.ok) {
+    await throwChatHttpError(res);
+  }
+
+  return parseSessionResponse(await res.json());
+}
+
 export async function deleteSession(sessionId: string): Promise<void> {
   const res = await sessionFetch(
     `/sessions/${encodeURIComponent(sessionId)}`,
