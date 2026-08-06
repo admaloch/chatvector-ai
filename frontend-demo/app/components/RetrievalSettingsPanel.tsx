@@ -96,6 +96,11 @@ export default function RetrievalSettingsPanel({
               step={1}
               value={settings.matchCount}
               onChange={(e) => onMatchCountChange(Number(e.target.value))}
+              aria-valuemin={MIN_MATCH_COUNT}
+              aria-valuemax={MAX_MATCH_COUNT}
+              aria-valuenow={settings.matchCount}
+              aria-valuetext={`${settings.matchCount} chunks`}
+              aria-describedby="retrieval-match-count-help"
               className="h-1.5 flex-1 accent-[color:var(--accent)]"
             />
             <input
@@ -106,10 +111,11 @@ export default function RetrievalSettingsPanel({
               value={settings.matchCount}
               onChange={(e) => onMatchCountChange(Number(e.target.value))}
               aria-label="Match count"
+              aria-describedby="retrieval-match-count-help"
               className="w-14 rounded-md border border-border bg-surface px-2 py-1 text-center text-xs text-foreground outline-none focus:border-accent"
             />
           </div>
-          <p className="mt-1.5 text-muted">
+          <p id="retrieval-match-count-help" className="mt-1.5 text-muted">
             Number of chunks to retrieve per query ({MIN_MATCH_COUNT}–
             {MAX_MATCH_COUNT}, default {MIN_MATCH_COUNT + 4}).
           </p>
