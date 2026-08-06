@@ -6,6 +6,7 @@ import MessageList from "../components/chat/MessageList";
 import ChatInput from "../components/chat/ChatInput";
 import SessionSidebar from "../components/chat/SessionSidebar";
 import RetrievalSettingsPanel from "../components/RetrievalSettingsPanel";
+import { InlineAlert } from "../components/ui/InlineAlert";
 import { useChat } from "../lib/hooks/useChat";
 import { useRetrievalSettings } from "../lib/hooks/useRetrievalSettings";
 import { useSessionManager } from "../lib/hooks/useSessionManager";
@@ -13,7 +14,17 @@ import { useSessionManager } from "../lib/hooks/useSessionManager";
 export default function ChatPage() {
   const [showModal, setShowModal] = useState(false);
   const uploadButtonRef = useRef<HTMLButtonElement>(null);
-  const { sessions, activeSessionId, createNewSession, switchSession, isLoaded } = useSessionManager();
+  const {
+    sessions,
+    activeSessionId,
+    createNewSession,
+    switchSession,
+    deleteSession,
+    isLoaded,
+    error: sessionError,
+    isCreating,
+    deletingSessionId,
+  } = useSessionManager();
   const { settings, setScope, setMatchCount, loaded: retrievalLoaded } = useRetrievalSettings();
 
   const {
@@ -104,10 +115,18 @@ export default function ChatPage() {
         activeSessionId={activeSessionId}
         onCreateSession={createNewSession}
         onSwitchSession={switchSession}
+        onDeleteSession={deleteSession}
+        isCreating={isCreating}
+        deletingSessionId={deletingSessionId}
       />
 
       <div className="flex-1 flex flex-col overflow-hidden min-h-0">
         <h1 className="sr-only">Chat with your documents</h1>
+        {sessionError && (
+          <div className="px-4 pt-4">
+            <InlineAlert>{sessionError}</InlineAlert>
+          </div>
+        )}
         {showModal && (
           <UploadModal
             onClose={() => setShowModal(false)}
