@@ -12,6 +12,7 @@ import {
   createSession,
   listSessions,
   deleteSession,
+  getSessionHistory,
 } from "./api";
 import { BackendApiError } from "./apiErrors";
 
@@ -927,5 +928,38 @@ describe("session API", () => {
     await expect(listSessions()).rejects.toMatchObject({
       code: "backend_unreachable",
     });
+  });
+
+  it("getSessionHistory returns parsed messages", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          messages: [
+            {
+              id: "msg-1",
+              role: "user",
+              content: "Hello",
+              created_at: "2026-01-01T00:00:00Z",
+            },
+          ],
+        }),
+        { status: 200 }
+      )
+    );
+
+    const result = await getSessionHistory("session-abc");
+
+    expect(result.messages).toEqual([
+      {
+        id: "msg-1",
+        role: "user",
+        content: "Hello",
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    ]);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/sessions/session-abc/history"),
+      expect.objectContaining({ method: "GET" })
+    );
   });
 });

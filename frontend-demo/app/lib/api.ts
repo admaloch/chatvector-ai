@@ -716,3 +716,51 @@ export async function deleteSession(sessionId: string): Promise<void> {
     await throwChatHttpError(res);
   }
 }
+
+export type SessionHistoryMessage = {
+  id: string;
+  role: "user" | "assistant" | string;
+  content: string;
+  created_at?: string | null;
+};
+
+export type SessionHistoryResponse = {
+  messages: SessionHistoryMessage[];
+};
+
+function parseSessionHistoryMessage(data: unknown): SessionHistoryMessage {
+  if (!data || typeof data !== "object") {
+    throw new ChatError("unexpected", "Invalid session history response from server.");
+  }
+  const record = data as Record<string, unknown>;
+  const id = record.id;
+  const role = record.role;
+  const content = record.content;
+  if (typeof id !== "string" || typeof role !== "string" || typeof content !== "string") {
+    throw new ChatError("unexpected", "Invalid session history response from server.");
+  }
+  return {
+    id,
+    role,
+    content,
+    created_at: typeof record.created_at === "string" ? record.created_at : null,
+  };
+}
+
+export async function getSessionHistory(sessionId: string): Promise<SessionHistoryResponse> {
+  const res = await sessionFetch(
+    `/sessions/${encodeURIComponent(sessionId)}/history`,
+    { method: "GET" }
+  );
+
+  if (!res.ok) {
+    await throwChatHttpError(res);
+  }
+
+  const data = (await res.json()) as { messages?: unknown };
+  const messages = Array.isArray(data.messages)
+    ? data.messages.map(parseSessionHistoryMessage)
+    : [];
+
+  return { messages };
+}
