@@ -4,7 +4,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+import db
 from core.auth import AuthContext, get_current_tenant, require_auth
+from core.config import config
 from core.session import Session
 from services import session_service
 
@@ -27,6 +29,17 @@ class SessionResponse(BaseModel):
 
 class SessionListResponse(BaseModel):
     sessions: list[SessionResponse]
+
+
+class SessionHistoryMessageResponse(BaseModel):
+    id: str
+    role: str
+    content: str
+    created_at: Optional[str] = None
+
+
+class SessionHistoryResponse(BaseModel):
+    messages: list[SessionHistoryMessageResponse]
 
 
 def _format_session(session: Session) -> SessionResponse:
@@ -81,3 +94,29 @@ async def delete_session(session_id: str, auth: AuthContext = Depends(require_au
     deleted = await session_service.delete_session(session_id=session_id, tenant_id=tenant_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
+
+
+@router.get("/sessions/{session_id}/history", response_model=SessionHistoryResponse)
+async def get_session_history(session_id: str, auth: AuthContext = Depends(require_auth)):
+    tenant_id = get_current_tenant(auth)
+    session = await session_service.get_session(session_id=session_id, tenant_id=tenant_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    messages = await db.get_session_history(
+        session_id=session_id,
+        tenant_id=tenant_id,
+        limit=config.MAX_SESSION_HISTORY_MESSAGES,
+    )
+
+    return SessionHistoryResponse(
+        messages=[
+            SessionHistoryMessageResponse(
+                id=message["id"],
+                role=message["role"],
+                content=message["content"],
+                created_at=message.get("created_at"),
+            )
+            for message in messages
+        ]
+    )
