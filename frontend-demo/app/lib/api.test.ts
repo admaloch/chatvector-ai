@@ -9,6 +9,9 @@ import {
   getDocumentStatus,
   uploadDocument,
   deleteDocument,
+  createSession,
+  listSessions,
+  deleteSession,
 } from "./api";
 import { BackendApiError } from "./apiErrors";
 
@@ -852,5 +855,77 @@ describe("sendMessageStream", () => {
 
     const gen = sendMessageStream("q", "doc-123");
     await expect(gen.next()).rejects.toThrow(ChatError);
+  });
+});
+
+describe("session API", () => {
+  const originalFetch = globalThis.fetch;
+
+  const SESSION_PAYLOAD = {
+    id: "session-abc",
+    tenant_id: "dev",
+    created_at: "2026-01-01T00:00:00Z",
+    last_active: "2026-01-01T00:00:00Z",
+    metadata: {},
+    document_ids: [],
+  };
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("createSession posts to /sessions and returns parsed session", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(JSON.stringify(SESSION_PAYLOAD), { status: 201 })
+    );
+
+    const result = await createSession();
+
+    expect(result).toEqual(SESSION_PAYLOAD);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/sessions"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({}),
+      })
+    );
+  });
+
+  it("listSessions returns parsed sessions array", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(JSON.stringify({ sessions: [SESSION_PAYLOAD] }), { status: 200 })
+    );
+
+    const result = await listSessions();
+
+    expect(result).toEqual({ sessions: [SESSION_PAYLOAD] });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/sessions"),
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("deleteSession succeeds on 204 and 404", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(null, { status: 204 })
+    );
+    await expect(deleteSession("session-abc")).resolves.toBeUndefined();
+
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(null, { status: 404 })
+    );
+    await expect(deleteSession("missing")).resolves.toBeUndefined();
+  });
+
+  it("throws backend_unreachable on network failure", async () => {
+    vi.mocked(globalThis.fetch).mockRejectedValue(new TypeError("fetch failed"));
+
+    await expect(listSessions()).rejects.toMatchObject({
+      code: "backend_unreachable",
+    });
   });
 });
