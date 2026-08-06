@@ -26,6 +26,16 @@ jobs:
           --health-timeout 2s
           --health-retries 10
 
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -63,6 +73,8 @@ jobs:
           APP_ENV: test
           GEN_AI_KEY: test-key-for-ci
           PYTHONPATH: backend
+          # Logical DB 15 is isolated from API traffic; tests flush this DB between cases
+          REDIS_URL: redis://localhost:6379/15
         run: |
           cd backend
           pytest tests/ -v --tb=short
