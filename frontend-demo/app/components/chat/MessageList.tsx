@@ -93,7 +93,11 @@ export default function MessageList({ messages, inflight, streaming, bottomRef }
   }, [messages, streaming, bottomRef]);
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 space-y-4">
+    <div
+      className="min-h-0 flex-1 overflow-y-auto px-4 py-6 space-y-4"
+      aria-busy={inflight || streaming}
+      aria-live="polite"
+    >
       {messages.map((msg) => {
         const isRealStreaming = msg.isStreaming === true;
         const wasStreamed = msg.isStreaming !== undefined;
