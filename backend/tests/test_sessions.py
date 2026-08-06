@@ -10,10 +10,12 @@ from request_utils import make_test_request
 from routes.sessions import (
     create_session,
     get_session,
+    get_session_history,
     list_sessions,
     delete_session,
     SessionCreateRequest,
     SessionListResponse,
+    SessionHistoryResponse,
 )
 
 
@@ -108,6 +110,95 @@ async def test_delete_session_not_found():
     ):
         with pytest.raises(HTTPException) as excinfo:
             await delete_session("test-id", auth=AuthContext(tenant_id="tenant-1"))
+        assert excinfo.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_session_history_success():
+    history = [
+        {
+            "id": "msg-1",
+            "role": "user",
+            "content": "Hello",
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+        {
+            "id": "msg-2",
+            "role": "assistant",
+            "content": "Hi there",
+            "created_at": "2026-01-01T00:00:01Z",
+        },
+    ]
+
+    with patch(
+        "routes.sessions.session_service.get_session",
+        new=AsyncMock(return_value=Session(id="test-id", tenant_id="tenant-1")),
+    ) as mock_get_session, patch(
+        "routes.sessions.db.get_session_history",
+        new=AsyncMock(return_value=history),
+    ) as mock_get_history:
+        result = await get_session_history(
+            "test-id",
+            auth=AuthContext(tenant_id="tenant-1"),
+        )
+
+        assert isinstance(result, SessionHistoryResponse)
+        assert len(result.messages) == 2
+        assert result.messages[0].role == "user"
+        assert result.messages[1].content == "Hi there"
+        mock_get_session.assert_awaited_once_with(
+            session_id="test-id",
+            tenant_id="tenant-1",
+        )
+        mock_get_history.assert_awaited_once_with(
+            session_id="test-id",
+            tenant_id="tenant-1",
+            limit=20,
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_session_history_empty():
+    with patch(
+        "routes.sessions.session_service.get_session",
+        new=AsyncMock(return_value=Session(id="test-id", tenant_id="tenant-1")),
+    ), patch(
+        "routes.sessions.db.get_session_history",
+        new=AsyncMock(return_value=[]),
+    ):
+        result = await get_session_history(
+            "test-id",
+            auth=AuthContext(tenant_id="tenant-1"),
+        )
+
+        assert result.messages == []
+
+
+@pytest.mark.asyncio
+async def test_get_session_history_not_found():
+    with patch(
+        "routes.sessions.session_service.get_session",
+        new=AsyncMock(return_value=None),
+    ):
+        with pytest.raises(HTTPException) as excinfo:
+            await get_session_history(
+                "missing-id",
+                auth=AuthContext(tenant_id="tenant-1"),
+            )
+        assert excinfo.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_session_history_cross_tenant_isolation():
+    with patch(
+        "routes.sessions.session_service.get_session",
+        new=AsyncMock(return_value=None),
+    ):
+        with pytest.raises(HTTPException) as excinfo:
+            await get_session_history(
+                "tenant-a-session",
+                auth=AuthContext(tenant_id="tenant-b"),
+            )
         assert excinfo.value.status_code == 404
 
 
