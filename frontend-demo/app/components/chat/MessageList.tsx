@@ -3,13 +3,8 @@
 import type { RefObject } from "react";
 import { useState, useEffect, useRef } from "react";
 import { Bot, User } from "lucide-react";
-import { softFailureMessage, type Message } from "../../lib/api";
-import {
-  deduplicatedSources,
-  formatCitationLine,
-  formatResponseMetadata,
-} from "../../lib/citations";
-import RetrievalInspector from "../RetrievalInspector";
+import { type Message } from "../../lib/api";
+import AiResponseContent from "./AiResponseContent";
 
 type Props = {
   messages: Message[];
@@ -109,11 +104,6 @@ export default function MessageList({ messages, inflight, streaming, bottomRef }
           : isAnimating
             ? animDone
             : true;
-        const metadata = formatResponseMetadata({
-          chunks: msg.chunks,
-          model: msg.model,
-          latency_ms: msg.latency_ms,
-        });
 
         return (
           <div
@@ -136,51 +126,20 @@ export default function MessageList({ messages, inflight, streaming, bottomRef }
                   : "bg-accent text-background rounded-br-none"
               }`}
             >
-              {msg.sender === "ai" && msg.error && detailsVisible && (
-                <p className="mb-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-500">
-                  {softFailureMessage(msg.error)}
-                </p>
-              )}
-              {/* Streaming: show text with blinking cursor */}
-              {isRealStreaming ? (
-                text ? (
-                  <span>
-                    {text}
-                    <span className="inline-block w-[2px] h-[1em] bg-accent animate-pulse ml-0.5 align-text-bottom" />
-                  </span>
-                ) : (
-                  <span className="text-muted animate-pulse">Streaming...</span>
-                )
-              ) : (
+              {msg.sender === "user" ? (
                 text
-              )}
-              {msg.sender === "ai" && msg.sources && msg.sources.length > 0 && detailsVisible && (
-                <div className="mt-2 flex flex-col gap-1">
-                  {deduplicatedSources(msg.sources).map((source, index) => (
-                    <span key={index} className="text-sm text-muted">
-                      {formatCitationLine(source)}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {msg.sender === "ai" && msg.chunks === 0 && detailsVisible && (
-                <p className="mt-1 text-sm text-muted italic">
-                  No relevant content found in this document.
-                </p>
-              )}
-              {msg.sender === "ai" && metadata && detailsVisible && (
-                <p className="mt-2 text-xs text-muted">{metadata}</p>
-              )}
-              {msg.sender === "ai" && detailsVisible && (
-                <RetrievalInspector
-                  data={{
-                    question: msg.question,
-                    retrieval_debug: msg.retrieval_debug,
-                    sources: msg.sources,
-                    chunks: msg.chunks,
-                    model: msg.model,
-                    latency_ms: msg.latency_ms,
-                  }}
+              ) : (
+                <AiResponseContent
+                  text={text}
+                  error={msg.error}
+                  sources={msg.sources}
+                  chunks={msg.chunks}
+                  model={msg.model}
+                  latencyMs={msg.latency_ms}
+                  question={msg.question}
+                  retrievalDebug={msg.retrieval_debug}
+                  detailsVisible={detailsVisible}
+                  isStreaming={isRealStreaming}
                 />
               )}
             </div>

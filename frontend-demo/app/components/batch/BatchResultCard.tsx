@@ -3,12 +3,7 @@ import {
   softFailureMessage,
   type BatchResultItem,
 } from "../../lib/api";
-import {
-  deduplicatedSources,
-  formatCitationLine,
-  formatResponseMetadata,
-} from "../../lib/citations";
-import RetrievalInspector from "../RetrievalInspector";
+import AiResponseContent from "../chat/AiResponseContent";
 
 export function hasPartialBatchResult(result: BatchResultItem): boolean {
   return Boolean(
@@ -27,11 +22,7 @@ export function BatchResultCard({
 }) {
   const isError = result.status === "error";
   const showPartialContent = isError && hasPartialBatchResult(result);
-  const metadata = formatResponseMetadata({
-    chunks: result.chunks,
-    model: result.model,
-    latency_ms: result.latency_ms,
-  });
+  const showBody = !isError || showPartialContent;
 
   return (
     <div
@@ -61,43 +52,26 @@ export function BatchResultCard({
         </div>
       )}
 
-      {(!isError || showPartialContent) && result.answer && (
-        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
-          {result.answer}
-        </p>
-      )}
-
-      {!isError && !result.answer && (
-        <p className="text-sm text-muted italic">No answer was generated.</p>
-      )}
-
-      {result.chunks === 0 && !isError && (
-        <p className="text-sm text-muted italic">
-          No chunks retrieved for this query.
-        </p>
-      )}
-
-      {result.sources && result.sources.length > 0 && (
-        <div className="mt-auto flex flex-col gap-1 border-t border-border pt-2">
-          {deduplicatedSources(result.sources).map((source, sourceIndex) => (
-            <span key={sourceIndex} className="text-xs text-muted">
-              {formatCitationLine(source)}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {metadata && <p className="text-xs text-muted">{metadata}</p>}
-
-      <RetrievalInspector
-        data={{
-          question: result.question,
-          retrieval_debug: result.retrieval_debug,
-          sources: result.sources,
-          chunks: result.chunks,
-          model: result.model,
-          latency_ms: result.latency_ms,
-        }}
+      <AiResponseContent
+        text={showBody ? result.answer : undefined}
+        sources={result.sources}
+        chunks={result.chunks}
+        model={result.model}
+        latencyMs={result.latency_ms}
+        question={result.question}
+        retrievalDebug={result.retrieval_debug}
+        emptyMessage={
+          showBody && !isError && !result.answer
+            ? "No answer was generated."
+            : undefined
+        }
+        zeroChunksMessage="No chunks retrieved for this query."
+        showZeroChunks={showBody && !isError}
+        textClassName="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground"
+        sourceClassName="text-xs text-muted"
+        sourcesContainerClassName="mt-auto flex flex-col gap-1 border-t border-border pt-2"
+        metadataClassName="text-xs text-muted"
+        zeroChunksClassName="text-sm text-muted italic"
       />
     </div>
   );
