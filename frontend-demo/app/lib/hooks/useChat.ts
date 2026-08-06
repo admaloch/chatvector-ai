@@ -5,10 +5,12 @@ import {
   deleteDocument,
   sendMessage,
   sendMessageStream,
+  getSessionHistory,
   ChatError,
   StreamingDisabledError,
   type AttachmentState,
   type Message,
+  type SessionHistoryMessage,
   type StreamEvent,
 } from "../api";
 import { useDocumentPolling } from "./useDocumentPolling";
@@ -26,8 +28,17 @@ const welcomeMessages: Message[] = [
   },
 ];
 
+function mapHistoryToMessages(history: SessionHistoryMessage[]): Message[] {
+  return history.map((entry, index) => ({
+    id: index + 1,
+    sender: entry.role === "user" ? "user" : "ai",
+    text: entry.content,
+  }));
+}
+
 export function useChat(sessionId: string | null, retrievalSettings: RetrievalSettings) {
   const [messages, setMessages] = useState<Message[]>(welcomeMessages);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [input, setInput] = useState("");
   const [attachment, setAttachment] = useState<AttachmentState | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
@@ -35,9 +46,20 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
   const [streaming, setStreaming] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const readyAnnouncedForDocRef = useRef<string | null>(null);
+  const historyRequestRef = useRef(0);
+  const inflightRef = useRef(false);
+  const streamingRef = useRef(false);
 
   // AbortController for cancelling an in-flight stream.
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    inflightRef.current = inflight;
+  }, [inflight]);
+
+  useEffect(() => {
+    streamingRef.current = streaming;
+  }, [streaming]);
 
   // Token batching: accumulate tokens between animation frames to avoid
   // excessive React re-renders when the LLM sends tokens very rapidly.
@@ -45,20 +67,44 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
   const rafIdRef = useRef<number | null>(null);
   const streamingMsgIdRef = useRef<number | null>(null);
 
-  // When session changes, reset the chat state.
+  // When session changes, reset local chat state and hydrate history from backend.
   useEffect(() => {
-    if (sessionId) {
-      setMessages(welcomeMessages);
-      setInput("");
-      setAttachment(null);
-      setRemoveError(null);
-      setInflight(false);
-      setStreaming(false);
-      readyAnnouncedForDocRef.current = null;
-      // Cancel any in-flight stream.
-      abortControllerRef.current?.abort();
-      abortControllerRef.current = null;
-    }
+    if (!sessionId) return;
+
+    const requestId = historyRequestRef.current + 1;
+    historyRequestRef.current = requestId;
+
+    setInput("");
+    setAttachment(null);
+    setRemoveError(null);
+    setInflight(false);
+    setStreaming(false);
+    readyAnnouncedForDocRef.current = null;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+
+    setHistoryLoading(true);
+    setMessages([]);
+
+    void (async () => {
+      try {
+        const { messages: history } = await getSessionHistory(sessionId);
+        if (historyRequestRef.current !== requestId) return;
+        if (inflightRef.current || streamingRef.current) return;
+
+        setMessages(
+          history.length > 0 ? mapHistoryToMessages(history) : welcomeMessages
+        );
+      } catch {
+        if (historyRequestRef.current !== requestId) return;
+        if (inflightRef.current || streamingRef.current) return;
+        setMessages(welcomeMessages);
+      } finally {
+        if (historyRequestRef.current === requestId) {
+          setHistoryLoading(false);
+        }
+      }
+    })();
   }, [sessionId]);
 
   const poll = useDocumentPolling(
@@ -521,6 +567,7 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
 
   return {
     messages,
+    historyLoading,
     input,
     setInput,
     inflight,

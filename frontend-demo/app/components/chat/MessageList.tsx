@@ -10,6 +10,7 @@ type Props = {
   messages: Message[];
   inflight: boolean;
   streaming: boolean;
+  historyLoading?: boolean;
   bottomRef: RefObject<HTMLDivElement | null>;
 };
 
@@ -34,7 +35,13 @@ function charInterval(textLength: number): number {
     : BASE_INTERVAL_MS;
 }
 
-export default function MessageList({ messages, inflight, streaming, bottomRef }: Props) {
+export default function MessageList({
+  messages,
+  inflight,
+  streaming,
+  historyLoading = false,
+  bottomRef,
+}: Props) {
   const [animatingId, setAnimatingId] = useState<number | null>(null);
   const [displayedText, setDisplayedText] = useState("");
   const [animDone, setAnimDone] = useState(true);
@@ -95,9 +102,19 @@ export default function MessageList({ messages, inflight, streaming, bottomRef }
   return (
     <div
       className="min-h-0 flex-1 overflow-y-auto px-4 py-6 space-y-4"
-      aria-busy={inflight || streaming}
+      aria-busy={historyLoading || inflight || streaming}
       aria-live="polite"
     >
+      {historyLoading && messages.length === 0 && (
+        <div className="flex items-end gap-2">
+          <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-accent text-background">
+            <Bot size={16} />
+          </div>
+          <div className="px-4 py-3 rounded-2xl rounded-bl-none bg-surface text-muted text-base animate-pulse">
+            Loading conversation...
+          </div>
+        </div>
+      )}
       {messages.map((msg) => {
         const isRealStreaming = msg.isStreaming === true;
         const wasStreamed = msg.isStreaming !== undefined;

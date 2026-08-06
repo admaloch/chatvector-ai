@@ -29,6 +29,7 @@ export default function ChatPage() {
 
   const {
     messages,
+    historyLoading,
     input,
     setInput,
     inflight,
@@ -148,7 +149,13 @@ export default function ChatPage() {
         )}
 
         <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden">
-          <MessageList messages={messages} inflight={inflight} streaming={streaming} bottomRef={bottomRef} />
+          <MessageList
+            messages={messages}
+            inflight={inflight}
+            streaming={streaming}
+            historyLoading={historyLoading}
+            bottomRef={bottomRef}
+          />
 
           <div className="shrink-0 px-4 pb-2">
             <RetrievalSettingsPanel
