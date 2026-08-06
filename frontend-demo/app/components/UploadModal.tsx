@@ -1,9 +1,19 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, type RefObject } from "react";
 import { X, Upload, AlertCircle, FileText, Loader2 } from "lucide-react";
 import { uploadDocument } from "../lib/api";
 import IngestionPipeline from "./IngestionPipeline";
+
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
+  if (!container) return [];
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (el) => el.offsetParent !== null || el.getClientRects().length > 0,
+  );
+}
 
 export type UploadAcceptedPayload = {
   fileName: string;
@@ -22,6 +32,8 @@ export type UploadModalAttachment = {
 
 type Props = {
   onClose: () => void;
+  /** Element to return focus to when the modal closes. */
+  returnFocusRef?: RefObject<HTMLElement | null>;
   /** Run before POST /upload (e.g. delete the prior document so replacement does not orphan rows). */
   onBeforeUpload?: () => Promise<void>;
   onUploadAccepted: (payload: UploadAcceptedPayload) => void;
@@ -31,11 +43,14 @@ type Props = {
 
 export default function UploadModal({
   onClose,
+  returnFocusRef,
   onBeforeUpload,
   onUploadAccepted,
   attachment,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [lastFile, setLastFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadHttpFailed, setUploadHttpFailed] = useState(false);
@@ -61,6 +76,41 @@ export default function UploadModal({
   const showSuccess = attachment?.status === "ready";
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+    const returnFocusElement = returnFocusRef?.current ?? null;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusable = getFocusableElements(dialogRef.current);
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      returnFocusElement?.focus();
+    };
+  }, [returnFocusRef]);
 
   // Start the close timer only once the pipeline animation visually reaches
   // "completed" — this guarantees the 1.5s border sweep has its full duration.
@@ -168,8 +218,13 @@ export default function UploadModal({
         backgroundColor: "rgba(2, 6, 23, 0.72)",
         backdropFilter: "blur(10px)",
       }}
+      onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upload-modal-title"
         className="relative w-full max-w-[460px] rounded-3xl border border-border bg-surface p-6 shadow-2xl shadow-black/50"
         onClick={(e) => e.stopPropagation()}
       >
@@ -209,7 +264,10 @@ export default function UploadModal({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <h2 className="text-xl font-semibold tracking-tight text-foreground">
+              <h2
+                id="upload-modal-title"
+                className="text-xl font-semibold tracking-tight text-foreground"
+              >
                 Upload document
               </h2>
               {showDismissWait && (
@@ -225,6 +283,7 @@ export default function UploadModal({
             <p className="mt-1 mb-2 text-base text-muted">PDF, TXT, or DOCX</p>
           </div>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             className="rounded-xl p-2 text-muted transition-colors hover:bg-background hover:text-foreground"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, type RefObject } from "react";
 import { Send, Square } from "lucide-react";
 import UploadButton from "../UploadButton";
 import AttachmentChip from "../AttachmentChip";
@@ -23,6 +23,7 @@ type Props = {
   handleKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   handleRemoveAttachment: () => void;
   onUploadClick: () => void;
+  uploadButtonRef?: RefObject<HTMLButtonElement | null>;
   stopStreaming: () => void;
 };
 
@@ -39,6 +40,7 @@ export default function ChatInput({
   handleKeyDown,
   handleRemoveAttachment,
   onUploadClick,
+  uploadButtonRef,
   stopStreaming,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -87,7 +89,7 @@ export default function ChatInput({
 
       <div className="bg-background px-4 py-3">
         <div className="flex items-end gap-2 bg-surface rounded-xl px-4 py-2">
-          <UploadButton onClick={onUploadClick} disabled={!!attachment} />
+          <UploadButton ref={uploadButtonRef} onClick={onUploadClick} disabled={!!attachment} />
           <textarea
             ref={textareaRef}
             rows={1}

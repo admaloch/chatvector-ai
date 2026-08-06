@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import UploadModal from "../components/UploadModal";
 import MessageList from "../components/chat/MessageList";
 import ChatInput from "../components/chat/ChatInput";
@@ -12,6 +12,7 @@ import { useSessionManager } from "../lib/hooks/useSessionManager";
 
 export default function ChatPage() {
   const [showModal, setShowModal] = useState(false);
+  const uploadButtonRef = useRef<HTMLButtonElement>(null);
   const { sessions, activeSessionId, createNewSession, switchSession, isLoaded } = useSessionManager();
   const { settings, setScope, setMatchCount, loaded: retrievalLoaded } = useRetrievalSettings();
 
@@ -110,6 +111,7 @@ export default function ChatPage() {
         {showModal && (
           <UploadModal
             onClose={() => setShowModal(false)}
+            returnFocusRef={uploadButtonRef}
             onBeforeUpload={handleBeforeUpload}
             onUploadAccepted={handleUploadAccepted}
             attachment={
@@ -150,6 +152,7 @@ export default function ChatPage() {
             handleKeyDown={handleKeyDown}
             handleRemoveAttachment={handleRemoveAttachment}
             onUploadClick={() => setShowModal(true)}
+            uploadButtonRef={uploadButtonRef}
             stopStreaming={stopStreaming}
           />
         </div>
