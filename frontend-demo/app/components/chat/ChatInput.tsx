@@ -17,6 +17,7 @@ type Props = {
   inflight: boolean;
   streaming: boolean;
   attachment: AttachmentState | null;
+  sessionNotice?: string | null;
   removeError: string | null;
   poll: ReturnType<typeof useDocumentPolling>;
   handleSend: () => void;
@@ -34,6 +35,7 @@ export default function ChatInput({
   inflight,
   streaming,
   attachment,
+  sessionNotice,
   removeError,
   poll,
   handleSend,
@@ -82,6 +84,9 @@ export default function ChatInput({
         <p className="px-4 pb-1 text-xs text-amber-400 bg-background">
           Document still processing — sending is disabled until it is ready.
         </p>
+      )}
+      {sessionNotice && !attachment && (
+        <p className="px-4 pb-1 text-xs text-amber-400 bg-background">{sessionNotice}</p>
       )}
       {removeError && (
         <p className="px-4 pb-1 text-xs text-red-400 bg-background">{removeError}</p>

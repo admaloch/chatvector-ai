@@ -6,6 +6,9 @@ import {
   sendMessage,
   sendMessageStream,
   getSessionHistory,
+  getSession,
+  getDocumentStatus,
+  DocumentNotFoundError,
   ChatError,
   StreamingDisabledError,
   type AttachmentState,
@@ -17,6 +20,7 @@ import { useDocumentPolling } from "./useDocumentPolling";
 import {
   saveUploadedDocument,
   removeUploadedDocument,
+  getUploadedDocument,
 } from "../documentStore";
 import type { RetrievalSettings } from "../retrievalSettings";
 
@@ -36,11 +40,54 @@ function mapHistoryToMessages(history: SessionHistoryMessage[]): Message[] {
   }));
 }
 
+function documentStatusEndpoint(documentId: string): string {
+  return `/documents/${documentId}/status`;
+}
+
+function mapApiStatusToAttachmentStatus(apiStatus: string): AttachmentState["status"] {
+  if (apiStatus === "completed") return "ready";
+  if (apiStatus === "failed") return "failed";
+  return "processing";
+}
+
+async function restoreSessionAttachment(
+  documentId: string
+): Promise<{ attachment: AttachmentState | null; notice: string | null }> {
+  const statusEndpoint = documentStatusEndpoint(documentId);
+  const stored = getUploadedDocument(documentId);
+  const fileName = stored?.fileName ?? `Document ${documentId.slice(0, 8)}`;
+
+  try {
+    const status = await getDocumentStatus(statusEndpoint);
+    return {
+      attachment: {
+        fileName,
+        documentId,
+        statusEndpoint,
+        status: mapApiStatusToAttachmentStatus(status.status),
+      },
+      notice: null,
+    };
+  } catch (error) {
+    if (error instanceof DocumentNotFoundError) {
+      return {
+        attachment: null,
+        notice: "The document attached to this session is no longer available.",
+      };
+    }
+    return {
+      attachment: null,
+      notice: "Could not restore the session document. You can upload a new one.",
+    };
+  }
+}
+
 export function useChat(sessionId: string | null, retrievalSettings: RetrievalSettings) {
   const [messages, setMessages] = useState<Message[]>(welcomeMessages);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [input, setInput] = useState("");
   const [attachment, setAttachment] = useState<AttachmentState | null>(null);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [inflight, setInflight] = useState(false);
   const [streaming, setStreaming] = useState(false);
@@ -76,6 +123,7 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
 
     setInput("");
     setAttachment(null);
+    setSessionNotice(null);
     setRemoveError(null);
     setInflight(false);
     setStreaming(false);
@@ -88,13 +136,34 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
 
     void (async () => {
       try {
-        const { messages: history } = await getSessionHistory(sessionId);
+        const [historyResult, sessionResult] = await Promise.all([
+          getSessionHistory(sessionId),
+          getSession(sessionId),
+        ]);
         if (historyRequestRef.current !== requestId) return;
         if (inflightRef.current || streamingRef.current) return;
 
         setMessages(
-          history.length > 0 ? mapHistoryToMessages(history) : welcomeMessages
+          historyResult.messages.length > 0
+            ? mapHistoryToMessages(historyResult.messages)
+            : welcomeMessages
         );
+
+        const documentIds = sessionResult.document_ids;
+        if (documentIds.length === 0) return;
+
+        const documentId = documentIds[documentIds.length - 1];
+        const restored = await restoreSessionAttachment(documentId);
+        if (historyRequestRef.current !== requestId) return;
+        if (inflightRef.current || streamingRef.current) return;
+
+        if (restored.attachment) {
+          setAttachment(restored.attachment);
+          setSessionNotice(null);
+        } else if (restored.notice) {
+          setAttachment(null);
+          setSessionNotice(restored.notice);
+        }
       } catch {
         if (historyRequestRef.current !== requestId) return;
         if (inflightRef.current || streamingRef.current) return;
@@ -529,6 +598,7 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
     queuePosition?: number;
   }) => {
     setRemoveError(null);
+    setSessionNotice(null);
     saveUploadedDocument({
       documentId: payload.documentId,
       fileName: payload.fileName,
@@ -573,6 +643,7 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
     inflight,
     streaming,
     attachment,
+    sessionNotice,
     removeError,
     sendDisabled,
     bottomRef,

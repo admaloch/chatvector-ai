@@ -35,6 +35,7 @@ export default function ChatPage() {
     inflight,
     streaming,
     attachment,
+    sessionNotice,
     removeError,
     sendDisabled,
     bottomRef,
@@ -172,6 +173,7 @@ export default function ChatPage() {
             inflight={inflight}
             streaming={streaming}
             attachment={attachment}
+            sessionNotice={sessionNotice}
             removeError={removeError}
             poll={poll}
             handleSend={handleSend}
