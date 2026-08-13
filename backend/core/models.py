@@ -36,7 +36,7 @@ class Document(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     file_name = Column(String, nullable=False)
-    tenant_id = Column(String(255), nullable=True, index=True)
+    tenant_id = Column(String(255), nullable=False, index=True)
     status = Column(String, nullable=False, default="uploaded")
     chunks = Column(JSONB, nullable=False, default=lambda: {"total": 0, "processed": 0})
     error = Column(JSONB, nullable=True)
