@@ -2,7 +2,7 @@
 
 `@chatvector/sdk` is the official, Node-first TypeScript client for the
 ChatVector API. It covers document upload and readiness polling,
-non-streaming chat, batch chat, and sessions.
+non-streaming chat, streaming chat, batch chat, and sessions.
 
 > [!WARNING]
 > This package is for server-side Node.js applications only. Never put a
@@ -81,6 +81,46 @@ try {
 }
 ```
 
+## Streaming chat
+
+When the backend has streaming enabled (`ENABLE_STREAMING=true`), use
+`streamChat()` to consume Server-Sent Events as typed events:
+
+```ts
+import type { ChatStreamEvent } from "@chatvector/sdk";
+
+const controller = new AbortController();
+
+try {
+  for await (const event of client.streamChat(
+    {
+      question: "Summarize the vacation policy.",
+      docId: uploaded.documentId,
+      sessionId: session.id,
+    },
+    { signal: controller.signal },
+  )) {
+    if (event.type === "token") {
+      process.stdout.write(event.content);
+      continue;
+    }
+
+    console.error("\nSources:", event.sources);
+    console.error("Session:", event.sessionId);
+  }
+} catch (error) {
+  if (error instanceof ChatVectorAPIError) {
+    console.error("Streaming chat failed:", error.kind, error.code);
+  } else {
+    throw error;
+  }
+}
+```
+
+Streaming requests are never automatically retried once response bytes begin.
+Connect an `AbortSignal` when the downstream caller disconnects so the SDK
+stops reading the stream promptly.
+
 Uploads also accept replayable in-memory data:
 
 ```ts
@@ -139,7 +179,7 @@ Backoff uses bounded exponential full jitter and respects valid delta-seconds
 or HTTP-date `Retry-After` headers.
 
 Mutating requests are never automatically replayed. This includes document
-uploads, chat, batch chat, session creation, and session deletion. The API has
+uploads, chat, streaming chat, batch chat, session creation, and session deletion. The API has
 no idempotency-key contract, so replaying an ambiguous request could duplicate
 documents, sessions, or messages.
 
