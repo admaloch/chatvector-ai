@@ -6,6 +6,7 @@ import type {
   BatchChatResponse,
   ChatRequest,
   ChatResponse,
+  ChatStreamEvent,
   CreateSessionInput,
   DocumentResponse,
   DocumentStatus,
@@ -81,6 +82,13 @@ export class ChatVectorClient {
 
   chat(request: ChatRequest, options?: RequestOptions): Promise<ChatResponse> {
     return this.chats.chat(request, options);
+  }
+
+  streamChat(
+    request: ChatRequest,
+    options?: RequestOptions,
+  ): AsyncIterable<ChatStreamEvent> {
+    return this.chats.streamChat(request, options);
   }
 
   batchChat(

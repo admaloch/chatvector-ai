@@ -202,7 +202,7 @@ describe("packed @chatvector/sdk exports", () => {
         assert.equal(isChatVectorError({ kind: "api", message: "x" }), true);
         const client = new ChatVectorClient({ baseUrl: "https://api.example.test" });
         assert.equal(typeof client.chat, "function");
-        assert.equal("streamChat" in client, false);
+        assert.equal(typeof client.streamChat, "function");
         console.log("esm-ok");
       `,
     );

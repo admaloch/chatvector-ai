@@ -50,6 +50,13 @@ export function textResponse(
   return new Response(body, init);
 }
 
+export function sseResponse(body: string): Response {
+  return textResponse(body, {
+    status: 200,
+    headers: { "Content-Type": "text/event-stream" },
+  });
+}
+
 export function emptyResponse(status = 204): Response {
   return new Response(null, { status });
 }

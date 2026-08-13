@@ -1,3 +1,4 @@
+import { iterChatStreamEvents } from "../internal/sse.js";
 import type {
   BatchChatQuery,
   BatchChatRequest,
@@ -6,6 +7,7 @@ import type {
   ChatRequest,
   ChatResponse,
   ChatSource,
+  ChatStreamEvent,
   RequestOptions,
 } from "../models.js";
 import { HttpClient } from "../internal/http.js";
@@ -58,6 +60,43 @@ export class ChatsResource {
       ...signalOption(options.signal),
     });
     return mapBatchResponse(payload);
+  }
+
+  streamChat(
+    request: ChatRequest,
+    options: RequestOptions = {},
+  ): AsyncIterable<ChatStreamEvent> {
+    return this.iterStreamChat(request, options);
+  }
+
+  private async *iterStreamChat(
+    request: ChatRequest,
+    options: RequestOptions = {},
+  ): AsyncGenerator<ChatStreamEvent> {
+    assertRequiredString(request?.question, "question");
+    assertRequiredString(request?.docId, "docId");
+    const body: Record<string, unknown> = {
+      question: request.question,
+      doc_id: request.docId,
+    };
+    addOptional(body, "match_count", request.matchCount);
+    addOptional(body, "session_id", request.sessionId);
+    addOptional(body, "scope", request.scope);
+
+    const response = await this.http.openStream("POST", "/chat/stream", {
+      json: body,
+      ...signalOption(options.signal),
+    });
+
+    try {
+      yield* iterChatStreamEvents(response, options.signal);
+    } finally {
+      try {
+        await response.body?.cancel();
+      } catch {
+        // Body cancellation failures are not authoritative for callers.
+      }
+    }
   }
 }
 

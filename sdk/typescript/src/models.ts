@@ -68,6 +68,16 @@ export type DocumentStatus = {
   _raw?: Record<string, unknown>;
 };
 
+export type ChatStreamEvent =
+  | { type: "token"; content: string }
+  | {
+      type: "complete";
+      sessionId: string | null;
+      sources: ChatSource[];
+      latencyMs: number;
+      model: string;
+    };
+
 export type ChatResponse = {
   question: string;
   docId: string;

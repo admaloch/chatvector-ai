@@ -17,6 +17,7 @@ export type {
   ChatRequest,
   ChatResponse,
   ChatSource,
+  ChatStreamEvent,
   CreateSessionInput,
   DocumentResponse,
   DocumentStatus,

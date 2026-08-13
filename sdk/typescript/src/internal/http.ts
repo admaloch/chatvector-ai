@@ -121,6 +121,38 @@ export class HttpClient {
     await this.request(method, path, options, false);
   }
 
+  async openStream(
+    method: string,
+    path: string,
+    options: HttpRequestOptions = {},
+  ): Promise<Response> {
+    const normalizedMethod = method.toUpperCase();
+    const url = `${this.baseUrl}/${path.replace(/^\/+/, "")}`;
+    throwIfAborted(options.signal);
+
+    try {
+      const response = await this.fetchOnce(normalizedMethod, url, options);
+      if (response.ok) {
+        return response;
+      }
+
+      const retryAfterMs = parseRetryAfter(
+        response.headers.get("retry-after"),
+        this.clock.now(),
+      );
+      const text = await this.readResponseText(response, options.signal);
+      throw this.decodeHttpError(response, retryAfterMs, text);
+    } catch (error) {
+      if (options.signal?.aborted) {
+        throw abortReason(options.signal);
+      }
+      if (isChatVectorError(error)) {
+        throw error;
+      }
+      throw this.mapTransportError(error).error;
+    }
+  }
+
   private async request(
     method: string,
     path: string,
