@@ -26,6 +26,42 @@ RetrievalScopeParam = Literal["session", "tenant"]
 DebugRetrievalQuery = Annotated[bool, Query()]
 
 
+class ChatSourceResponse(BaseModel):
+    """Citation metadata for a retrieved chunk."""
+
+    file_name: Optional[str] = None
+    page_number: Optional[int] = None
+    chunk_index: Optional[int] = None
+    score: Optional[float] = Field(
+        default=None,
+        description="Numeric relevance value from the final ranking stage.",
+    )
+    score_type: Optional[str] = Field(
+        default=None,
+        description="Label describing what score means (vector, hybrid_rrf, reranked).",
+    )
+    vector_score: Optional[float] = Field(
+        default=None,
+        description="Cosine similarity from pgvector when available.",
+    )
+    full_text_score: Optional[float] = Field(
+        default=None,
+        description="PostgreSQL ts_rank from full-text search when available.",
+    )
+    rrf_score: Optional[float] = Field(
+        default=None,
+        description="Reciprocal Rank Fusion score when hybrid retrieval ran.",
+    )
+    reranker_score: Optional[float] = Field(
+        default=None,
+        description="Combined retrieval + lexical score from the reranker.",
+    )
+    rerank_order: Optional[int] = Field(
+        default=None,
+        description="1-based position after reranking when reranking ran.",
+    )
+
+
 async def _assert_document_owned(doc_id: str, tenant_id: str) -> None:
     """Raise 404 if the document does not exist or belongs to a different tenant."""
     doc = await db.get_document(doc_id, tenant_id=tenant_id)

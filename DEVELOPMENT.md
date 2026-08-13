@@ -522,6 +522,25 @@ When reranking is enabled (`ENABLE_RERANKING=true`), final citations use
 `score_type: "reranked"`. When hybrid retrieval is active, citations use
 `hybrid_rrf` unless reranking runs afterward.
 
+#### Component score fields (retrieval inspector)
+
+Each `sources[]` item may also include optional component scores when the
+corresponding retrieval stage ran. These fields are additive — existing
+clients can ignore them. The top-level `score` and `score_type` fields are
+unchanged.
+
+| Field | Description | Present when |
+|---|---|---|
+| `vector_score` | Cosine similarity from pgvector (`1 - distance`) | Vector search ran for this chunk |
+| `full_text_score` | PostgreSQL `ts_rank` from keyword search | Hybrid retrieval ran and the chunk matched keyword search |
+| `rrf_score` | Reciprocal Rank Fusion score | Hybrid retrieval merged vector + keyword ranks |
+| `reranker_score` | Combined retrieval + lexical overlap score | Reranking ran (`ENABLE_RERANKING=true`) |
+| `rerank_order` | 1-based position after reranking | Reranking ran |
+
+Component fields are omitted when the corresponding stage did not run or did
+not produce a value for that chunk. Compare component scores only within the
+same field — they are not interchangeable across fields or with `score`.
+
 ---
 
 ```env
