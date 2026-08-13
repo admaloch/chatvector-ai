@@ -88,5 +88,26 @@ export function inspectorSourceFields(source: ChatSource): InspectorSourceField[
   if (source.score_type) {
     fields.push({ label: "Score type", value: source.score_type });
   }
+  if (source.vector_score != null) {
+    fields.push({ label: "Vector score", value: source.vector_score.toFixed(2) });
+  }
+  if (source.full_text_score != null) {
+    fields.push({
+      label: "Full-text score",
+      value: source.full_text_score.toFixed(2),
+    });
+  }
+  if (source.rrf_score != null) {
+    fields.push({ label: "RRF score", value: source.rrf_score.toFixed(2) });
+  }
+  if (source.reranker_score != null) {
+    fields.push({
+      label: "Reranker score",
+      value: source.reranker_score.toFixed(2),
+    });
+  }
+  if (source.rerank_order != null) {
+    fields.push({ label: "Rerank order", value: String(source.rerank_order) });
+  }
   return fields;
 }

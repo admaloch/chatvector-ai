@@ -53,6 +53,11 @@ export type ChatSource = {
   chunk_index: number | null;
   score?: number | null;
   score_type?: string | null;
+  vector_score?: number | null;
+  full_text_score?: number | null;
+  rrf_score?: number | null;
+  reranker_score?: number | null;
+  rerank_order?: number | null;
 };
 
 /** Opt-in retrieval debug metadata when the backend exposes it. */
