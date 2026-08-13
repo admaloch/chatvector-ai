@@ -87,7 +87,7 @@ ChatVector is designed for:
 
 ### Phases 1–2.5 Complete | Phase 3 Mostly Shipped
 
-Phases 1, 2, and 2.5 are complete. Phase 3 platform work is largely shipped — API-key authentication, tenant isolation, Python SDK parity, hybrid retrieval, and the expanded frontend demo are in place. Remaining Phase 3 work is focused on ecosystem (Node/TypeScript SDK), distributed rate-limit storage, and frontend chat SSE streaming. See [ROADMAP.md](ROADMAP.md) for the full breakdown.
+Phases 1, 2, and 2.5 are complete. Phase 3 platform work is largely shipped — API-key authentication, tenant isolation, durable sessions, hybrid retrieval, Python and TypeScript SDKs, component score metadata, and the expanded frontend demo are in place. Remaining Phase 3 work is focused on frontend chat SSE wiring in the demo UI, distributed rate-limit storage, and API-key lifecycle automation beyond CLI list/revoke. See [ROADMAP.md](ROADMAP.md) for the full breakdown.
 
 **What's working today:**
 
@@ -117,7 +117,9 @@ Phases 1, 2, and 2.5 are complete. Phase 3 platform work is largely shipped — 
 - ✅ Pluggable embedding providers (Gemini, OpenAI, Ollama, Voyage AI)
 - ✅ Mixed-provider configurations (e.g. Claude + Voyage)
 - ✅ Response metadata: `latency_ms` and `model` on chat and batch responses
+- ✅ Optional component score metadata on citation sources
 - ✅ Python client SDK (upload, status, chat, batch, sessions, streaming, retrieval scopes)
+- ✅ TypeScript SDK (`@chatvector/sdk`) for Node backends (upload, chat, batch, sessions, streaming)
 
 **Frontend Demo**
 - ✅ Document upload with live pipeline stage display and ingestion SSE progress
@@ -129,11 +131,9 @@ Phases 1, 2, and 2.5 are complete. Phase 3 platform work is largely shipped — 
 - 🚧 Real-time chat SSE streaming in the demo UI (backend `/chat/stream` is ready; demo uses `POST /chat` with simulated typing in `MessageList.tsx`)
 
 **Active Phase 3 work:**
-- 🚧 Node.js/TypeScript SDK (planned)
-- 🚧 Redis-backed distributed rate-limit storage across workers
-- 🚧 Durable Postgres-backed session metadata (messages persisted; session registry is in-memory)
 - 🚧 Frontend demo chat SSE streaming wired to `/chat/stream`
-- 🚧 API-key lifecycle tooling beyond CLI create (rotation, expiration)
+- 🚧 Redis-backed distributed rate-limit storage across workers
+- 🚧 API-key lifecycle automation beyond CLI create/list/revoke (rotation, expiration)
 
 ---
 
@@ -313,7 +313,7 @@ Frontend runs at http://localhost:3000
 
 ### Python SDK
 
-A synchronous Python client covers upload, status polling, non-streaming and streaming chat, batch chat, session management, and retrieval scope options. A Node.js/TypeScript SDK is planned for Phase 3.
+A synchronous Python client covers upload, status polling, non-streaming and streaming chat, batch chat, session management, and retrieval scope options. A Node.js/TypeScript SDK (`@chatvector/sdk`) is also available under `sdk/typescript/`.
 
 ```bash
 pip install ./sdk/python

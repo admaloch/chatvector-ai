@@ -83,7 +83,7 @@ Transform ChatVector into a **multi-tenant, session-aware document intelligence 
 
 **Core Principle:** Simple by default, powerful when explicitly enabled.
 
-> **Current status:** Phase 3A and 3B backend platform work is largely complete — API-key authentication, tenant isolation, sessions, streaming, hybrid retrieval, Python SDK parity, and the expanded frontend demo are shipped. Remaining work is ecosystem expansion (Node/TypeScript SDK), distributed rate-limit storage, frontend chat SSE wiring, and API-key lifecycle tooling.
+> **Current status:** Phase 3A and 3B backend platform work is largely complete — API-key authentication, tenant isolation, durable sessions, streaming, hybrid retrieval, Python and TypeScript SDKs, component score metadata, and the expanded frontend demo are shipped. Remaining work is frontend chat SSE wiring in the demo UI, distributed rate-limit storage, API-key lifecycle automation beyond CLI list/revoke, and documentation/examples polish.
 
 ---
 
@@ -145,20 +145,25 @@ This phase introduces the primary architectural shift. Phase 3B and 3C work buil
 - SQLAlchemy/PostgreSQL via `DATABASE_URL` is the only supported database backend in all environments
 - Managed/cloud Postgres (Neon, RDS, Cloud SQL, Supabase Postgres via direct connection) supported through standard connection strings
 
+**Migration ledger**
+
+- Numbered SQL migrations tracked in `schema_migrations` ledger table (`008_schema_migrations.sql`)
+- Startup validation ensures fresh and existing installations apply migrations consistently
+
+**API-key CLI tooling**
+
+- `list-tenant-keys` and `revoke-tenant-key` commands alongside `create-tenant-key`
+
 #### ⏳ Remaining
 
 **API-key lifecycle tooling**
 
-- Programmatic rotation, expiration, and revocation workflows beyond CLI create and DB status updates
+- Programmatic rotation, expiration, and revocation workflows beyond CLI create/list/revoke and DB status updates
 - Optional `external_user_id` field for developer-side user mapping
 
 **Frontend demo chat SSE**
 
 - Backend `/chat/stream` is ready; the demo chat page still uses non-streaming `POST /chat` with a simulated character-by-character typing animation
-
-**Durable session metadata** ✅
-
-- Postgres-backed session registry (`sessions` table) and `document_ids` bindings (`session_documents` table) — migration `007_sessions.sql`; messages and session state all survive restarts
 
 **Distributed rate limiting**
 
@@ -223,9 +228,16 @@ Build on the platform foundation to improve response quality and expand develope
 - Retrieval scope options (`session` / `tenant`)
 - Typed responses, structured errors, relevance scores, model/latency metadata
 
+**TypeScript SDK (`@chatvector/sdk`)**
+
+- Node-first typed client for upload, status polling, `waitForReady`, chat, batch chat, and sessions
+- Streaming chat (`streamChat`) with typed SSE events
+- Structured error hierarchy, retry controls, and AbortSignal cancellation
+- Fastify server-side proxy example
+
 **Frontend demo improvements**
 
-- Chat with retrieval controls and retrieval inspector
+- Chat with retrieval controls and retrieval inspector (including query traces and component score breakdown)
 - Batch compare and batch synthesize modes
 - Live system status page
 - Structured API error display
@@ -233,19 +245,16 @@ Build on the platform foundation to improve response quality and expand develope
 - Shared components and loading skeletons
 - Ingestion SSE progress (document status stream)
 
+**Citation component scores**
+
+- Optional per-component retrieval metadata on API sources (`vector_score`, `full_text_score`, `rrf_score`, `reranker_score`, `rerank_order`)
+- Retrieval inspector displays component breakdown when the backend returns it
+
 #### ⏳ Remaining
-
-**Node.js / TypeScript SDK**
-
-- First-class SDK for backend developers — planned, not yet implemented
-- Typed API client, retry with backoff, `waitForReady()` polling helper
-- Session-aware chat support
-- Published to npm
 
 **Inspection and observability tooling**
 
 - Query transformation visualization (opt-in debug metadata beyond current `retrieval_debug` payloads)
-- Richer per-component retrieval score breakdown (today: collapsed `score` + `score_type` on citations)
 - Async Python SDK client
 - Ingestion SSE client in Python SDK (document status stream not exposed in SDK)
 
@@ -340,10 +349,10 @@ Progress toward the Phase 3 north star:
 - ✅ Response personas, citation relevance scores/score types, and response metadata (`latency_ms`, `model`)
 - ✅ Bearer API-key authentication and strict tenant isolation in production
 - ✅ Python SDK with sessions, streaming, and retrieval scope support
+- ✅ TypeScript SDK v0 with upload, chat, batch, sessions, and streaming
 - ✅ SQLAlchemy/PostgreSQL as the only database backend (`DATABASE_URL` in all environments)
-- ✅ Frontend demo: chat, batch compare/synthesize, status, retrieval controls, retrieval inspector
+- ✅ Frontend demo: chat, batch compare/synthesize, status, retrieval controls, retrieval inspector with component scores
 - ⏳ Frontend demo chat SSE streaming (backend ready; UI still uses `POST /chat` with simulated typing)
 - ✅ Durable Postgres-backed session metadata (sessions table + session_documents table; fully persistent)
-- ⏳ Node.js/TypeScript SDK planned
 - ⏳ Redis-backed distributed rate-limit storage across workers
 - ⏳ Documentation site, examples, and advanced inspection tooling in progress
