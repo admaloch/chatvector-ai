@@ -460,6 +460,8 @@ class SQLAlchemyService(DatabaseService):
         *,
         similarity: float | None = None,
         score_type: str | None = None,
+        vector_score: float | None = None,
+        full_text_score: float | None = None,
     ) -> ChunkMatch:
         return ChunkMatch(
             id=str(chunk.id),
@@ -469,11 +471,46 @@ class SQLAlchemyService(DatabaseService):
             created_at=str(chunk.created_at) if chunk.created_at else None,
             similarity=similarity,
             score_type=score_type,
+            vector_score=vector_score,
+            full_text_score=full_text_score,
             chunk_index=chunk.chunk_index,
             page_number=chunk.page_number,
             character_offset_start=chunk.character_offset_start,
             character_offset_end=chunk.character_offset_end,
             file_name=file_name,
+        )
+
+    @staticmethod
+    def _merge_hybrid_match(
+        existing: ChunkMatch | None,
+        incoming: ChunkMatch,
+    ) -> ChunkMatch:
+        """Combine vector and keyword matches for the same chunk ID."""
+        if existing is None:
+            return incoming
+        return ChunkMatch(
+            id=existing.id,
+            chunk_text=existing.chunk_text,
+            document_id=existing.document_id,
+            embedding=existing.embedding,
+            created_at=existing.created_at,
+            similarity=existing.similarity,
+            score_type=existing.score_type,
+            vector_score=(
+                existing.vector_score
+                if existing.vector_score is not None
+                else incoming.vector_score
+            ),
+            full_text_score=(
+                existing.full_text_score
+                if existing.full_text_score is not None
+                else incoming.full_text_score
+            ),
+            chunk_index=existing.chunk_index,
+            page_number=existing.page_number,
+            character_offset_start=existing.character_offset_start,
+            character_offset_end=existing.character_offset_end,
+            file_name=existing.file_name,
         )
 
     async def _find_vector_chunks(
@@ -501,6 +538,7 @@ class SQLAlchemyService(DatabaseService):
                 file_name,
                 similarity=float(similarity) if similarity is not None else None,
                 score_type=SCORE_TYPE_VECTOR,
+                vector_score=float(similarity) if similarity is not None else None,
             )
             for chunk, file_name, similarity in result.all()
         ]
@@ -538,8 +576,13 @@ class SQLAlchemyService(DatabaseService):
             raise
         rows = result.all()
         return [
-            self._chunk_match_from_row(chunk, file_name)
-            for chunk, file_name, _rank in rows
+            self._chunk_match_from_row(
+                chunk,
+                file_name,
+                similarity=float(rank) if rank is not None else None,
+                full_text_score=float(rank) if rank is not None else None,
+            )
+            for chunk, file_name, rank in rows
         ]
 
     async def _search_similar_chunks(
@@ -579,8 +622,13 @@ class SQLAlchemyService(DatabaseService):
                             tenant_id=tenant_id,
                         )
                         matches_by_id: dict[str, ChunkMatch] = {}
-                        for match in vector_matches + keyword_matches:
+                        for match in vector_matches:
                             matches_by_id[match.id] = match
+                        for match in keyword_matches:
+                            matches_by_id[match.id] = self._merge_hybrid_match(
+                                matches_by_id.get(match.id),
+                                match,
+                            )
 
                         fused_ids = reciprocal_rank_fusion(
                             [

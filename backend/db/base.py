@@ -33,6 +33,11 @@ class ChunkMatch:
     created_at: Optional[str] = None
     similarity: Optional[float] = None
     score_type: Optional[str] = None
+    vector_score: Optional[float] = None
+    full_text_score: Optional[float] = None
+    rrf_score: Optional[float] = None
+    reranker_score: Optional[float] = None
+    rerank_order: Optional[int] = None
     chunk_index: Optional[int] = None
     page_number: Optional[int] = None
     character_offset_start: Optional[int] = None

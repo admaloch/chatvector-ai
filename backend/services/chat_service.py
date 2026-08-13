@@ -204,6 +204,15 @@ async def _finalize_retrieved_chunks(question: str, chunks: list, match_count: i
     return await rerank_chunks_if_enabled(question, chunks, top_k=match_count)
 
 
+_COMPONENT_SCORE_FIELDS = (
+    "vector_score",
+    "full_text_score",
+    "rrf_score",
+    "reranker_score",
+    "rerank_order",
+)
+
+
 def _build_sources(chunks: list) -> list[dict]:
     """Extract citation metadata from retrieved chunks."""
     sources: list[dict] = []
@@ -216,6 +225,10 @@ def _build_sources(chunks: list) -> list[dict]:
         }
         if chunk.score_type is not None:
             source["score_type"] = chunk.score_type
+        for field in _COMPONENT_SCORE_FIELDS:
+            value = getattr(chunk, field, None)
+            if value is not None:
+                source[field] = value
         sources.append(source)
     return sources
 

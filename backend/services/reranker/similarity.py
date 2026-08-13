@@ -70,7 +70,7 @@ class SimilarityRerankerProvider(RerankerProvider):
         scored.sort(key=lambda item: item[0], reverse=True)
         limit = request.top_k if request.top_k is not None else len(scored)
         reranked: list[ChunkMatch] = []
-        for combined_score, chunk in scored[:limit]:
+        for rerank_order, (combined_score, chunk) in enumerate(scored[:limit], start=1):
             reranked.append(
                 ChunkMatch(
                     id=chunk.id,
@@ -80,6 +80,11 @@ class SimilarityRerankerProvider(RerankerProvider):
                     created_at=chunk.created_at,
                     similarity=combined_score,
                     score_type=SCORE_TYPE_RERANKED,
+                    vector_score=chunk.vector_score,
+                    full_text_score=chunk.full_text_score,
+                    rrf_score=chunk.rrf_score,
+                    reranker_score=combined_score,
+                    rerank_order=rerank_order,
                     chunk_index=chunk.chunk_index,
                     page_number=chunk.page_number,
                     character_offset_start=chunk.character_offset_start,
