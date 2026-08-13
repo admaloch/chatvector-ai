@@ -108,4 +108,65 @@ describe("citations helpers", () => {
       { label: "Chunk", value: "0" },
     ]);
   });
+
+  it("formats inspector component score fields when present", () => {
+    expect(
+      inspectorSourceFields({
+        file_name: "report.pdf",
+        page_number: 2,
+        chunk_index: 3,
+        score: 0.77,
+        score_type: "reranked",
+        vector_score: 0.55,
+        full_text_score: 0.42,
+        rrf_score: 0.03,
+        reranker_score: 0.77,
+        rerank_order: 1,
+      })
+    ).toEqual([
+      { label: "File", value: "report.pdf" },
+      { label: "Page", value: "2" },
+      { label: "Chunk", value: "3" },
+      { label: "Score", value: "0.77" },
+      { label: "Score type", value: "reranked" },
+      { label: "Vector score", value: "0.55" },
+      { label: "Full-text score", value: "0.42" },
+      { label: "RRF score", value: "0.03" },
+      { label: "Reranker score", value: "0.77" },
+      { label: "Rerank order", value: "1" },
+    ]);
+  });
+
+  it("omits component score fields when absent", () => {
+    expect(
+      inspectorSourceFields({
+        file_name: "report.pdf",
+        page_number: 1,
+        chunk_index: 0,
+        score: 0.82,
+        score_type: "vector",
+      })
+    ).toEqual([
+      { label: "File", value: "report.pdf" },
+      { label: "Page", value: "1" },
+      { label: "Chunk", value: "0" },
+      { label: "Score", value: "0.82" },
+      { label: "Score type", value: "vector" },
+    ]);
+  });
+
+  it("keeps citation lines unchanged when component scores are present", () => {
+    expect(
+      formatCitationLine({
+        file_name: "report.pdf",
+        page_number: 2,
+        chunk_index: 3,
+        score: 0.77,
+        score_type: "reranked",
+        vector_score: 0.55,
+        reranker_score: 0.77,
+        rerank_order: 1,
+      })
+    ).toBe("report.pdf · p.2 · chunk 3 · score 0.77");
+  });
 });
