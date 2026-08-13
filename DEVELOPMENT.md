@@ -720,6 +720,21 @@ DELETE FROM documents WHERE tenant_id IS NULL;
 After backfilling, apply `006` to add the foreign key from `documents.tenant_id → tenants.id`.
 The FK is guarded by a `DO … IF NOT EXISTS` block so it is safe to re-run.
 
+**Enforce NOT NULL on `documents.tenant_id` (`009`):**
+
+Fresh Docker/CI installs apply `009_documents_tenant_id_not_null.sql` automatically after
+backfill-safe checks pass. Existing installations with legacy `tenant_id IS NULL` rows
+must backfill first (same options as above), then apply:
+
+```bash
+docker compose exec db psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+    -f /docker-entrypoint-initdb.d/009_documents_tenant_id_not_null.sql
+```
+
+If NULL rows remain, migration `009` logs a notice and skips the constraint so you can
+backfill and re-run. Once enforced, deleting a tenant cascades to its documents
+(`ON DELETE CASCADE` replaces the earlier `ON DELETE SET NULL` from `006`).
+
 **Bootstrap a tenant and API key** (run once per environment):
 
 ```bash
