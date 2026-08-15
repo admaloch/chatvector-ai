@@ -21,6 +21,16 @@ from typing import Type, Tuple, Callable, Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# Shared retry contract (backend services). SDK clients use aligned defaults documented
+# in DEVELOPMENT.md — max_retries counts retries *after* the first attempt.
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_BASE_DELAY = 1.0
+DEFAULT_BACKOFF = 2.0
+DEFAULT_DB_TIMEOUT_SEC = 10.0
+
+# HTTP status codes treated as transient when calling external APIs or in SDK clients.
+RETRYABLE_HTTP_STATUS_CODES = frozenset({408, 429, 502, 503, 504})
+
 TRANSIENT_DB_ERROR_PATTERNS = [
     "timeout",
     "connection",
@@ -43,9 +53,16 @@ def is_transient_error(exception: Exception) -> bool:
 
     # Provider-layer transient errors (rate limits, timeouts) are always retryable
     # regardless of which provider is active.
-    from services.providers.base import ProviderRateLimitError, ProviderTimeoutError
+    from services.providers.base import (
+        ProviderConnectionError,
+        ProviderRateLimitError,
+        ProviderTimeoutError,
+    )
 
-    if isinstance(exception, (ProviderRateLimitError, ProviderTimeoutError)):
+    if isinstance(
+        exception,
+        (ProviderRateLimitError, ProviderTimeoutError, ProviderConnectionError),
+    ):
         return True
 
     error_str = str(exception).lower()

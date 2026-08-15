@@ -164,6 +164,13 @@ def test_is_transient_error_provider_timeout():
     assert is_transient_error(ProviderTimeoutError("Request timed out")) is True
 
 
+def test_is_transient_error_provider_connection():
+    """ProviderConnectionError should always be transient."""
+    from services.providers.base import ProviderConnectionError
+
+    assert is_transient_error(ProviderConnectionError("Connection reset")) is True
+
+
 def test_is_transient_error_generic_provider_error_non_transient():
     """A generic ProviderError (e.g. bad request) should not be transient."""
     from services.providers.base import ProviderError
