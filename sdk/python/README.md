@@ -52,6 +52,42 @@ for source in answer.sources:
 
 For ingestion progress over SSE instead of polling, see [Document Status Streaming](#document-status-streaming).
 
+## Async Client
+
+Use ``AsyncChatVectorClient`` in FastAPI and other async Python apps without
+blocking the event loop:
+
+```python
+import asyncio
+
+from chatvector import AsyncChatVectorClient
+
+async def main() -> None:
+    async with AsyncChatVectorClient(base_url="http://localhost:8000") as client:
+        upload = await client.upload_document("handbook.pdf")
+        ready = await client.wait_for_ready(upload.document_id, timeout=90, interval=3)
+        answer = await client.chat(
+            question="What are the onboarding steps?",
+            doc_id=ready.document_id,
+            match_count=3,
+        )
+        print(answer.answer)
+
+asyncio.run(main())
+```
+
+Streaming chat works the same way with ``async for``:
+
+```python
+async for event in client.stream_chat("Summarize this", "doc-1"):
+    if event.type == "token":
+        print(event.content, end="")
+```
+
+The async client mirrors the sync surface for upload, status, ``wait_for_ready``,
+chat, batch chat, sessions, and streaming chat. Document status SSE streaming
+(``iter_document_status``) is sync-only for now.
+
 ## Authentication
 
 ChatVector backends running with `APP_ENV=production` require an API key on every
@@ -225,5 +261,4 @@ The backend currently exposes document upload at `/upload`. The SDK targets `/in
 
 ## Current Gaps
 
-- **No async client** — synchronous `httpx` only
 - **No per-component retrieval scores** — citations expose collapsed `score` + `score_type` only

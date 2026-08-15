@@ -1,6 +1,7 @@
 """Public package exports for the ChatVector Python SDK."""
 
 from .client import ChatVectorClient
+from .async_client import AsyncChatVectorClient
 from .exceptions import (
     ChatVectorAPIError,
     ChatVectorAuthError,
@@ -23,6 +24,7 @@ from .models import (
 )
 
 __all__ = [
+    "AsyncChatVectorClient",
     "ChatVectorAPIError",
     "ChatVectorAuthError",
     "ChatVectorClient",
