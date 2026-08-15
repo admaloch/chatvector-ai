@@ -270,6 +270,10 @@ See the runnable scripts in [examples](./examples):
 - `session_chat.py`
 - `stream_chat.py`
 
+Server-side FastAPI proxy (upload → wait → session → chat):
+
+- [examples/fastapi-proxy](./examples/fastapi-proxy/README.md)
+
 ## API Notes
 
 The backend currently exposes document upload at `/upload`. The SDK targets `/ingest` as the forward-facing contract and transparently falls back to `/upload` for compatibility with the current repository backend.

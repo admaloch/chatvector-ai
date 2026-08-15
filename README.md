@@ -345,7 +345,7 @@ with ChatVectorClient("http://localhost:8000", api_key="cv_live_...") as client:
 
 In development (`APP_ENV=development`), the `api_key` parameter can be omitted — the backend bypasses authentication and attributes requests to `DEV_TENANT_ID`.
 
-See [sdk/python/README.md](sdk/python/README.md) for authentication, error handling, and runnable examples.
+See [sdk/python/README.md](sdk/python/README.md) for authentication, error handling, runnable examples, and the [FastAPI proxy example](sdk/python/examples/fastapi-proxy/README.md).
 
 ### TypeScript SDK
 

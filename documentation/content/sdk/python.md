@@ -69,6 +69,10 @@ Runnable scripts in the repository:
 - [`sdk/python/examples/session_chat.py`](https://github.com/chatvector-ai/chatvector-ai/blob/main/sdk/python/examples/session_chat.py)
 - [`sdk/python/examples/stream_chat.py`](https://github.com/chatvector-ai/chatvector-ai/blob/main/sdk/python/examples/stream_chat.py)
 
+Server-side FastAPI proxy example (keeps API keys off the client):
+
+- [`sdk/python/examples/fastapi-proxy/`](https://github.com/chatvector-ai/chatvector-ai/tree/main/sdk/python/examples/fastapi-proxy)
+
 ## Error handling
 
 The SDK maps HTTP failures to typed exceptions such as `ChatVectorAuthError`, `ChatVectorRateLimitError`, and `ChatVectorTimeoutError`. See the [README](https://github.com/chatvector-ai/chatvector-ai/blob/main/sdk/python/README.md#error-handling) for the full hierarchy.
