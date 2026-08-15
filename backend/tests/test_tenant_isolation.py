@@ -18,6 +18,8 @@ Coverage:
   - cross-tenant document status returns None
   - cross-tenant document delete skips silently
   - vector retrieval enforces tenant_id at DB level
+  - keyword / hybrid retrieval enforces tenant_id at DB level
+  - tenant-scope retrieval returns only owning tenant's chunks
   - list_tenant_documents returns only own documents
   - DLQEntry carries tenant_id (unit: no DB needed)
   - development bypass via AuthContext (no DB needed)
@@ -29,6 +31,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import sys
+from pathlib import Path
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -165,6 +169,33 @@ async def _create_test_tenant_and_key(
 
 def _dummy_embedding(dim: int = 3) -> list[float]:
     return [0.1] * dim
+
+
+async def _ensure_hybrid_migration(svc: SQLAlchemyService) -> None:
+    """Apply 004_hybrid_retrieval.sql when content_tsv is not yet present."""
+    from sqlalchemy import text
+
+    async with svc.engine.connect() as conn:
+        result = await conn.execute(
+            text(
+                "SELECT COUNT(*) FROM information_schema.columns "
+                "WHERE table_schema='public' AND table_name='document_chunks' "
+                "AND column_name='content_tsv'"
+            )
+        )
+        if result.scalar() == 0:
+            migration_path = (
+                Path(__file__).resolve().parents[1]
+                / "db"
+                / "init"
+                / "004_hybrid_retrieval.sql"
+            )
+            migration_sql = migration_path.read_text(encoding="utf-8")
+            async with svc.engine.begin() as migrate_conn:
+                for statement in migration_sql.split(";"):
+                    stmt = statement.strip()
+                    if stmt:
+                        await migrate_conn.execute(text(stmt))
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +375,7 @@ async def test_list_tenant_documents_returns_only_own(svc):
 
 
 # ---------------------------------------------------------------------------
-# Vector retrieval isolation  (real DB, uses embedding vectors)
+# Retrieval isolation  (real DB: vector, keyword, hybrid, tenant scope)
 # ---------------------------------------------------------------------------
 
 
@@ -396,6 +427,261 @@ async def test_vector_retrieval_respects_tenant_isolation(svc):
         )
         assert len(results_cross) == 0
     finally:
+        await _cleanup_tenant(tid_a, svc)
+        await _cleanup_tenant(tid_b, svc)
+
+
+@_requires_db
+@pytest.mark.asyncio
+async def test_keyword_retrieval_respects_tenant_isolation(svc):
+    """Hybrid keyword search does not return chunks from another tenant's document."""
+    if sys.platform == "win32":
+        pytest.skip("Psycopg async mode not supported with ProactorEventLoop on Windows")
+
+    from core.config import config, get_embedding_dim
+
+    await _ensure_hybrid_migration(svc)
+    dim = get_embedding_dim()
+    tid_a = f"test-kw-a-{uuid4().hex[:6]}"
+    tid_b = f"test-kw-b-{uuid4().hex[:6]}"
+    unique_token = f"KWISO-{uuid4().hex[:8]}"
+
+    await create_tenant("KW A", tid_a)
+    await create_tenant("KW B", tid_b)
+    try:
+        doc_a = await svc.create_document("tenant_a.txt", tenant_id=tid_a)
+        doc_b = await svc.create_document("tenant_b.txt", tenant_id=tid_b)
+        embedding = [0.01] * dim
+
+        await svc.store_chunks_with_embeddings(
+            doc_a,
+            [
+                ChunkRecord(
+                    chunk_text=f"Tenant A owns {unique_token} exclusively.",
+                    embedding=embedding,
+                    chunk_index=0,
+                    character_offset_start=0,
+                    character_offset_end=40,
+                )
+            ],
+            tenant_id=tid_a,
+        )
+        await svc.store_chunks_with_embeddings(
+            doc_b,
+            [
+                ChunkRecord(
+                    chunk_text="Tenant B filler chunk without the rare token.",
+                    embedding=embedding,
+                    chunk_index=0,
+                    character_offset_start=0,
+                    character_offset_end=40,
+                )
+            ],
+            tenant_id=tid_b,
+        )
+
+        with patch.object(config, "HYBRID_RETRIEVAL_ENABLED", True):
+            own_results = await svc.find_similar_chunks(
+                doc_id=doc_a,
+                query_embedding=embedding,
+                match_count=5,
+                tenant_id=tid_a,
+                query_text=unique_token,
+            )
+            cross_results = await svc.find_similar_chunks(
+                doc_id=doc_a,
+                query_embedding=embedding,
+                match_count=5,
+                tenant_id=tid_b,
+                query_text=unique_token,
+            )
+
+        assert any(unique_token in (m.chunk_text or "") for m in own_results)
+        assert cross_results == []
+    finally:
+        await _cleanup_tenant(tid_a, svc)
+        await _cleanup_tenant(tid_b, svc)
+
+
+@_requires_db
+@pytest.mark.asyncio
+async def test_hybrid_rrf_retrieval_respects_tenant_isolation(svc):
+    """Hybrid RRF merge cannot leak another tenant's chunk via shared embeddings."""
+    if sys.platform == "win32":
+        pytest.skip("Psycopg async mode not supported with ProactorEventLoop on Windows")
+
+    from core.config import config, get_embedding_dim
+
+    await _ensure_hybrid_migration(svc)
+    dim = get_embedding_dim()
+    tid_a = f"test-hyb-a-{uuid4().hex[:6]}"
+    tid_b = f"test-hyb-b-{uuid4().hex[:6]}"
+    unique_token = f"HYBISO-{uuid4().hex[:8]}"
+    embedding = [0.01] * dim
+
+    await create_tenant("Hybrid A", tid_a)
+    await create_tenant("Hybrid B", tid_b)
+    try:
+        doc_a = await svc.create_document("hybrid_a.txt", tenant_id=tid_a)
+        doc_b = await svc.create_document("hybrid_b.txt", tenant_id=tid_b)
+
+        await svc.store_chunks_with_embeddings(
+            doc_a,
+            [
+                ChunkRecord(
+                    chunk_text=f"Tenant A secret {unique_token} with shared embedding.",
+                    embedding=embedding,
+                    chunk_index=0,
+                    character_offset_start=0,
+                    character_offset_end=50,
+                )
+            ],
+            tenant_id=tid_a,
+        )
+        await svc.store_chunks_with_embeddings(
+            doc_b,
+            [
+                ChunkRecord(
+                    chunk_text="Tenant B chunk with identical embedding vector.",
+                    embedding=embedding,
+                    chunk_index=0,
+                    character_offset_start=0,
+                    character_offset_end=50,
+                )
+            ],
+            tenant_id=tid_b,
+        )
+
+        with patch.object(config, "HYBRID_RETRIEVAL_ENABLED", True):
+            cross_doc_results = await svc.find_similar_chunks(
+                doc_id=doc_a,
+                query_embedding=embedding,
+                match_count=5,
+                tenant_id=tid_b,
+                query_text=unique_token,
+            )
+            cross_keyword_results = await svc.find_similar_chunks(
+                doc_id=doc_b,
+                query_embedding=embedding,
+                match_count=5,
+                tenant_id=tid_b,
+                query_text=unique_token,
+            )
+
+        assert cross_doc_results == []
+        assert all(unique_token not in (m.chunk_text or "") for m in cross_keyword_results)
+        assert all(m.document_id == doc_b for m in cross_keyword_results)
+    finally:
+        await _cleanup_tenant(tid_a, svc)
+        await _cleanup_tenant(tid_b, svc)
+
+
+@_requires_db
+@pytest.mark.asyncio
+async def test_tenant_scope_retrieval_returns_only_own_tenant_chunks(svc):
+    """scope=tenant resolution and retrieval return only the authenticated tenant's chunks."""
+    if sys.platform == "win32":
+        pytest.skip("Psycopg async mode not supported with ProactorEventLoop on Windows")
+
+    from core.config import config, get_embedding_dim
+    from services.retrieval_service import (
+        filter_doc_ids_for_tenant,
+        parse_retrieval_scope,
+        resolve_scoped_doc_ids,
+    )
+    from services.tenant_registry import clear_tenant_registry
+
+    await _ensure_hybrid_migration(svc)
+    clear_tenant_registry()
+
+    dim = get_embedding_dim()
+    embedding = [0.0] * dim
+    embedding[0] = 1.0
+    tid_a = f"test-scope-a-{uuid4().hex[:6]}"
+    tid_b = f"test-scope-b-{uuid4().hex[:6]}"
+    token_a = f"SCOPEA-{uuid4().hex[:8]}"
+    token_b = f"SCOPEB-{uuid4().hex[:8]}"
+
+    await create_tenant("Scope A", tid_a)
+    await create_tenant("Scope B", tid_b)
+    try:
+        doc_a1 = await svc.create_document("scope_a_one.txt", tenant_id=tid_a)
+        doc_a2 = await svc.create_document("scope_a_two.txt", tenant_id=tid_a)
+        doc_b = await svc.create_document("scope_b_one.txt", tenant_id=tid_b)
+
+        await svc.store_chunks_with_embeddings(
+            doc_a1,
+            [
+                ChunkRecord(
+                    chunk_text=f"First tenant A document mentions {token_a}.",
+                    embedding=embedding,
+                    chunk_index=0,
+                    character_offset_start=0,
+                    character_offset_end=40,
+                )
+            ],
+            tenant_id=tid_a,
+        )
+        await svc.store_chunks_with_embeddings(
+            doc_a2,
+            [
+                ChunkRecord(
+                    chunk_text="Second tenant A document with generic content.",
+                    embedding=embedding,
+                    chunk_index=0,
+                    character_offset_start=0,
+                    character_offset_end=40,
+                )
+            ],
+            tenant_id=tid_a,
+        )
+        await svc.store_chunks_with_embeddings(
+            doc_b,
+            [
+                ChunkRecord(
+                    chunk_text=f"Tenant B exclusive content with {token_b}.",
+                    embedding=embedding,
+                    chunk_index=0,
+                    character_offset_start=0,
+                    character_offset_end=40,
+                )
+            ],
+            tenant_id=tid_b,
+        )
+
+        tenant_doc_ids = await svc.list_tenant_documents(tid_a)
+        scoped_doc_ids = resolve_scoped_doc_ids(
+            parse_retrieval_scope("tenant"),
+            requested_doc_ids=[doc_a1],
+            tenant_doc_ids=tenant_doc_ids,
+        )
+        scoped_doc_ids = filter_doc_ids_for_tenant(
+            scoped_doc_ids,
+            tenant_doc_ids,
+            tid_a,
+        )
+        assert set(scoped_doc_ids) == {doc_a1, doc_a2}
+        assert doc_b not in scoped_doc_ids
+
+        retrieved_chunks = []
+        with patch.object(config, "HYBRID_RETRIEVAL_ENABLED", True):
+            for scoped_doc_id in scoped_doc_ids:
+                retrieved_chunks.extend(
+                    await svc.find_similar_chunks(
+                        doc_id=scoped_doc_id,
+                        query_embedding=embedding,
+                        match_count=5,
+                        tenant_id=tid_a,
+                        query_text=token_b,
+                    )
+                )
+
+        assert retrieved_chunks
+        assert all(chunk.document_id in {doc_a1, doc_a2} for chunk in retrieved_chunks)
+        assert all(token_b not in (chunk.chunk_text or "") for chunk in retrieved_chunks)
+        assert all(chunk.file_name != "scope_b_one.txt" for chunk in retrieved_chunks)
+    finally:
+        clear_tenant_registry()
         await _cleanup_tenant(tid_a, svc)
         await _cleanup_tenant(tid_b, svc)
 
