@@ -11,7 +11,13 @@ from typing import Any, Mapping, Sequence
 import httpx
 
 from ._retry import WantsRetry, retry_sync
-from ._sse import iter_stream_chat_events, map_stream_error, raise_for_stream_response
+from ._sse import (
+    iter_document_status_events,
+    iter_stream_chat_events,
+    map_document_status_stream_error,
+    map_stream_error,
+    raise_for_stream_response,
+)
 from .exceptions import (
     ChatVectorAPIError,
     ChatVectorAuthError,
@@ -305,6 +311,61 @@ class ChatVectorClient:
             payload["scope"] = scope
         response_payload = self._request_json("POST", "chat/batch", json=payload)
         return BatchChatResponse.from_dict(response_payload)
+
+    def iter_document_status(
+        self,
+        document_id: str,
+        timeout: float | httpx.Timeout | None = None,
+    ) -> Iterator[DocumentStatus]:
+        """
+        Stream document ingestion status updates as typed Server-Sent Events.
+
+        Args:
+            document_id: Document identifier to monitor.
+            timeout: Optional per-request timeout override.
+
+        Yields:
+            Status snapshots until the document reaches ``completed`` or ``failed``.
+
+        Raises:
+            ChatVectorAPIError: If the stream fails before or during delivery.
+        """
+        request_kwargs: JSONDict = {}
+        if timeout is not None:
+            request_kwargs["timeout"] = timeout
+
+        return self._iter_document_status_events(document_id, request_kwargs)
+
+    def _iter_document_status_events(
+        self,
+        document_id: str,
+        request_kwargs: JSONDict,
+    ) -> Iterator[DocumentStatus]:
+        """Open a document status stream and yield parsed SSE events."""
+        try:
+            with self._client.stream(
+                "GET",
+                f"documents/{document_id}/status/stream",
+                **request_kwargs,
+            ) as response:
+                raise_for_stream_response(response, self._map_http_error)
+                try:
+                    yield from iter_document_status_events(
+                        response.iter_lines(),
+                        map_error=map_document_status_stream_error,
+                    )
+                finally:
+                    response.close()
+        except httpx.TimeoutException as exc:
+            raise ChatVectorTimeoutError(self._msg_timeout_or_connection()) from exc
+        except (httpx.ConnectError, httpx.NetworkError, httpx.RemoteProtocolError) as exc:
+            raise ChatVectorTimeoutError(self._msg_timeout_or_connection()) from exc
+        except httpx.HTTPStatusError as exc:
+            raise self._map_http_error(exc.response) from exc
+        except httpx.RequestError as exc:
+            raise ChatVectorAPIError(
+                self._msg_unexpected(), details={"error": str(exc)}
+            ) from exc
 
     def wait_for_ready(
         self,
