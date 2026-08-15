@@ -4,12 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, AlertCircle } from "lucide-react";
 import {
   formatChunkProgress,
+  resolveStageForChunkAnimation,
   shouldShowChunkProgress,
 } from "../lib/chunkProgress";
+import { useAnimatedChunkCount } from "../lib/hooks/useAnimatedChunkCount";
 import { PIPELINE_STAGES, PIPELINE_STAGE_LABELS } from "../lib/stageLabels";
 
 /** ms between each incremental stage completion when fast-forwarding. */
 const STEP_MS = 380;
+
+const EMBEDDING_STAGE_INDEX = PIPELINE_STAGES.indexOf("embedding");
 
 type StageState = "completed" | "active" | "pending" | "failed";
 
@@ -111,19 +115,25 @@ function StageRow({
   label,
   state,
   isLast,
-  chunks,
+  displayChunks,
   errorMessage,
 }: {
   stageKey: string;
   label: string;
   state: StageState;
   isLast: boolean;
-  chunks?: { total: number; processed: number };
+  displayChunks?: { total: number; processed: number };
   errorMessage?: string;
 }) {
-  const showChunks = shouldShowChunkProgress({ stageKey, state, chunks });
+  const showChunks = shouldShowChunkProgress({
+    stageKey,
+    state,
+    chunks: displayChunks,
+  });
   const chunkProgressLabel =
-    showChunks && chunks ? formatChunkProgress(chunks) : null;
+    showChunks && displayChunks
+      ? formatChunkProgress(displayChunks)
+      : null;
 
   return (
     <li className="flex items-start gap-3">
@@ -181,7 +191,7 @@ function StageRow({
           {label}
         </span>
         {chunkProgressLabel && (
-          <p className="absolute top-full -mt-3 text-xs text-muted">
+          <p className="absolute top-full -mt-3 whitespace-nowrap text-xs tabular-nums text-muted">
             {chunkProgressLabel}
           </p>
         )}
@@ -202,7 +212,49 @@ export default function IngestionPipeline({
   errorMessage,
   onDisplayedStageChange,
 }: Props) {
-  const { displayedStage, displayedCompleted } = useAnimatedStage(currentStage, failed);
+  const peakProcessedRef = useRef(0);
+
+  if (chunks) {
+    if (chunks.processed === 0) {
+      peakProcessedRef.current = 0;
+    } else {
+      peakProcessedRef.current = Math.max(peakProcessedRef.current, chunks.processed);
+    }
+  }
+
+  const currentStageIndex = currentStage
+    ? PIPELINE_STAGES.indexOf(currentStage as never)
+    : -1;
+
+  const chunkCountTarget =
+    chunks?.processed ??
+    (peakProcessedRef.current > 0 && currentStageIndex >= EMBEDDING_STAGE_INDEX
+      ? peakProcessedRef.current
+      : undefined);
+
+  const animatedProcessed = useAnimatedChunkCount(
+    chunkCountTarget !== undefined && currentStageIndex >= EMBEDDING_STAGE_INDEX
+      ? chunkCountTarget
+      : undefined
+  );
+
+  const stageForAnimation = resolveStageForChunkAnimation({
+    currentStage,
+    animatedProcessed,
+    chunkTarget: peakProcessedRef.current,
+    failed,
+    pipelineStages: PIPELINE_STAGES,
+  });
+
+  const { displayedStage, displayedCompleted } = useAnimatedStage(
+    stageForAnimation,
+    failed
+  );
+
+  const displayChunks =
+    chunks && animatedProcessed !== undefined
+      ? { total: chunks.total, processed: animatedProcessed }
+      : chunks;
 
   const onDisplayedStageChangeRef = useRef(onDisplayedStageChange);
   onDisplayedStageChangeRef.current = onDisplayedStageChange;
@@ -225,8 +277,8 @@ export default function IngestionPipeline({
             label={label}
             state={state}
             isLast={isLast}
-            chunks={chunks}
-            errorMessage={state === "failed" ? errorMessage : undefined}  
+            displayChunks={displayChunks}
+            errorMessage={state === "failed" ? errorMessage : undefined}
           />
         );
       })}

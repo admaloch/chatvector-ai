@@ -10,6 +10,38 @@ from services.ingestion_pipeline import UploadPipelineError
 
 
 @pytest.mark.asyncio
+async def test_upload_route_binds_document_to_session_when_header_present():
+    mock_file = AsyncMock(spec=UploadFile)
+    mock_file.filename = "test.pdf"
+    mock_file.content_type = "application/pdf"
+    mock_file.read = AsyncMock(return_value=b"fake-pdf-bytes")
+
+    request = make_test_request("POST", "/upload", headers={"X-Session-Id": "sess-123"})
+
+    mock_session = AsyncMock()
+    mock_session.id = "sess-123"
+
+    with (
+        patch("routes.upload.ingestion_pipeline.validate_file", return_value=None),
+        patch("routes.upload.db.create_document", new=AsyncMock(return_value="doc-1")),
+        patch("routes.upload.db.update_document_status", new=AsyncMock()),
+        patch("routes.upload.ingestion_queue.enqueue", new=AsyncMock(return_value=1)),
+        patch(
+            "routes.upload.get_or_create_session",
+            new=AsyncMock(return_value=mock_session),
+        ) as mock_get_session,
+        patch(
+            "routes.upload.register_session_document",
+            new=AsyncMock(),
+        ) as mock_register,
+    ):
+        await upload(request, mock_file, auth=AuthContext(tenant_id="tenant-123"))
+
+    mock_get_session.assert_awaited_once_with(session_id="sess-123", tenant_id="tenant-123")
+    mock_register.assert_awaited_once_with("sess-123", "doc-1", "tenant-123")
+
+
+@pytest.mark.asyncio
 async def test_upload_route_enqueues_job_and_returns_accepted():
     """Successful upload validates, creates a document, enqueues the job, and returns immediately."""
     mock_file = AsyncMock(spec=UploadFile)

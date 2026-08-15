@@ -138,6 +138,10 @@ class DatabaseService(ABC):
         """Return IDs of all documents owned by tenant_id."""
         return []
 
+    async def list_tenant_document_summaries(self, tenant_id: str) -> list[dict]:
+        """Return summary metadata for all documents owned by tenant_id."""
+        return []
+
     # ── Tenant-scoped chat history ────────────────────────────────────────────
 
     @abstractmethod

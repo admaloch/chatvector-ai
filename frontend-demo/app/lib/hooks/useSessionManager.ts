@@ -7,6 +7,7 @@ import {
   listSessions,
   ChatError,
 } from "../api";
+import { cleanupSessionDocuments } from "../cleanupSessionDocuments";
 import { getSessionId, setActiveSession } from "../session";
 
 export type ChatSession = {
@@ -120,6 +121,7 @@ export function useSessionManager() {
     setDeletingSessionId(id);
     setError(null);
     try {
+      await cleanupSessionDocuments(id);
       await apiDeleteSession(id);
 
       const remaining = sessions.filter((session) => session.id !== id);

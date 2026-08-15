@@ -19,6 +19,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/documents")
+@limiter.limit(config.RATE_LIMIT_DOCUMENT_STATUS)
+async def list_documents(request: Request, auth: AuthContext = Depends(require_auth)):
+    """List documents registered to the authenticated tenant."""
+    tenant_id = require_current_tenant(auth)
+    documents = await db.list_tenant_document_summaries(tenant_id)
+    return {"tenant_id": tenant_id, "documents": documents}
+
+
 @router.get("/documents/{document_id}/status")
 @limiter.limit(config.RATE_LIMIT_DOCUMENT_STATUS)
 async def get_document_status(request: Request, document_id: UUID, auth: AuthContext = Depends(require_auth)):

@@ -27,4 +27,19 @@ describe("RetrievalSettingsPanel", () => {
     await userEvent.type(matchCountInput, "8");
     expect(onMatchCountChange).toHaveBeenCalled();
   });
+
+  it("hides scope controls when showScope is false", async () => {
+    render(
+      <RetrievalSettingsPanel
+        settings={DEFAULT_RETRIEVAL_SETTINGS}
+        onMatchCountChange={vi.fn()}
+        showScope={false}
+      />
+    );
+
+    await userEvent.click(screen.getByText("Retrieval settings"));
+
+    expect(screen.queryByRole("radiogroup", { name: "Retrieval scope" })).not.toBeInTheDocument();
+    expect(screen.getByRole("slider")).toBeInTheDocument();
+  });
 });

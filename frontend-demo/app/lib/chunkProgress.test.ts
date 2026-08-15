@@ -1,23 +1,48 @@
 import { describe, expect, it } from "vitest";
-import { formatChunkProgress, shouldShowChunkProgress } from "./chunkProgress";
+import {
+  formatChunkProgress,
+  resolveStageForChunkAnimation,
+  shouldShowChunkProgress,
+} from "./chunkProgress";
+import { PIPELINE_STAGES } from "./stageLabels";
 
 describe("formatChunkProgress", () => {
   it("shows processed and total chunk progress", () => {
-    expect(formatChunkProgress({ processed: 7, total: 24 })).toBe(
-      "7 / 24 chunks"
-    );
+    expect(formatChunkProgress({ processed: 7, total: 24 })).toBe("7 / 24");
   });
 
   it("shows zero processed chunks during early embedding progress", () => {
-    expect(formatChunkProgress({ processed: 0, total: 24 })).toBe(
-      "0 / 24 chunks"
-    );
+    expect(formatChunkProgress({ processed: 0, total: 24 })).toBe("0 / 24");
   });
 
-  it("uses the singular chunk label for one total chunk", () => {
-    expect(formatChunkProgress({ processed: 1, total: 1 })).toBe(
-      "1 / 1 chunk"
-    );
+  it("shows progress when only one chunk exists", () => {
+    expect(formatChunkProgress({ processed: 1, total: 1 })).toBe("1 / 1");
+  });
+});
+
+describe("resolveStageForChunkAnimation", () => {
+  it("holds on embedding while the animated count is still catching up", () => {
+    expect(
+      resolveStageForChunkAnimation({
+        currentStage: "storing",
+        animatedProcessed: 120,
+        chunkTarget: 137,
+        failed: false,
+        pipelineStages: PIPELINE_STAGES,
+      })
+    ).toBe("embedding");
+  });
+
+  it("releases once the animated count reaches the target", () => {
+    expect(
+      resolveStageForChunkAnimation({
+        currentStage: "storing",
+        animatedProcessed: 137,
+        chunkTarget: 137,
+        failed: false,
+        pipelineStages: PIPELINE_STAGES,
+      })
+    ).toBe("storing");
   });
 });
 

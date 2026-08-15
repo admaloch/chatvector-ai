@@ -32,6 +32,8 @@ export type UploadModalAttachment = {
 
 type Props = {
   onClose: () => void;
+  /** Active chat session — binds the upload to session restore on navigation/refresh. */
+  sessionId?: string | null;
   /** Element to return focus to when the modal closes. */
   returnFocusRef?: RefObject<HTMLElement | null>;
   /** Run before POST /upload (e.g. delete the prior document so replacement does not orphan rows). */
@@ -43,6 +45,7 @@ type Props = {
 
 export default function UploadModal({
   onClose,
+  sessionId,
   returnFocusRef,
   onBeforeUpload,
   onUploadAccepted,
@@ -131,7 +134,7 @@ export default function UploadModal({
         await onBeforeUpload();
       }
       const { documentId, statusEndpoint, queuePosition } =
-        await uploadDocument(file);
+        await uploadDocument(file, sessionId);
       onUploadAccepted({
         fileName: file.name,
         documentId,

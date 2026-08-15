@@ -80,6 +80,19 @@ class _SingleChunkSplitter:
         return ["chunk-a"]
 
 
+class _ManyChunkSplitter:
+    def __init__(self, chunk_size: int, chunk_overlap: int, add_start_index: bool = False):
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        self.add_start_index = add_start_index
+
+    def create_documents(self, texts: list[str]) -> list[_FakeDoc]:
+        return [_FakeDoc(f"chunk-{index}", index) for index in range(25)]
+
+    def split_text(self, text: str) -> list[str]:
+        return [f"chunk-{index}" for index in range(25)]
+
+
 class _TrackingSplitter:
     last_init: dict | None = None
     last_create: dict | None = None
@@ -148,7 +161,15 @@ async def test_process_document_success_tracks_status_and_returns_status_endpoin
     mock_cleanup.assert_not_awaited()
 
     statuses = [call.kwargs.get("status") for call in mock_update.await_args_list]
-    assert statuses == ["uploaded", "extracting", "chunking", "embedding", "storing", "completed"]
+    assert statuses == [
+        "uploaded",
+        "extracting",
+        "chunking",
+        "embedding",
+        "embedding",
+        "storing",
+        "completed",
+    ]
 
 
 @pytest.mark.asyncio
@@ -599,6 +620,48 @@ def test_classify_ingestion_error_preserves_upload_pipeline_error_fields():
     assert result["code"] == "no_text_extracted"
     assert result["stage"] == "extracting"
     assert result["message"] == "No extractable text was found in the uploaded document."
+
+
+@pytest.mark.asyncio
+async def test_process_document_background_updates_chunk_progress_during_embedding():
+    pipeline = IngestionPipeline(splitter_cls=_ManyChunkSplitter)
+    embed_batch_sizes: list[int] = []
+
+    async def fake_get_embeddings(texts: list[str]) -> list[list[float]]:
+        embed_batch_sizes.append(len(texts))
+        return [[0.1, 0.2] for _ in texts]
+
+    with patch("services.ingestion_pipeline.db.update_document_status", new=AsyncMock()) as mock_update, patch(
+        "services.ingestion_pipeline.db.store_chunks_with_embeddings",
+        new=AsyncMock(return_value=[f"c{i}" for i in range(25)]),
+    ), patch(
+        "services.ingestion_pipeline.extract_text_with_metadata",
+        new=AsyncMock(return_value=("hello world", [])),
+    ), patch(
+        "services.ingestion_pipeline.get_embeddings",
+        side_effect=fake_get_embeddings,
+    ):
+        await pipeline.process_document_background(
+            doc_id="doc-progress",
+            file_name="test.pdf",
+            content_type="application/pdf",
+            file_bytes=b"%PDF-fake",
+            tenant_id="dev",
+        )
+
+    assert embed_batch_sizes == [10, 10, 5]
+
+    embedding_updates = [
+        call.kwargs.get("chunks")
+        for call in mock_update.await_args_list
+        if call.kwargs.get("status") == "embedding" and call.kwargs.get("chunks") is not None
+    ]
+    assert embedding_updates == [
+        {"total": 25, "processed": 0},
+        {"total": 25, "processed": 10},
+        {"total": 25, "processed": 20},
+        {"total": 25, "processed": 25},
+    ]
 
 
 @pytest.mark.asyncio

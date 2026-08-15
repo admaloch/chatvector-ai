@@ -341,6 +341,60 @@ export type DeleteDocumentResult =
   | { status: "conflict"; message: string }
   | { status: "error"; message: string };
 
+export type DocumentSummary = {
+  document_id: string;
+  file_name: string;
+  status: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type DocumentListResponse = {
+  tenant_id: string;
+  documents: DocumentSummary[];
+};
+
+export async function listDocuments(): Promise<DocumentListResponse> {
+  const res = await fetch(`${API_BASE}/documents`, { headers: authHeaders() });
+  if (!res.ok) {
+    throw await backendApiErrorFromResponse(
+      res,
+      `Document list failed: ${res.status}`
+    );
+  }
+  const data = (await res.json()) as Record<string, unknown>;
+  const tenantId = typeof data.tenant_id === "string" ? data.tenant_id : "";
+  const documents = Array.isArray(data.documents)
+    ? data.documents
+        .map((item) => {
+          if (item == null || typeof item !== "object") return null;
+          const record = item as Record<string, unknown>;
+          const documentId = record.document_id;
+          const fileName = record.file_name;
+          const status = record.status;
+          if (
+            typeof documentId !== "string" ||
+            typeof fileName !== "string" ||
+            typeof status !== "string"
+          ) {
+            return null;
+          }
+          return {
+            document_id: documentId,
+            file_name: fileName,
+            status,
+            created_at:
+              typeof record.created_at === "string" ? record.created_at : null,
+            updated_at:
+              typeof record.updated_at === "string" ? record.updated_at : null,
+          } satisfies DocumentSummary;
+        })
+        .filter((item): item is DocumentSummary => item !== null)
+    : [];
+
+  return { tenant_id: tenantId, documents };
+}
+
 export async function deleteDocument(
   documentId: string
 ): Promise<DeleteDocumentResult> {
@@ -580,9 +634,11 @@ async function postBatchChat(
 }
 
 export async function uploadDocument(
-  file: File
+  file: File,
+  sessionIdOverride?: string | null
 ): Promise<{ documentId: string; statusEndpoint: string; queuePosition?: number }> {
-  const sessionId = getSessionId();
+  const sessionId =
+    sessionIdOverride !== undefined ? sessionIdOverride : getSessionId();
   const formData = new FormData();
   formData.append("file", file);
   

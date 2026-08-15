@@ -80,6 +80,9 @@ from services.text_cleaning_service import clean_text
 
 logger = logging.getLogger(__name__)
 
+# Embed this many chunks per API call so status polling can report progress.
+_EMBEDDING_PROGRESS_BATCH_SIZE = 10
+
 ALLOWED_UPLOAD_TYPES = {"application/pdf", "text/plain"}
 HEADING_PATTERN = re.compile(r"^\s{0,3}#{1,6}\s+(?P<heading>.+?)\s*$")
 FALLBACK_SENTENCE_PATTERN = re.compile(r".+?(?:[.!?](?=\s+|$)|$)", re.DOTALL)
@@ -800,6 +803,38 @@ class IngestionPipeline:
                     message="File content is not valid text encoding.",
                 )
 
+    async def _embed_documents_with_progress(
+        self,
+        *,
+        doc_id: str,
+        tenant_id: str,
+        langchain_docs: list[LangChainDocument],
+    ) -> list[list[float]]:
+        total = len(langchain_docs)
+        texts = [doc.page_content for doc in langchain_docs]
+        embeddings: list[list[float]] = []
+
+        await self._update_status(
+            doc_id=doc_id,
+            status="embedding",
+            chunks={"total": total, "processed": 0},
+            tenant_id=tenant_id,
+        )
+
+        for start in range(0, total, _EMBEDDING_PROGRESS_BATCH_SIZE):
+            batch_texts = texts[start : start + _EMBEDDING_PROGRESS_BATCH_SIZE]
+            batch_embeddings = await get_embeddings(batch_texts)
+            embeddings.extend(batch_embeddings)
+            processed = start + len(batch_texts)
+            await self._update_status(
+                doc_id=doc_id,
+                status="embedding",
+                chunks={"total": total, "processed": processed},
+                tenant_id=tenant_id,
+            )
+
+        return embeddings
+
     async def _update_status(
         self,
         doc_id: str,
@@ -893,13 +928,11 @@ class IngestionPipeline:
                 )
 
             stage = "embedding"
-            await self._update_status(
+            embeddings = await self._embed_documents_with_progress(
                 doc_id=doc_id,
-                status="embedding",
-                chunks={"total": len(langchain_docs), "processed": 0},
                 tenant_id=tenant_id,
+                langchain_docs=langchain_docs,
             )
-            embeddings = await get_embeddings([doc.page_content for doc in langchain_docs])
 
             if len(embeddings) != len(langchain_docs):
                 raise UploadPipelineError(
@@ -1011,15 +1044,13 @@ class IngestionPipeline:
                 )
 
             stage = "embedding"
-            await self._update_status(
-                doc_id=doc_id,
-                status="embedding",
-                chunks={"total": len(langchain_docs), "processed": 0},
-                tenant_id=tenant_id,
-            )
             if rate_limiter is not None:
                 await rate_limiter.acquire()
-            embeddings = await get_embeddings([doc.page_content for doc in langchain_docs])
+            embeddings = await self._embed_documents_with_progress(
+                doc_id=doc_id,
+                tenant_id=tenant_id,
+                langchain_docs=langchain_docs,
+            )
 
             if len(embeddings) != len(langchain_docs):
                 raise UploadPipelineError(

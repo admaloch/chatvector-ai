@@ -700,6 +700,25 @@ class SQLAlchemyService(DatabaseService):
             )
             return [str(row[0]) for row in rows]
 
+    async def list_tenant_document_summaries(self, tenant_id: str) -> list[dict]:
+        tenant_id = require_tenant_id(tenant_id, method="list_tenant_document_summaries")
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(Document)
+                .where(Document.tenant_id == tenant_id)
+                .order_by(Document.created_at.desc())
+            )
+            return [
+                {
+                    "document_id": str(document.id),
+                    "file_name": document.file_name,
+                    "status": document.status,
+                    "created_at": str(document.created_at) if document.created_at else None,
+                    "updated_at": str(document.updated_at) if document.updated_at else None,
+                }
+                for document in result.scalars().all()
+            ]
+
     async def store_chat_message(
         self,
         session_id: str,

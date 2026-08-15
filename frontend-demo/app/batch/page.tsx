@@ -5,6 +5,7 @@ import { Layers, Loader2, FileText } from "lucide-react";
 import {
   sendBatchMessage,
   sendSynthesizedBatchMessage,
+  listDocuments,
   ChatError,
   type BatchResultItem,
 } from "../lib/api";
@@ -13,10 +14,16 @@ import BatchPageSkeleton from "../components/batch/BatchPageSkeleton";
 import RetrievalSettingsPanel from "../components/RetrievalSettingsPanel";
 import BatchResultSkeleton from "./BatchResultSkeleton";
 import { EmptyState } from "../components/ui/EmptyState";
+import { InfoPopover } from "../components/ui/InfoPopover";
 import { InlineAlert } from "../components/ui/InlineAlert";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
-import { getUploadedDocuments, type StoredDocument } from "../lib/documentStore";
 import { useRetrievalSettings } from "../lib/hooks/useRetrievalSettings";
+
+type BatchDocument = {
+  documentId: string;
+  fileName: string;
+  status: string;
+};
 
 type BatchMode = "compare" | "synthesize";
 
@@ -26,9 +33,10 @@ const BATCH_MODE_OPTIONS: { value: BatchMode; label: string }[] = [
 ];
 
 export default function BatchPage() {
-  const [documents, setDocuments] = useState<StoredDocument[]>([]);
+  const [documents, setDocuments] = useState<BatchDocument[]>([]);
   const [documentsLoaded, setDocumentsLoaded] = useState(false);
-  const { settings, setScope, setMatchCount, loaded: retrievalLoaded } = useRetrievalSettings();
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const { settings, setMatchCount, loaded: retrievalLoaded } = useRetrievalSettings();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<BatchMode>("compare");
   const [question, setQuestion] = useState("");
@@ -42,8 +50,40 @@ export default function BatchPage() {
   } | null>(null);
 
   useEffect(() => {
-    setDocuments(getUploadedDocuments());
-    setDocumentsLoaded(true);
+    let cancelled = false;
+
+    async function loadDocuments() {
+      setDocumentsLoaded(false);
+      setDocumentsError(null);
+      try {
+        const response = await listDocuments();
+        if (cancelled) return;
+        setDocuments(
+          response.documents.map((doc) => ({
+            documentId: doc.document_id,
+            fileName: doc.file_name,
+            status: doc.status,
+          }))
+        );
+      } catch (err) {
+        if (cancelled) return;
+        setDocuments([]);
+        setDocumentsError(
+          err instanceof ChatError
+            ? err.message
+            : "Could not load documents. Check your connection and try again."
+        );
+      } finally {
+        if (!cancelled) {
+          setDocumentsLoaded(true);
+        }
+      }
+    }
+
+    void loadDocuments();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const nameById = useMemo(() => {
@@ -87,11 +127,11 @@ export default function BatchPage() {
         mode === "compare"
           ? await sendBatchMessage(question.trim(), selectedDocIds, {
               matchCount: settings.matchCount,
-              scope: settings.scope,
+              scope: "session",
             })
           : await sendSynthesizedBatchMessage(question.trim(), selectedDocIds, {
               matchCount: settings.matchCount,
-              scope: settings.scope,
+              scope: "session",
             });
       setResults(response.results);
       setSummary({
@@ -133,13 +173,33 @@ export default function BatchPage() {
         <EmptyState
           icon={FileText}
           title="No documents yet."
-          description="Upload a document on the chat page first — it'll show up here automatically."
-          action={{ href: "/chat", label: "Go to chat" }}
+          description={
+            documentsError ??
+            "Upload a document on the chat page first — it'll show up here automatically."
+          }
+          action={documentsError ? undefined : { href: "/chat", label: "Go to chat" }}
         />
       ) : (
         <div className="flex flex-col gap-6">
           <div>
-            <p className="mb-2 text-sm font-medium">Mode</p>
+            <div className="mb-2 flex items-center gap-1.5">
+              <p className="text-sm font-medium">Mode</p>
+              <InfoPopover label="Batch mode help">
+                <p>
+                  <strong className="font-medium text-foreground/80">Compare</strong>{" "}
+                  sends one query per document and shows a separate answer card for
+                  each — useful for seeing what each file contributes. Each document
+                  is answered independently from its own retrieved content; prior
+                  chat or batch turns in this session are not used.
+                </p>
+                <p className="mt-3">
+                  <strong className="font-medium text-foreground/80">Synthesize</strong>{" "}
+                  sends one query across all selected documents and returns a single
+                  combined answer with citations from every contributing file — best
+                  for cross-document questions.
+                </p>
+              </InfoPopover>
+            </div>
             <SegmentedControl
               name="batch-mode"
               ariaLabel="Batch query mode"
@@ -147,24 +207,6 @@ export default function BatchPage() {
               onChange={setMode}
               options={BATCH_MODE_OPTIONS}
             />
-            <p className="mt-2 max-w-2xl text-sm text-muted">
-              {mode === "compare" ? (
-                <>
-                  <strong className="text-foreground">Compare</strong> sends one
-                  query per document and shows a separate answer card for each —
-                  useful for seeing what each file contributes. Each document is
-                  answered independently from its own retrieved content; prior
-                  chat or batch turns in this session are not used.
-                </>
-              ) : (
-                <>
-                  <strong className="text-foreground">Synthesize</strong> sends
-                  one query across all selected documents and returns a single
-                  combined answer with citations from every contributing file —
-                  best for cross-document questions.
-                </>
-              )}
-            </p>
           </div>
 
           <div>
@@ -210,6 +252,11 @@ export default function BatchPage() {
                     <span className="ml-auto truncate font-mono text-xs text-muted">
                       {doc.documentId.slice(0, 8)}
                     </span>
+                    {doc.status !== "completed" && (
+                      <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted">
+                        {doc.status}
+                      </span>
+                    )}
                   </label>
                 </li>
               ))}
@@ -218,8 +265,8 @@ export default function BatchPage() {
 
           <RetrievalSettingsPanel
             settings={settings}
-            onScopeChange={setScope}
             onMatchCountChange={setMatchCount}
+            showScope={false}
           />
 
           <div>

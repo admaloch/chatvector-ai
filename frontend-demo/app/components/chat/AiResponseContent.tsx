@@ -3,11 +3,7 @@ import {
   type ChatSource,
   type RetrievalDebugMetadata,
 } from "../../lib/api";
-import {
-  deduplicatedSources,
-  formatCitationLine,
-  formatResponseMetadata,
-} from "../../lib/citations";
+import { formatResponseMetadata } from "../../lib/citations";
 import RetrievalInspector from "../RetrievalInspector";
 import { InlineAlert } from "../ui/InlineAlert";
 
@@ -20,7 +16,7 @@ export type AiResponseContentProps = {
   latencyMs?: number;
   question?: string;
   retrievalDebug?: RetrievalDebugMetadata;
-  /** When false, hide error, sources, zero-chunks, metadata, and inspector. */
+  /** When false, hide error, zero-chunks, metadata, and inspector. */
   detailsVisible?: boolean;
   /** Show a blinking cursor after text while tokens are in flight. */
   isStreaming?: boolean;
@@ -30,8 +26,6 @@ export type AiResponseContentProps = {
   zeroChunksMessage?: string;
   showZeroChunks?: boolean;
   textClassName?: string;
-  sourceClassName?: string;
-  sourcesContainerClassName?: string;
   metadataClassName?: string;
   zeroChunksClassName?: string;
   emptyMessageClassName?: string;
@@ -52,8 +46,6 @@ export default function AiResponseContent({
   zeroChunksMessage = "No relevant content found in this document.",
   showZeroChunks = true,
   textClassName = "",
-  sourceClassName = "text-sm text-muted",
-  sourcesContainerClassName = "mt-2 flex flex-col gap-1",
   metadataClassName = "mt-2 text-xs text-muted",
   zeroChunksClassName = "mt-1 text-sm text-muted italic",
   emptyMessageClassName = "text-sm text-muted italic",
@@ -96,15 +88,6 @@ export default function AiResponseContent({
       ) : emptyMessage ? (
         <p className={emptyMessageClassName}>{emptyMessage}</p>
       ) : null}
-      {sources && sources.length > 0 && detailsVisible && (
-        <div className={sourcesContainerClassName}>
-          {deduplicatedSources(sources).map((source, index) => (
-            <span key={index} className={sourceClassName}>
-              {formatCitationLine(source)}
-            </span>
-          ))}
-        </div>
-      )}
       {showZeroChunks && chunks === 0 && detailsVisible && (
         <p className={zeroChunksClassName}>{zeroChunksMessage}</p>
       )}

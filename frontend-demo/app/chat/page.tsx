@@ -131,6 +131,7 @@ export default function ChatPage() {
         )}
         {showModal && (
           <UploadModal
+            sessionId={activeSessionId}
             onClose={() => setShowModal(false)}
             returnFocusRef={uploadButtonRef}
             onBeforeUpload={handleBeforeUpload}

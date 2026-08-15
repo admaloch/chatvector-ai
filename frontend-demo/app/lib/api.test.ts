@@ -8,6 +8,7 @@ import {
   StreamingDisabledError,
   getDocumentStatus,
   uploadDocument,
+  listDocuments,
   deleteDocument,
   createSession,
   listSessions,
@@ -524,6 +525,88 @@ describe("uploadDocument", () => {
       message: "Too many requests — please wait a moment and try again.",
       httpStatus: 429,
     });
+  });
+
+  it("sends X-Session-Id when a session override is provided", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          document_id: "doc-1",
+          status_endpoint: "/documents/doc-1/status",
+        }),
+        { status: 202 }
+      )
+    );
+
+    const file = new File(["content"], "test.pdf", { type: "application/pdf" });
+    await uploadDocument(file, "sess-123");
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/upload"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "X-Session-Id": "sess-123",
+        }),
+      })
+    );
+  });
+});
+
+describe("listDocuments", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("returns tenant-scoped document summaries", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          tenant_id: "dev",
+          documents: [
+            {
+              document_id: "doc-1",
+              file_name: "japan.txt",
+              status: "completed",
+              created_at: "2026-01-01T00:00:00",
+              updated_at: "2026-01-01T00:01:00",
+            },
+          ],
+        }),
+        { status: 200 }
+      )
+    );
+
+    await expect(listDocuments()).resolves.toEqual({
+      tenant_id: "dev",
+      documents: [
+        {
+          document_id: "doc-1",
+          file_name: "japan.txt",
+          status: "completed",
+          created_at: "2026-01-01T00:00:00",
+          updated_at: "2026-01-01T00:01:00",
+        },
+      ],
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/documents"),
+      expect.objectContaining({ headers: expect.any(Object) })
+    );
+  });
+
+  it("throws BackendApiError on non-OK response", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Unauthorized" }), { status: 401 })
+    );
+
+    await expect(listDocuments()).rejects.toBeInstanceOf(BackendApiError);
   });
 });
 

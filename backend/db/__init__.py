@@ -307,6 +307,23 @@ async def list_tenant_documents(tenant_id: str) -> list[str]:
     )
 
 
+async def list_tenant_document_summaries(tenant_id: str) -> list[dict]:
+    tenant_id = require_tenant_id(tenant_id, method="list_tenant_document_summaries")
+    service = get_db_service()
+
+    async def _list():
+        return await service.list_tenant_document_summaries(tenant_id)
+
+    return await retry_async(
+        _list,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=0.5,
+        backoff=2.0,
+        timeout=DEFAULT_DB_TIMEOUT_SEC,
+        func_name=f"{service.__class__.__name__}.list_tenant_document_summaries",
+    )
+
+
 async def store_chat_message(
     session_id: str,
     role: str,
@@ -382,6 +399,7 @@ __all__ = [
     "create_document_with_chunks_atomic",
     "find_similar_chunks",
     "list_tenant_documents",
+    "list_tenant_document_summaries",
     "update_document_status",
     "get_document_status",
     "delete_document_chunks",
