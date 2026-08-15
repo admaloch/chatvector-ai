@@ -607,6 +607,9 @@ pytest -k "chat"  # run tests matching pattern
 
 ## Deployment
 
+For production setup (environment variables, pgvector, Redis, API-key bootstrap,
+Docker Compose, and common pitfalls), see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+
 ### Local development
 
 For day-to-day work use the [Quick Start](#quick-start) flow
