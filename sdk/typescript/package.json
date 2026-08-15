@@ -17,13 +17,27 @@
       "require": "./dist/index.cjs"
     }
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chatvector-ai/chatvector-ai.git",
+    "directory": "sdk/typescript"
+  },
+  "homepage": "https://github.com/chatvector-ai/chatvector-ai/tree/main/sdk/typescript#readme",
+  "bugs": {
+    "url": "https://github.com/chatvector-ai/chatvector-ai/issues"
+  },
   "scripts": {
     "build": "tsup",
     "type-check": "tsc --noEmit",
     "test": "npm run test:unit",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
-    "test:exports": "vitest run tests/package-exports.test.ts --no-file-parallelism"
+    "test:exports": "vitest run tests/package-exports.test.ts --no-file-parallelism",
+    "prepublishOnly": "npm run type-check && npm run test:unit && npm run build && npm run test:exports"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
