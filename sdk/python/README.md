@@ -37,17 +37,7 @@ from chatvector import ChatVectorClient
 
 with ChatVectorClient(base_url="http://localhost:8000") as client:
     upload = client.upload_document("handbook.pdf")
-
-    # Option 1: poll until ready
     ready = client.wait_for_ready(upload.document_id, timeout=90, interval=3)
-
-    # Option 2: subscribe to ingestion progress over SSE
-    for status in client.iter_document_status(upload.document_id, timeout=120):
-        print(status.status, status.chunks)
-        if status.status in {"completed", "failed"}:
-            ready = status
-            break
-
     answer = client.chat(
         question="What are the onboarding steps?",
         doc_id=ready.document_id,
@@ -59,6 +49,8 @@ print(answer.answer)
 for source in answer.sources:
     print(source.file_name, source.page_number, source.chunk_index)
 ```
+
+For ingestion progress over SSE instead of polling, see [Document Status Streaming](#document-status-streaming).
 
 ## Authentication
 
