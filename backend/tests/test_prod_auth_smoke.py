@@ -35,7 +35,13 @@ from db.sqlalchemy_service import SQLAlchemyService
 from services.api_key_service import (
     create_api_key,
     create_tenant,
+    list_tenant_keys,
     reset_session_factory,
+    revoke_api_key,
+    rotate_api_key,
+    set_api_key_expiry,
+    set_api_key_external_user_id,
+    validate_api_key,
 )
 
 
@@ -209,7 +215,7 @@ async def test_revoked_api_key_returns_401():
         with pytest.raises(HTTPException) as exc:
             await require_auth(_make_request(_bearer(raw_key)))
         assert exc.value.status_code == 401
-        assert exc.value.detail["code"] == "invalid_api_key"
+        assert exc.value.detail["code"] == "revoked_api_key"
     finally:
         await _cleanup_tenant(tenant_id)
 
@@ -414,6 +420,7 @@ async def test_cross_tenant_chat_returns_404():
 
 from services.api_key_service import list_tenant_keys, revoke_api_key
 
+
 @_requires_db
 async def test_list_tenant_keys_returns_created_key():
     tenant_id, raw_key, api_key_id = await _provision_tenant("smoke-list")
@@ -459,6 +466,68 @@ async def test_revoked_key_fails_validate_api_key():
 
         from services.api_key_service import validate_api_key
         result = await validate_api_key(raw_key)
-        assert result is None
+        assert result == "revoked"
+    finally:
+        await _cleanup_tenant(tenant_id)
+
+
+@_requires_db
+async def test_expired_api_key_returns_401():
+    tenant_id, raw_key, api_key_id = await _provision_tenant("smoke-expired")
+    try:
+        from datetime import datetime, timedelta
+
+        success = await set_api_key_expiry(
+            tenant_id=tenant_id,
+            key_id=api_key_id,
+            expires_at=datetime.utcnow() - timedelta(hours=1),
+        )
+        assert success is True
+
+        with pytest.raises(HTTPException) as exc:
+            await require_auth(_make_request(_bearer(raw_key)))
+        assert exc.value.status_code == 401
+        assert exc.value.detail["code"] == "expired_api_key"
+    finally:
+        await _cleanup_tenant(tenant_id)
+
+
+@_requires_db
+async def test_rotate_api_key_revokes_old_and_issues_new():
+    tenant_id, old_raw_key, old_key_id = await _provision_tenant("smoke-rotate")
+    try:
+        result = await rotate_api_key(tenant_id=tenant_id, key_id=old_key_id)
+        assert result is not None
+        new_raw_key, new_api_key = result
+
+        old_validate = await validate_api_key(old_raw_key)
+        assert old_validate == "revoked"
+
+        auth = await require_auth(_make_request(_bearer(new_raw_key)))
+        assert auth.tenant_id == tenant_id
+        assert auth.api_key_id == str(new_api_key.id)
+
+        keys = await list_tenant_keys(tenant_id=tenant_id)
+        statuses = {str(k.id): k.status for k in keys}
+        assert statuses[old_key_id] == "revoked"
+        assert statuses[str(new_api_key.id)] == "active"
+    finally:
+        await _cleanup_tenant(tenant_id)
+
+
+@_requires_db
+async def test_external_user_id_persists_and_lists():
+    tenant_id, _, api_key_id = await _provision_tenant("smoke-ext-user")
+    try:
+        success = await set_api_key_external_user_id(
+            tenant_id=tenant_id,
+            key_id=api_key_id,
+            external_user_id="user-123",
+        )
+        assert success is True
+
+        keys = await list_tenant_keys(tenant_id=tenant_id)
+        assert len(keys) == 1
+        assert keys[0].external_user_id == "user-123"
     finally:
         await _cleanup_tenant(tenant_id)

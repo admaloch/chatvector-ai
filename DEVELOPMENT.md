@@ -1035,10 +1035,37 @@ Record it immediately. Use it as `Authorization: Bearer <raw-key>` in all reques
 
 **Managing keys after bootstrap:**
 
+```bash
 python -m backend.cli list-tenant-keys --tenant-id <id>
 python -m backend.cli revoke-tenant-key --tenant-id <id> --key-id <key-id>
+python -m backend.cli rotate-tenant-key --tenant-id <id> --key-id <key-id>
+python -m backend.cli set-tenant-key-expiry --tenant-id <id> --key-id <key-id> --expires-at <iso>
+python -m backend.cli set-tenant-key-expiry --tenant-id <id> --key-id <key-id> --expires-at clear
+python -m backend.cli set-tenant-key-external-user-id --tenant-id <id> --key-id <key-id> --external-user-id <id>
+python -m backend.cli set-tenant-key-external-user-id --tenant-id <id> --key-id <key-id> --external-user-id clear
+```
+
+Optional fields on create:
+
+```bash
+python -m backend.cli create-tenant-key --tenant "My Org" --tenant-id my-org \
+  --external-user-id user-123 --expires-at 2026-12-31T23:59:59
+```
+
+`list-tenant-keys` shows `external_user_id` and `expires_at` metadata but never raw secrets.
+Rotation prints a new raw key once (same security model as create).
+Expired keys return HTTP 401 with code `expired_api_key`; revoked keys use `revoked_api_key`.
 
 Revoking is idempotent — running it again on an already-revoked key won't error.
+
+**Apply API key lifecycle columns (`010`):**
+
+Existing installations need migration `010_api_key_lifecycle.sql` after `009`:
+
+```bash
+docker compose exec db psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+    -f /docker-entrypoint-initdb.d/010_api_key_lifecycle.sql
+```
 
 **Rollback:**
 

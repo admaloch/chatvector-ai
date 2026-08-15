@@ -238,7 +238,7 @@ async def test_revoked_key_rejected(svc):
                 )
 
         result = await validate_api_key(raw_key)
-        assert result is None
+        assert result == "revoked"
     finally:
         await _cleanup_tenant(tid, svc)
 

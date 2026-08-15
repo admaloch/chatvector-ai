@@ -147,7 +147,41 @@ async def test_require_auth_production_invalid_key_returns_401(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_require_auth_production_valid_key_returns_auth_context(monkeypatch):
+async def test_require_auth_production_revoked_key_returns_401(monkeypatch):
+    """A revoked API key raises 401 with revoked_api_key code in production."""
+    monkeypatch.setattr("core.config.config.APP_ENV", "production")
+    raw_key = _make_raw_key()
+    request = _make_request_with_header(f"Bearer {raw_key}")
+
+    with patch(
+        "services.api_key_service.validate_api_key",
+        new=AsyncMock(return_value="revoked"),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await require_auth(request)
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail["code"] == "revoked_api_key"
+
+
+@pytest.mark.asyncio
+async def test_require_auth_production_expired_key_returns_401(monkeypatch):
+    """An expired API key raises 401 with expired_api_key code in production."""
+    monkeypatch.setattr("core.config.config.APP_ENV", "production")
+    raw_key = _make_raw_key()
+    request = _make_request_with_header(f"Bearer {raw_key}")
+
+    with patch(
+        "services.api_key_service.validate_api_key",
+        new=AsyncMock(return_value="expired"),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await require_auth(request)
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail["code"] == "expired_api_key"
+
+
     """A valid API key returns a populated AuthContext in production mode."""
     monkeypatch.setattr("core.config.config.APP_ENV", "production")
     raw_key = _make_raw_key()
@@ -251,8 +285,8 @@ async def test_validate_api_key_returns_none_for_hash_mismatch():
 
 
 @pytest.mark.asyncio
-async def test_validate_api_key_returns_none_for_revoked_key():
-    """validate_api_key returns None for keys with status != 'active'."""
+async def test_validate_api_key_returns_revoked_for_revoked_key():
+    """validate_api_key returns 'revoked' for keys with status != 'active'."""
     from services.api_key_service import validate_api_key
 
     raw_key = "cv_live_aabbccdd.correctsecret"
@@ -263,6 +297,7 @@ async def test_validate_api_key_returns_none_for_revoked_key():
     fake_row.status = "revoked"
     fake_row.tenant_id = "tenant-x"
     fake_row.id = "key-id-1"
+    fake_row.expires_at = None
 
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = fake_row
@@ -277,7 +312,40 @@ async def test_validate_api_key_returns_none_for_revoked_key():
     with patch("services.api_key_service._get_session_factory", return_value=mock_factory):
         result = await validate_api_key(raw_key)
 
-    assert result is None
+    assert result == "revoked"
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_returns_expired_for_past_expiry():
+    """validate_api_key returns 'expired' when expires_at is in the past."""
+    from datetime import datetime, timedelta
+
+    from services.api_key_service import validate_api_key
+
+    raw_key = "cv_live_aabbccdd.correctsecret"
+    correct_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+
+    fake_row = MagicMock()
+    fake_row.key_hash = correct_hash
+    fake_row.status = "active"
+    fake_row.tenant_id = "tenant-x"
+    fake_row.id = "key-id-1"
+    fake_row.expires_at = datetime.utcnow() - timedelta(hours=1)
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = fake_row
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=mock_result)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    mock_factory = MagicMock(return_value=mock_session)
+
+    with patch("services.api_key_service._get_session_factory", return_value=mock_factory):
+        result = await validate_api_key(raw_key)
+
+    assert result == "expired"
 
 
 @pytest.mark.asyncio
@@ -293,6 +361,7 @@ async def test_validate_api_key_success():
     fake_row.status = "active"
     fake_row.tenant_id = "tenant-y"
     fake_row.id = "key-id-99"
+    fake_row.expires_at = None
 
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = fake_row
