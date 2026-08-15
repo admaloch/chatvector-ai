@@ -35,15 +35,27 @@ from .models import (
     SessionListResponse,
     StreamChatEvent,
 )
-
-JSONDict = dict[str, Any]
-JSONMapping = Mapping[str, Any]
+from ._common import (
+    JSONDict,
+    JSONMapping,
+    RETRYABLE_STATUS_CODES,
+    default_error_message,
+    extract_error_details,
+    map_http_error,
+    msg_timeout_or_connection,
+    msg_unexpected,
+    normalize_base_url,
+    parse_json_dict,
+    retry_after_seconds,
+    serialize_batch_query,
+    build_client_headers,
+)
 
 
 class ChatVectorClient:
     """Convenience wrapper around the ChatVector HTTP API."""
 
-    _RETRYABLE_STATUS_CODES = {408, 429, 502, 503, 504}
+    _RETRYABLE_STATUS_CODES = RETRYABLE_STATUS_CODES
 
     def __init__(self, base_url: str, api_key: str | None = None) -> None:
         """
@@ -57,10 +69,8 @@ class ChatVectorClient:
         if not base_url.strip():
             raise ValueError("base_url must not be empty.")
 
-        normalized_base_url = base_url.rstrip("/")
-        headers = {"Accept": "application/json"}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
+        normalized_base_url = normalize_base_url(base_url)
+        headers = build_client_headers(api_key)
 
         self.base_url = normalized_base_url
         self.api_key = api_key
@@ -503,7 +513,7 @@ class ChatVectorClient:
                 raise self._map_http_error(exc.response) from exc
             except httpx.RequestError as exc:
                 raise ChatVectorAPIError(
-                    self._msg_unexpected(), details={"error": str(exc)}
+                    msg_unexpected(), details={"error": str(exc)}
                 ) from exc
 
         return retry_sync(
@@ -515,138 +525,45 @@ class ChatVectorClient:
         )
 
     def _map_http_error(self, response: httpx.Response) -> ChatVectorAPIError:
-        """
-        Convert an HTTP error response into the matching ChatVector exception.
-
-        Args:
-            response: Response object that triggered ``raise_for_status``.
-
-        Returns:
-            A typed ``ChatVectorAPIError`` instance.
-        """
-        message, details = self._extract_error_details(response)
-        error_class: type[ChatVectorAPIError] = ChatVectorAPIError
-
-        if response.status_code in {401, 403}:
-            error_class = ChatVectorAuthError
-        elif response.status_code == 429:
-            error_class = ChatVectorRateLimitError
-        elif response.status_code in {408, 504}:
-            error_class = ChatVectorTimeoutError
-
-        return error_class(
-            message,
-            status_code=response.status_code,
-            details=details,
-            response=response,
-        )
+        """Convert an HTTP error response into the matching ChatVector exception."""
+        return map_http_error(response)
 
     def _extract_error_details(self, response: httpx.Response) -> tuple[str, Any | None]:
-        """
-        Extract a readable error message and payload from an HTTP response.
+        """Extract a readable error message and payload from an HTTP response."""
+        return extract_error_details(response)
 
-        Args:
-            response: Error response from the API.
-
-        Returns:
-            A tuple containing the message and the parsed error details.
-        """
-        try:
-            payload = response.json()
-        except ValueError:
-            text = response.text.strip()
-            if text:
-                return text, None
-            return self._default_error_message(response.status_code), None
-
-        if not isinstance(payload, dict):
-            return self._default_error_message(response.status_code), payload
-
-        detail = payload.get("detail", payload)
-
-        if isinstance(detail, dict):
-            message = detail.get("message")
-            code = detail.get("code")
-            if isinstance(message, str) and message:
-                if isinstance(code, str) and code:
-                    return f"{message} ({code})", detail
-                return message, detail
-
-        if isinstance(detail, str) and detail:
-            return detail, detail
-
-        return self._default_error_message(response.status_code), detail
-
-    @staticmethod
-    def _parse_json_dict(response: httpx.Response) -> JSONDict:
+    def _parse_json_dict(self, response: httpx.Response) -> JSONDict:
         """Decode a response body as a JSON object."""
-        try:
-            payload = response.json()
-        except ValueError as exc:
-            raise ChatVectorAPIError(
-                "ChatVector returned a non-JSON response.",
-                status_code=response.status_code,
-                response=response,
-            ) from exc
-
-        if not isinstance(payload, dict):
-            raise ChatVectorAPIError(
-                "ChatVector returned an unexpected response shape.",
-                status_code=response.status_code,
-                details=payload,
-                response=response,
-            )
-
-        return payload
+        return parse_json_dict(response)
 
     def _default_error_message(self, status_code: int) -> str:
         """Return a classification-based fallback error message."""
-        if status_code in {401, 403}:
-            return self._msg_invalid_api_key()
-        if status_code == 429:
-            return self._msg_rate_limit()
-        if status_code in {408, 504}:
-            return self._msg_timeout_or_connection()
-        return self._msg_unexpected()
+        return default_error_message(status_code)
 
-    @staticmethod
-    def _retry_after_seconds(response: httpx.Response) -> float:
+    def _retry_after_seconds(self, response: httpx.Response) -> float:
         """Parse Retry-After as seconds, or 0.0 if absent or invalid."""
-        retry_after = response.headers.get("Retry-After")
-        if retry_after is None:
-            return 0.0
-        try:
-            return max(0.0, float(retry_after))
-        except ValueError:
-            return 0.0
+        return retry_after_seconds(response)
 
-    @staticmethod
-    def _serialize_batch_query(query: BatchChatQuery | JSONMapping) -> JSONDict:
+    def _serialize_batch_query(self, query: BatchChatQuery | JSONMapping) -> JSONDict:
         """Normalize a batch query into the JSON payload expected by the API."""
-        if isinstance(query, BatchChatQuery):
-            return query.to_dict()
-        if isinstance(query, Mapping):
-            return dict(query)
-        raise TypeError(
-            "Each batch query must be a BatchChatQuery instance or a mapping."
-        )
+        return serialize_batch_query(query)
 
-    @staticmethod
-    def _msg_invalid_api_key() -> str:
+    def _msg_invalid_api_key(self) -> str:
         """Return the standard authentication failure message."""
-        return "ChatVector request failed: invalid or unauthorized API key."
+        from ._common import msg_invalid_api_key
 
-    @staticmethod
-    def _msg_rate_limit() -> str:
+        return msg_invalid_api_key()
+
+    def _msg_rate_limit(self) -> str:
         """Return the standard rate-limit failure message."""
-        return "ChatVector request failed: rate limit or quota exceeded. Please try again later."
+        from ._common import msg_rate_limit
 
-    @staticmethod
-    def _msg_timeout_or_connection() -> str:
+        return msg_rate_limit()
+
+    def _msg_timeout_or_connection(self) -> str:
         """Return the standard timeout or connection failure message."""
-        return "ChatVector request failed: the service timed out or could not be reached."
+        return msg_timeout_or_connection()
 
-    @staticmethod
-    def _msg_unexpected() -> str:
+    def _msg_unexpected(self) -> str:
         """Return the standard unexpected failure message."""
-        return "ChatVector request failed due to an unexpected error."
+        return msg_unexpected()

@@ -1,0 +1,157 @@
+"""Shared HTTP helpers for sync and async ChatVector clients."""
+
+from __future__ import annotations
+
+from typing import Any, Mapping
+
+import httpx
+
+from .exceptions import (
+    ChatVectorAPIError,
+    ChatVectorAuthError,
+    ChatVectorRateLimitError,
+    ChatVectorTimeoutError,
+)
+from .models import BatchChatQuery
+
+JSONDict = dict[str, Any]
+JSONMapping = Mapping[str, Any]
+
+RETRYABLE_STATUS_CODES = {408, 429, 502, 503, 504}
+
+
+def map_http_error(response: httpx.Response) -> ChatVectorAPIError:
+    """Convert an HTTP error response into the matching ChatVector exception."""
+    message, details = extract_error_details(response)
+    error_class: type[ChatVectorAPIError] = ChatVectorAPIError
+
+    if response.status_code in {401, 403}:
+        error_class = ChatVectorAuthError
+    elif response.status_code == 429:
+        error_class = ChatVectorRateLimitError
+    elif response.status_code in {408, 504}:
+        error_class = ChatVectorTimeoutError
+
+    return error_class(
+        message,
+        status_code=response.status_code,
+        details=details,
+        response=response,
+    )
+
+
+def extract_error_details(response: httpx.Response) -> tuple[str, Any | None]:
+    """Extract a readable error message and payload from an HTTP response."""
+    try:
+        payload = response.json()
+    except ValueError:
+        text = response.text.strip()
+        if text:
+            return text, None
+        return default_error_message(response.status_code), None
+
+    if not isinstance(payload, dict):
+        return default_error_message(response.status_code), payload
+
+    detail = payload.get("detail", payload)
+
+    if isinstance(detail, dict):
+        message = detail.get("message")
+        code = detail.get("code")
+        if isinstance(message, str) and message:
+            if isinstance(code, str) and code:
+                return f"{message} ({code})", detail
+            return message, detail
+
+    if isinstance(detail, str) and detail:
+        return detail, detail
+
+    return default_error_message(response.status_code), detail
+
+
+def parse_json_dict(response: httpx.Response) -> JSONDict:
+    """Decode a response body as a JSON object."""
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise ChatVectorAPIError(
+            "ChatVector returned a non-JSON response.",
+            status_code=response.status_code,
+            response=response,
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise ChatVectorAPIError(
+            "ChatVector returned an unexpected response shape.",
+            status_code=response.status_code,
+            details=payload,
+            response=response,
+        )
+
+    return payload
+
+
+def default_error_message(status_code: int) -> str:
+    """Return a classification-based fallback error message."""
+    if status_code in {401, 403}:
+        return msg_invalid_api_key()
+    if status_code == 429:
+        return msg_rate_limit()
+    if status_code in {408, 504}:
+        return msg_timeout_or_connection()
+    return msg_unexpected()
+
+
+def retry_after_seconds(response: httpx.Response) -> float:
+    """Parse Retry-After as seconds, or 0.0 if absent or invalid."""
+    retry_after = response.headers.get("Retry-After")
+    if retry_after is None:
+        return 0.0
+    try:
+        return max(0.0, float(retry_after))
+    except ValueError:
+        return 0.0
+
+
+def serialize_batch_query(query: BatchChatQuery | JSONMapping) -> JSONDict:
+    """Normalize a batch query into the JSON payload expected by the API."""
+    if isinstance(query, BatchChatQuery):
+        return query.to_dict()
+    if isinstance(query, Mapping):
+        return dict(query)
+    raise TypeError("Each batch query must be a BatchChatQuery instance or a mapping.")
+
+
+def build_client_headers(api_key: str | None) -> dict[str, str]:
+    """Build default HTTP headers for ChatVector API requests."""
+    headers = {"Accept": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    return headers
+
+
+def normalize_base_url(base_url: str) -> str:
+    """Validate and normalize a ChatVector API base URL."""
+    if not base_url.strip():
+        raise ValueError("base_url must not be empty.")
+    return base_url.rstrip("/")
+
+
+def msg_invalid_api_key() -> str:
+    """Return the standard authentication failure message."""
+    return "ChatVector request failed: invalid or unauthorized API key."
+
+
+def msg_rate_limit() -> str:
+    """Return the standard rate-limit failure message."""
+    return "ChatVector request failed: rate limit or quota exceeded. Please try again later."
+
+
+def msg_timeout_or_connection() -> str:
+    """Return the standard timeout or connection failure message."""
+    return "ChatVector request failed: the service timed out or could not be reached."
+
+
+def msg_unexpected() -> str:
+    """Return the standard unexpected failure message."""
+    return "ChatVector request failed due to an unexpected error."

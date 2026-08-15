@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 import httpx
@@ -17,6 +17,52 @@ from .exceptions import (
 from .models import ChatSource, DocumentStatus, StreamChatEvent, StreamErrorEvent
 
 _DONE_PAYLOAD = "[DONE]"
+
+
+async def async_iter_stream_chat_events(
+    lines: AsyncIterator[str],
+    *,
+    map_error: Any,
+) -> AsyncIterator[StreamChatEvent]:
+    """
+    Parse SSE lines from an async streaming HTTP response into typed chat events.
+
+    Args:
+        lines: Async iterable of response lines from ``httpx.Response.aiter_lines``.
+        map_error: Callable that converts ``StreamErrorEvent`` into SDK exceptions.
+
+    Yields:
+        Token and completion events. Legacy ``done`` events are ignored.
+
+    Raises:
+        ChatVectorAPIError: If the stream emits a structured error event.
+    """
+    event_name: str | None = None
+    data_lines: list[str] = []
+
+    async for line in lines:
+        if line == "":
+            if event_name is None and not data_lines:
+                continue
+            event = _dispatch_sse_event(event_name, "\n".join(data_lines), map_error)
+            if event is not None:
+                yield event
+            event_name = None
+            data_lines = []
+            continue
+
+        if line.startswith("event:"):
+            event_name = line[len("event:") :].strip() or None
+            continue
+
+        if line.startswith("data:"):
+            data_lines.append(line[len("data:") :].strip())
+            continue
+
+    if event_name is not None or data_lines:
+        event = _dispatch_sse_event(event_name, "\n".join(data_lines), map_error)
+        if event is not None:
+            yield event
 
 
 def iter_stream_chat_events(
