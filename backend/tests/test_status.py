@@ -300,7 +300,14 @@ async def test_run_health_check_with_cache_skips_redis_if_backend_is_memory(monk
     mock_redis.setex.assert_not_called()
 
 def test_health_returns_ok():
+    import db as db_module
     from main import app
+    from services.api_key_service import reset_session_factory
+
+    # TestClient runs app lifespan on its own anyio loop; ensure the DB singleton
+    # is not reused from a prior pytest-asyncio test loop.
+    db_module.db_service = None
+    reset_session_factory()
 
     with TestClient(app) as client:
         response = client.get("/health")

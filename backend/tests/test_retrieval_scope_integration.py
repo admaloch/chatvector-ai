@@ -143,6 +143,9 @@ async def test_tenant_scope_prevents_cross_tenant_document_access():
 @pytest.mark.asyncio
 async def test_session_scope_backward_compatible_without_session_documents():
     with patch(
+        "services.chat_service.get_tenant_document_ids",
+        new=AsyncMock(return_value=[]),
+    ), patch(
         "services.chat_service.get_embeddings",
         new=AsyncMock(return_value=[[0.1, 0.2]]),
     ), patch(

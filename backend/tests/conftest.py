@@ -68,3 +68,22 @@ def clear_test_logs():
         if log_file.exists():
             log_file.write_text("", encoding="utf-8")
     yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_db_service_singleton():
+    """Clear cached SQLAlchemyService between tests.
+
+    pytest-asyncio uses a fresh event loop per async test, but ``db.db_service``
+    binds its async engine to the first loop that created it. Reusing that cache
+    in a later test (especially sync TestClient lifespan startup) triggers asyncpg
+    "another operation is in progress" errors.
+    """
+    import db as db_module
+    from services.api_key_service import reset_session_factory
+
+    db_module.db_service = None
+    reset_session_factory()
+    yield
+    db_module.db_service = None
+    reset_session_factory()
