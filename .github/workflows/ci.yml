@@ -243,6 +243,9 @@ jobs:
   prod-compose-e2e:
     name: Production Compose E2E Smoke Test
     runs-on: ubuntu-latest
+    # Requires a real provider key; skip cleanly when the secret is not configured
+    # (common on fork PRs where secrets are unavailable).
+    if: ${{ secrets.GEN_AI_KEY != '' }}
 
     steps:
       - name: Checkout

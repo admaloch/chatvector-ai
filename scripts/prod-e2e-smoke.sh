@@ -5,6 +5,16 @@ COMPOSE_FILE="docker-compose.prod.yml"
 BASE_URL="${BASE_URL:-http://localhost:8000}"
 PYTHON="${PYTHON:-python3}"
 
+# GitHub Actions passes empty strings for unset repository variables/secrets.
+# Treat those as unset so docker-compose and backend config fall back to defaults.
+if [ -z "${LLM_PROVIDER}" ]; then export LLM_PROVIDER=gemini; fi
+if [ -z "${EMBEDDING_PROVIDER}" ]; then export EMBEDDING_PROVIDER=gemini; fi
+if [ -z "${GEN_AI_KEY}" ]; then
+    echo "ERROR: GEN_AI_KEY is required for the production E2E smoke test."
+    echo "Configure secrets.GEN_AI_KEY and optional vars.CI_LLM_PROVIDER / CI_EMBEDDING_PROVIDER in GitHub."
+    exit 1
+fi
+
 TENANT_ID="ci-smoke-tenant-$(date +%s)"
 TENANT_NAME="CI Smoke Tenant"
 

@@ -197,22 +197,23 @@ describe("streamChat", () => {
       const stream = new ReadableStream<Uint8Array>({
         start(streamController) {
           streamController.enqueue(firstChunk);
-          if (signal === undefined) {
+          if (signal == null) {
             streamController.close();
             return;
           }
+          const abortSignal = signal;
           const fail = (): void => {
             streamController.error(
-              "reason" in signal
-                ? signal.reason
+              "reason" in abortSignal
+                ? abortSignal.reason
                 : new DOMException("The operation was aborted", "AbortError"),
             );
           };
-          if (signal.aborted) {
+          if (abortSignal.aborted) {
             fail();
             return;
           }
-          signal.addEventListener("abort", fail, { once: true });
+          abortSignal.addEventListener("abort", fail, { once: true });
         },
       });
       return new Response(stream, {
