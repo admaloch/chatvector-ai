@@ -30,6 +30,10 @@ from routes.root import router as root_router
 from routes.sessions import router as sessions_router
 from routes.status import router as status_router
 from routes.upload import router as upload_router
+from core.provider_validation import (
+    ProviderConfigError,
+    validate_provider_configuration_from_env,
+)
 from services.queue_service import ingestion_queue
 
 import logging
@@ -87,6 +91,22 @@ async def lifespan(app: FastAPI):
             "Set DATABASE_URL to a PostgreSQL connection string with pgvector enabled "
             "(e.g. postgresql+asyncpg://user:pass@host:5432/dbname). "
             "See backend/.env.example for configuration options."
+        )
+
+    if config.APP_ENV.lower() != "test":
+        try:
+            validate_provider_configuration_from_env(
+                llm_provider=config.LLM_PROVIDER,
+                embedding_provider=config.EMBEDDING_PROVIDER,
+                enable_streaming=config.ENABLE_STREAMING,
+            )
+        except ProviderConfigError as exc:
+            logger.error("%s Startup aborted.", exc)
+            raise RuntimeError(str(exc)) from exc
+        logger.info(
+            "Provider configuration validated (LLM=%s, embedding=%s).",
+            config.LLM_PROVIDER,
+            config.EMBEDDING_PROVIDER,
         )
 
     try:
