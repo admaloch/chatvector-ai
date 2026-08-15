@@ -1,4 +1,4 @@
-.PHONY: help setup dev quickstart backend frontend open stop up build down reset logs db sync prod-up prod-down prod-build ci tests cleanup clean
+.PHONY: help setup dev quickstart backend frontend open stop up build down reset logs db sync prod-up prod-down prod-build ci tests cleanup clean docs docs-build docs-serve
 
 # Default: most convenient local development experience
 .DEFAULT_GOAL := all
@@ -50,6 +50,11 @@ help:
 	@echo "  $(GREEN)make db$(RESET)            Open Postgres shell"
 	@echo "  $(GREEN)make tests$(RESET)         Run backend tests via Docker"
 	@echo "  $(GREEN)make clean$(RESET)         Remove containers, volumes, and orphans"
+	@echo ""
+	@echo "$(YELLOW)Documentation$(RESET)"
+	@echo "  $(GREEN)make docs$(RESET)          Build and serve the docs site locally"
+	@echo "  $(GREEN)make docs-build$(RESET)    Build static docs (strict link check)"
+	@echo "  $(GREEN)make docs-serve$(RESET)    Serve docs after building OpenAPI export"
 	@echo ""
 	@echo "$(YELLOW)Other$(RESET)"
 	@echo "  $(GREEN)make prod-up$(RESET)       Start production stack"
@@ -142,6 +147,19 @@ sync:
 	git rebase upstream/main
 	git push --force-with-lease origin HEAD
 	@echo "$(GREEN)Synced with upstream/main$(RESET)"
+
+docs-export:
+	python3 documentation/scripts/export_openapi.py
+
+docs-build: docs-export
+	mkdocs build -f documentation/mkdocs.yml --strict
+	@echo "$(GREEN)Documentation built to documentation/site/$(RESET)"
+
+docs-serve: docs-export
+	mkdocs serve -f documentation/mkdocs.yml
+
+docs: docs-export
+	mkdocs serve -f documentation/mkdocs.yml
 
 cleanup:
 	@echo "$(YELLOW)Deleting all local branches except main...$(RESET)"

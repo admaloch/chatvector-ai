@@ -203,6 +203,37 @@ jobs:
           cd sdk/python
           pytest tests/ -v --tb=short
 
+  docs:
+    name: Documentation Site
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            documentation/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r backend/requirements.txt
+          pip install -r documentation/requirements.txt
+
+      - name: Export OpenAPI schema
+        env:
+          APP_ENV: test
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
+          GEN_AI_KEY: docs-export-key
+        run: python documentation/scripts/export_openapi.py
+
+      - name: Build documentation site
+        run: mkdocs build -f documentation/mkdocs.yml --strict
+
   typescript-sdk:
     name: TypeScript SDK (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
