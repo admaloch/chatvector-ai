@@ -241,14 +241,21 @@ for legal, academic, and internal knowledge base use cases.
 ## Retry Logic & Resilience
 
 All external I/O is wrapped with retry logic via `backend/utils/retry.py`.
+See [DEVELOPMENT.md — Retry behavior](DEVELOPMENT.md#retry-behavior) for the
+full cross-surface contract and audit checklist.
 
 **`retry_async` features:**
 - Per-attempt timeout via `asyncio.wait_for` (default 30s)
 - Exponential backoff with full jitter — `random.uniform(0, cap)` prevents thundering herd
 - `asyncio.TimeoutError` caught by type and always treated as transient
-- 429/rate-limit errors from Gemini detected by type (`APIError`) before string matching
+- Provider rate limits, timeouts, and connection errors detected by exception type
 - Non-transient errors (4xx validation failures) fail fast without retry
 - `max_retries` means retries *after* the first attempt — `max_retries=3` makes 4 total attempts
+
+**Where retries apply:**
+- DB factory operations and embedding calls use shared defaults (`DEFAULT_MAX_RETRIES=3`)
+- Non-streaming LLM answer generation retries transient provider failures
+- Streaming LLM responses are not retried after bytes may have started
 
 **Timeout configuration:**
 | Surface | Timeout | Mechanism |

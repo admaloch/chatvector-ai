@@ -245,6 +245,21 @@ except ChatVectorAPIError as exc:
     print(exc)
 ```
 
+## Retry behavior
+
+By default, eligible `GET` and `HEAD` requests are retried at most twice (three
+total attempts) for connection/timeouts and HTTP 408, 429, 502, 503, or 504.
+Backoff uses bounded exponential full jitter (cap 8s) and honors numeric
+`Retry-After` headers as a sleep floor.
+
+Mutating requests are never automatically replayed. This includes document
+uploads, chat, streaming chat, batch chat, session creation, and session
+deletion. The API has no idempotency-key contract, so replaying an ambiguous
+request could duplicate documents, sessions, or messages.
+
+See [DEVELOPMENT.md — Retry behavior](../../DEVELOPMENT.md#retry-behavior) for
+the full cross-surface contract shared with the backend and TypeScript SDK.
+
 ## Examples
 
 See the runnable scripts in [examples](./examples):

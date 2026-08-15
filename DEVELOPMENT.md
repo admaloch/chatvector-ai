@@ -10,6 +10,7 @@
 - [Working with the Database Layer](#working-with-the-database-layer)
 - [Ingestion Queue](#ingestion-queue)
 - [Tests](#tests)
+- [Retry behavior](#retry-behavior)
 - [Deployment](#deployment)
 - [CI](#ci)
 - [Frontend](#frontend)
@@ -602,6 +603,60 @@ pytest -x         # stop on first failure
 pytest -s         # show print statements
 pytest -k "chat"  # run tests matching pattern
 ```
+
+---
+
+## Retry behavior
+
+ChatVector uses a shared retry contract across the backend, provider layer, and
+official SDKs. The goal is consistent handling of transient failures (429, 502,
+503, 504, 408, timeouts, and connection errors) without replaying ambiguous
+mutating HTTP requests.
+
+### Semantics
+
+| Setting | Backend (`utils/retry.py`) | Python SDK | TypeScript SDK |
+| --- | --- | --- | --- |
+| `max_retries` meaning | Retries **after** the first attempt | Same | `maxRetries` — same |
+| Default max retries | 3 (4 total attempts) | 2 (3 total attempts) | 2 (3 total attempts) |
+| Base delay | 1.0s | 0.5s | 500ms |
+| Backoff multiplier | 2.0 | 2.0 | 2× per retry index |
+| Jitter | Full jitter: `uniform(0, cap)` | Full jitter with 8s cap | Full jitter with 8s cap |
+| `Retry-After` | Not parsed at backend layer | Floors sleep via `WantsRetry` | Floors sleep via `parseRetryAfter` |
+| Per-attempt timeout | Yes (`asyncio.wait_for`) | httpx client timeout (30s default) | Per-request timeout (30s default) |
+
+### Retryable errors
+
+**Backend** (`is_transient_error` in `backend/utils/retry.py`):
+
+- `asyncio.TimeoutError`
+- `ProviderRateLimitError`, `ProviderTimeoutError`, `ProviderConnectionError`
+- Message patterns: connection, timeout, deadlock, rate limit, unavailable, etc.
+- Non-transient provider/auth/validation errors fail fast
+
+**HTTP status codes** (SDK clients and documentation): `408`, `429`, `502`, `503`, `504`
+
+### Where retries apply
+
+| Surface | Retries? | Notes |
+| --- | --- | --- |
+| DB factory (`db/__init__.py`) | Yes | Most ops use shared defaults; some status updates use `base_delay=0.5` |
+| Embedding service | Yes | Wraps provider `embed()` |
+| LLM answer generation (non-streaming) | Yes | Wraps provider `generate()`; streaming is not retried |
+| LLM streaming | No | Bytes may have started — explicit non-goal |
+| HTTP middleware (`POST /chat`, upload) | No | Explicit non-goal |
+| Python/TS SDK `GET`/`HEAD` | Yes | Safe, idempotent reads |
+| Python/TS SDK mutating methods | No | Upload, chat, sessions, streaming |
+
+### Audit checklist
+
+- [x] `embedding_service.py` — `retry_async` with shared defaults
+- [x] `answer_service.py` — non-streaming `generate_answer` uses `retry_async`
+- [x] `answer_service.py` — streaming path intentionally has no retry
+- [x] Provider clients — map rate limits/timeouts/connections to shared exception types
+- [x] `db/__init__.py` — retry at factory layer (status-update ops use shorter base delay)
+- [x] Python SDK — GET/HEAD only, full jitter, `Retry-After` floor
+- [x] TypeScript SDK — GET/HEAD only (existing behavior documented in `sdk/typescript/README.md`)
 
 ---
 

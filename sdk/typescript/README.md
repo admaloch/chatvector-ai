@@ -183,6 +183,9 @@ uploads, chat, streaming chat, batch chat, session creation, and session deletio
 no idempotency-key contract, so replaying an ambiguous request could duplicate
 documents, sessions, or messages.
 
+See [DEVELOPMENT.md — Retry behavior](../DEVELOPMENT.md#retry-behavior) for the
+full cross-surface contract shared with the backend and Python SDK.
+
 Configure or disable retry behavior at construction:
 
 ```ts
