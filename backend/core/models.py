@@ -28,6 +28,8 @@ class ApiKey(Base):
     prefix = Column(String(16), nullable=False, unique=True, index=True)
     key_hash = Column(String(64), nullable=False)
     status = Column(String(50), nullable=False, default="active")
+    expires_at = Column(DateTime, nullable=True, index=True)
+    external_user_id = Column(String(255), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
