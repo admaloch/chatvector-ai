@@ -1,5 +1,6 @@
 """LLM answer generation for RAG chat — delegates to the configured provider."""
 
+import asyncio
 import logging
 import time
 from pathlib import Path
@@ -167,6 +168,15 @@ async def generate_answer(question: str, context: str) -> tuple[str, int, str]:
             "LLM connection error (%s): %s",
             type(e).__name__,
             e,
+            exc_info=True,
+            extra={"error_type": type(e).__name__},
+        )
+        return _msg_timeout_or_connection(), 0, ""
+
+    except asyncio.TimeoutError as e:
+        logger.error(
+            "LLM request timed out after retries (%s)",
+            type(e).__name__,
             exc_info=True,
             extra={"error_type": type(e).__name__},
         )

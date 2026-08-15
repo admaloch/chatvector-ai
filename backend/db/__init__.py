@@ -208,10 +208,10 @@ async def update_document_status(
 
     await retry_async(
         _update,
-        max_retries=3,
+        max_retries=DEFAULT_MAX_RETRIES,
         base_delay=0.5,
         backoff=2.0,
-        timeout=10.0,
+        timeout=DEFAULT_DB_TIMEOUT_SEC,
         func_name=f"{service.__class__.__name__}.update_document_status",
     )
 
@@ -225,10 +225,10 @@ async def get_document_status(doc_id: str, tenant_id: str) -> dict | None:
 
     return await retry_async(
         _get_status,
-        max_retries=3,
+        max_retries=DEFAULT_MAX_RETRIES,
         base_delay=0.5,
         backoff=2.0,
-        timeout=10.0,
+        timeout=DEFAULT_DB_TIMEOUT_SEC,
         func_name=f"{service.__class__.__name__}.get_document_status",
     )
 
@@ -242,10 +242,10 @@ async def delete_document_chunks(doc_id: str, tenant_id: str) -> None:
 
     await retry_async(
         _cleanup,
-        max_retries=3,
+        max_retries=DEFAULT_MAX_RETRIES,
         base_delay=0.5,
         backoff=2.0,
-        timeout=10.0,
+        timeout=DEFAULT_DB_TIMEOUT_SEC,
         func_name=f"{service.__class__.__name__}.delete_document_chunks",
     )
 
@@ -259,10 +259,10 @@ async def delete_document(doc_id: str, tenant_id: str) -> None:
 
     await retry_async(
         _delete,
-        max_retries=3,
+        max_retries=DEFAULT_MAX_RETRIES,
         base_delay=0.5,
         backoff=2.0,
-        timeout=10.0,
+        timeout=DEFAULT_DB_TIMEOUT_SEC,
         func_name=f"{service.__class__.__name__}.delete_document",
     )
 
@@ -299,10 +299,10 @@ async def list_tenant_documents(tenant_id: str) -> list[str]:
 
     return await retry_async(
         _list,
-        max_retries=3,
+        max_retries=DEFAULT_MAX_RETRIES,
         base_delay=0.5,
         backoff=2.0,
-        timeout=10.0,
+        timeout=DEFAULT_DB_TIMEOUT_SEC,
         func_name=f"{service.__class__.__name__}.list_tenant_documents",
     )
 
@@ -339,10 +339,10 @@ async def get_session_history(
 
     return await retry_async(
         _get,
-        max_retries=3,
+        max_retries=DEFAULT_MAX_RETRIES,
         base_delay=0.5,
         backoff=2.0,
-        timeout=10.0,
+        timeout=DEFAULT_DB_TIMEOUT_SEC,
         func_name=f"{service.__class__.__name__}.get_session_history",
     )
 

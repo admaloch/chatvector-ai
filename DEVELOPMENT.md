@@ -622,7 +622,7 @@ mutating HTTP requests.
 | Base delay | 1.0s | 0.5s | 500ms |
 | Backoff multiplier | 2.0 | 2.0 | 2× per retry index |
 | Jitter | Full jitter: `uniform(0, cap)` | Full jitter with 8s cap | Full jitter with 8s cap |
-| `Retry-After` | Not parsed at backend layer | Floors sleep via `WantsRetry` | Floors sleep via `parseRetryAfter` |
+| `Retry-After` | Not parsed at backend layer | Numeric delta-seconds only (floors sleep via `WantsRetry`); HTTP-date values ignored | Parses delta-seconds and HTTP-date via `parseRetryAfter` |
 | Per-attempt timeout | Yes (`asyncio.wait_for`) | httpx client timeout (30s default) | Per-request timeout (30s default) |
 
 ### Retryable errors
