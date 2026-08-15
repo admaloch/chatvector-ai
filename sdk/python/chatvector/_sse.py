@@ -14,7 +14,7 @@ from .exceptions import (
     ChatVectorRateLimitError,
     ChatVectorTimeoutError,
 )
-from .models import ChatSource, StreamChatEvent, StreamErrorEvent
+from .models import ChatSource, DocumentStatus, StreamChatEvent, StreamErrorEvent
 
 _DONE_PAYLOAD = "[DONE]"
 
@@ -101,6 +101,84 @@ def _dispatch_sse_event(
         "ChatVector returned an unexpected streaming event.",
         details={"event": event_name, "data": data},
     )
+
+
+def iter_document_status_events(
+    lines: Iterator[str],
+    *,
+    map_error: Any,
+) -> Iterator[DocumentStatus]:
+    """
+    Parse SSE lines from a document status stream into typed status payloads.
+
+    Args:
+        lines: Iterable of response lines from ``httpx.Response.iter_lines``.
+        map_error: Callable that converts error payloads into SDK exceptions.
+
+    Yields:
+        Document status snapshots emitted by the ingestion stream.
+
+    Raises:
+        ChatVectorAPIError: If the stream emits a structured error event.
+    """
+    event_name: str | None = None
+    data_lines: list[str] = []
+
+    for line in lines:
+        if line == "":
+            if event_name is None and not data_lines:
+                continue
+            event = _dispatch_document_status_sse_event(
+                event_name, "\n".join(data_lines), map_error
+            )
+            if event is not None:
+                yield event
+            event_name = None
+            data_lines = []
+            continue
+
+        if line.startswith("event:"):
+            event_name = line[len("event:") :].strip() or None
+            continue
+
+        if line.startswith("data:"):
+            data_lines.append(line[len("data:") :].strip())
+            continue
+
+    if event_name is not None or data_lines:
+        event = _dispatch_document_status_sse_event(
+            event_name, "\n".join(data_lines), map_error
+        )
+        if event is not None:
+            yield event
+
+
+def _dispatch_document_status_sse_event(
+    event_name: str | None,
+    data: str,
+    map_error: Any,
+) -> DocumentStatus | None:
+    """Convert one document-status SSE event into a model or raise."""
+    if event_name == "error":
+        payload = _parse_json_object(data)
+        raise map_error(payload)
+
+    if event_name == "status":
+        payload = _parse_json_object(data)
+        return DocumentStatus.from_dict(payload)
+
+    raise ChatVectorAPIError(
+        "ChatVector returned an unexpected document status streaming event.",
+        details={"event": event_name, "data": data},
+    )
+
+
+def map_document_status_stream_error(payload: dict[str, Any]) -> ChatVectorAPIError:
+    """Convert a document-status streaming error payload into an SDK exception."""
+    message = str(payload.get("message") or "ChatVector document status stream failed.")
+    if "timed out" in message.lower():
+        return ChatVectorTimeoutError(message, details=payload)
+    return ChatVectorAPIError(message, details=payload)
 
 
 def map_stream_error(error: StreamErrorEvent) -> ChatVectorAPIError:
