@@ -1,10 +1,11 @@
-"""Unit tests for the internal ``retry_sync`` helper."""
+"""Unit tests for the internal retry helpers."""
 
 from __future__ import annotations
 
 import unittest
 from unittest.mock import patch
 
+from chatvector._common import is_retryable_method
 from chatvector._retry import WantsRetry, retry_sync
 
 
@@ -20,7 +21,7 @@ class RetrySyncTests(unittest.TestCase):
             return "ok"
 
         with patch("chatvector._retry.time.sleep") as mock_sleep:
-            result = retry_sync(func, max_retries=3, base_delay=1.0, backoff=2.0)
+            result = retry_sync(func, max_retries=2, base_delay=1.0, backoff=2.0)
 
         self.assertEqual(result, "ok")
         self.assertEqual(calls[0], 1)
@@ -36,8 +37,9 @@ class RetrySyncTests(unittest.TestCase):
                 raise WantsRetry(0.0)
             return 42
 
-        with patch("chatvector._retry.time.sleep", return_value=None) as mock_sleep:
-            result = retry_sync(func, max_retries=5, base_delay=0.5, backoff=2.0)
+        with patch("chatvector._retry.random.uniform", side_effect=[0.5, 1.0]):
+            with patch("chatvector._retry.time.sleep", return_value=None) as mock_sleep:
+                result = retry_sync(func, max_retries=3, base_delay=0.5, backoff=2.0)
 
         self.assertEqual(result, 42)
         self.assertEqual(calls[0], 3)
@@ -55,13 +57,13 @@ class RetrySyncTests(unittest.TestCase):
 
         with patch("chatvector._retry.time.sleep", return_value=None) as mock_sleep:
             with self.assertRaises(WantsRetry):
-                retry_sync(func, max_retries=3, base_delay=1.0, backoff=2.0)
+                retry_sync(func, max_retries=2, base_delay=1.0, backoff=2.0)
 
         self.assertEqual(calls[0], 3)
         self.assertEqual(mock_sleep.call_count, 2)
 
-    def test_exponential_backoff_uses_base_delay_and_backoff(self) -> None:
-        """Sleep durations should follow ``base_delay * (backoff ** attempt)``."""
+    def test_exponential_backoff_uses_full_jitter(self) -> None:
+        """Sleep durations should follow bounded exponential full jitter."""
         calls = [0]
 
         def func() -> str:
@@ -70,12 +72,13 @@ class RetrySyncTests(unittest.TestCase):
                 raise WantsRetry(0.0)
             return "done"
 
-        with patch("chatvector._retry.time.sleep", return_value=None) as mock_sleep:
-            retry_sync(func, max_retries=4, base_delay=0.1, backoff=3.0)
+        with patch("chatvector._retry.random.uniform", side_effect=[0.01, 0.2, 0.9]):
+            with patch("chatvector._retry.time.sleep", return_value=None) as mock_sleep:
+                retry_sync(func, max_retries=3, base_delay=0.1, backoff=3.0)
 
         self.assertEqual(mock_sleep.call_count, 3)
-        self.assertAlmostEqual(mock_sleep.call_args_list[0].args[0], 0.1)
-        self.assertAlmostEqual(mock_sleep.call_args_list[1].args[0], 0.3)
+        self.assertAlmostEqual(mock_sleep.call_args_list[0].args[0], 0.01)
+        self.assertAlmostEqual(mock_sleep.call_args_list[1].args[0], 0.2)
         self.assertAlmostEqual(mock_sleep.call_args_list[2].args[0], 0.9)
 
     def test_non_retry_exception_propagates_immediately(self) -> None:
@@ -88,7 +91,7 @@ class RetrySyncTests(unittest.TestCase):
 
         with patch("chatvector._retry.time.sleep", return_value=None) as mock_sleep:
             with self.assertRaises(ValueError):
-                retry_sync(func, max_retries=5, base_delay=1.0, backoff=2.0)
+                retry_sync(func, max_retries=3, base_delay=1.0, backoff=2.0)
 
         self.assertEqual(calls[0], 1)
         mock_sleep.assert_not_called()
@@ -103,12 +106,27 @@ class RetrySyncTests(unittest.TestCase):
                 raise WantsRetry(5.0)
             return "ok"
 
-        with patch("chatvector._retry.time.sleep", return_value=None) as mock_sleep:
-            result = retry_sync(func, max_retries=3, base_delay=0.5, backoff=2.0)
+        with patch("chatvector._retry.random.uniform", return_value=0.1):
+            with patch("chatvector._retry.time.sleep", return_value=None) as mock_sleep:
+                result = retry_sync(func, max_retries=2, base_delay=0.5, backoff=2.0)
 
         self.assertEqual(result, "ok")
         self.assertEqual(mock_sleep.call_count, 1)
         self.assertEqual(mock_sleep.call_args_list[0].args[0], 5.0)
+
+
+class RetryableMethodTests(unittest.TestCase):
+    """Verify HTTP method classification matches the TypeScript SDK."""
+
+    def test_retryable_methods(self) -> None:
+        for method in ("GET", "get", "HEAD", "head"):
+            with self.subTest(method=method):
+                self.assertTrue(is_retryable_method(method))
+
+    def test_non_retryable_methods(self) -> None:
+        for method in ("POST", "DELETE", "PUT", "PATCH", " GET "):
+            with self.subTest(method=method):
+                self.assertFalse(is_retryable_method(method))
 
 
 if __name__ == "__main__":

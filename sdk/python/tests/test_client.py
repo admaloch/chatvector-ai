@@ -280,7 +280,7 @@ class ChatVectorClientTests(unittest.TestCase):
 
         with (
             patch.object(self.client, "get_status", side_effect=[queued, completed]) as mock_status,
-            patch("chatvector.client.time.sleep", return_value=None),
+            patch("chatvector._retry.time.sleep", return_value=None),
         ):
             result = self.client.wait_for_ready("doc-123", timeout=10, interval=1)
 
@@ -344,7 +344,7 @@ class ChatVectorClientTests(unittest.TestCase):
 
         with (
             patch.object(self.client._client, "request", side_effect=responses) as mock_request,
-            patch("chatvector.client.time.sleep", return_value=None) as mock_sleep,
+            patch("chatvector._retry.time.sleep", return_value=None) as mock_sleep,
         ):
             with self.assertRaises(ChatVectorRateLimitError):
                 self.client.get_status("doc-123")
@@ -358,7 +358,7 @@ class ChatVectorClientTests(unittest.TestCase):
 
         with (
             patch.object(self.client._client, "request", side_effect=timeouts) as mock_request,
-            patch("chatvector.client.time.sleep", return_value=None) as mock_sleep,
+            patch("chatvector._retry.time.sleep", return_value=None) as mock_sleep,
         ):
             with self.assertRaises(ChatVectorTimeoutError):
                 self.client.get_status("doc-123")
@@ -409,26 +409,42 @@ class ChatVectorClientTests(unittest.TestCase):
         self.assertEqual(exc_info.exception.status_code, 403)
 
     def test_408_request_timeout_raises_chatvector_timeout_error(self) -> None:
-        """HTTP 408 status should map to ChatVectorTimeoutError (distinct from httpx.TimeoutException)."""
-        # 408 is in _RETRYABLE_STATUS_CODES so it will retry — provide 3 responses
-        responses = [
-            make_response(
-                408,
-                method="POST",
-                url="https://api.chatvector.test/chat",
-                json_data={"detail": {"code": "request_timeout", "message": "Request timed out"}},
-            )
-            for _ in range(3)
-        ]
+        """HTTP 408 on POST should fail immediately without automatic replay."""
+        response = make_response(
+            408,
+            method="POST",
+            url="https://api.chatvector.test/chat",
+            json_data={"detail": {"code": "request_timeout", "message": "Request timed out"}},
+        )
 
         with (
-            patch.object(self.client._client, "request", side_effect=responses),
-            patch("chatvector.client.time.sleep", return_value=None),
+            patch.object(self.client._client, "request", return_value=response) as mock_request,
+            patch("chatvector._retry.time.sleep", return_value=None),
         ):
             with self.assertRaises(ChatVectorTimeoutError) as exc_info:
                 self.client.chat("Hello?", "doc-123")
 
         self.assertEqual(exc_info.exception.status_code, 408)
+        self.assertEqual(mock_request.call_count, 1)
+
+    def test_post_does_not_retry_retryable_status_codes(self) -> None:
+        """Mutating requests must not replay ambiguous 503 responses."""
+        response = make_response(
+            503,
+            method="POST",
+            url="https://api.chatvector.test/chat",
+            json_data={"detail": {"code": "busy", "message": "Busy"}},
+        )
+
+        with (
+            patch.object(self.client._client, "request", return_value=response) as mock_request,
+            patch("chatvector._retry.time.sleep", return_value=None) as mock_sleep,
+        ):
+            with self.assertRaises(ChatVectorAPIError):
+                self.client.chat("Hello?", "doc-123")
+
+        self.assertEqual(mock_request.call_count, 1)
+        mock_sleep.assert_not_called()
 
     def test_504_gateway_timeout_raises_chatvector_timeout_error(self) -> None:
         """HTTP 504 status should map to ChatVectorTimeoutError (distinct from httpx.TimeoutException)."""
@@ -445,7 +461,7 @@ class ChatVectorClientTests(unittest.TestCase):
 
         with (
             patch.object(self.client._client, "request", side_effect=responses),
-            patch("chatvector.client.time.sleep", return_value=None),
+            patch("chatvector._retry.time.sleep", return_value=None),
         ):
             with self.assertRaises(ChatVectorTimeoutError) as exc_info:
                 self.client.get_status("doc-123")

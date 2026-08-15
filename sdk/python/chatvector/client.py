@@ -41,6 +41,7 @@ from ._common import (
     RETRYABLE_STATUS_CODES,
     default_error_message,
     extract_error_details,
+    is_retryable_method,
     map_http_error,
     msg_timeout_or_connection,
     msg_unexpected,
@@ -483,6 +484,7 @@ class ChatVectorClient:
         """
         max_attempts = self.max_retries + 1
         call_idx = [0]
+        retryable_method = is_retryable_method(method)
 
         def _attempt() -> httpx.Response:
             i = call_idx[0]
@@ -490,23 +492,24 @@ class ChatVectorClient:
             try:
                 response = self._client.request(method, url, **kwargs)
                 if response.status_code in self._RETRYABLE_STATUS_CODES:
-                    if i + 1 < max_attempts:
+                    if retryable_method and i + 1 < max_attempts:
                         raise WantsRetry(self._retry_after_seconds(response))
                     response.raise_for_status()
                     return response
                 response.raise_for_status()
                 return response
             except httpx.TimeoutException as exc:
-                if i + 1 < max_attempts:
+                if retryable_method and i + 1 < max_attempts:
                     raise WantsRetry(0.0) from exc
                 raise ChatVectorTimeoutError(self._msg_timeout_or_connection()) from exc
             except (httpx.ConnectError, httpx.NetworkError, httpx.RemoteProtocolError) as exc:
-                if i + 1 < max_attempts:
+                if retryable_method and i + 1 < max_attempts:
                     raise WantsRetry(0.0) from exc
                 raise ChatVectorTimeoutError(self._msg_timeout_or_connection()) from exc
             except httpx.HTTPStatusError as exc:
                 if (
-                    exc.response.status_code in self._RETRYABLE_STATUS_CODES
+                    retryable_method
+                    and exc.response.status_code in self._RETRYABLE_STATUS_CODES
                     and i + 1 < max_attempts
                 ):
                     raise WantsRetry(self._retry_after_seconds(exc.response)) from exc
@@ -518,7 +521,7 @@ class ChatVectorClient:
 
         return retry_sync(
             _attempt,
-            max_retries=max_attempts,
+            max_retries=self.max_retries,
             base_delay=self.retry_backoff,
             backoff=2.0,
             func_name="_request_response",

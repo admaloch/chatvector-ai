@@ -19,6 +19,18 @@ JSONMapping = Mapping[str, Any]
 
 RETRYABLE_STATUS_CODES = {408, 429, 502, 503, 504}
 
+# SDK defaults aligned with the TypeScript client (see DEVELOPMENT.md).
+DEFAULT_SDK_MAX_RETRIES = 2
+DEFAULT_SDK_BASE_DELAY = 0.5
+DEFAULT_SDK_BACKOFF = 2.0
+DEFAULT_SDK_MAX_DELAY = 8.0
+
+
+def is_retryable_method(method: str) -> bool:
+    """Only safe, idempotent reads are automatically replayed."""
+    normalized = method.upper()
+    return normalized in {"GET", "HEAD"}
+
 
 def map_http_error(response: httpx.Response) -> ChatVectorAPIError:
     """Convert an HTTP error response into the matching ChatVector exception."""

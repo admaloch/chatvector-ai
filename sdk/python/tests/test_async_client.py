@@ -289,7 +289,7 @@ class AsyncChatVectorClientTests(unittest.IsolatedAsyncioTestCase):
                 "get_status",
                 new=AsyncMock(side_effect=[queued, completed]),
             ) as mock_status,
-            patch("chatvector.async_client.asyncio.sleep", new=AsyncMock(return_value=None)),
+            patch("chatvector._retry.asyncio.sleep", new=AsyncMock(return_value=None)),
         ):
             result = await self.client.wait_for_ready("doc-123", timeout=10, interval=1)
 
@@ -329,7 +329,7 @@ class AsyncChatVectorClientTests(unittest.IsolatedAsyncioTestCase):
                 "request",
                 new=AsyncMock(side_effect=responses),
             ) as mock_request,
-            patch("chatvector.async_client.asyncio.sleep", new=AsyncMock(return_value=None)) as mock_sleep,
+            patch("chatvector._retry.asyncio.sleep", new=AsyncMock(return_value=None)) as mock_sleep,
         ):
             with self.assertRaises(ChatVectorRateLimitError):
                 await self.client.get_status("doc-123")
@@ -346,7 +346,7 @@ class AsyncChatVectorClientTests(unittest.IsolatedAsyncioTestCase):
                 "request",
                 new=AsyncMock(side_effect=timeouts),
             ) as mock_request,
-            patch("chatvector.async_client.asyncio.sleep", new=AsyncMock(return_value=None)) as mock_sleep,
+            patch("chatvector._retry.asyncio.sleep", new=AsyncMock(return_value=None)) as mock_sleep,
         ):
             with self.assertRaises(ChatVectorTimeoutError):
                 await self.client.get_status("doc-123")

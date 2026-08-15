@@ -4,8 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from typing import Awaitable, Callable, Optional, TypeVar
+
+from ._common import (
+    DEFAULT_SDK_BACKOFF,
+    DEFAULT_SDK_BASE_DELAY,
+    DEFAULT_SDK_MAX_DELAY,
+    DEFAULT_SDK_MAX_RETRIES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,26 +30,41 @@ class WantsRetry(Exception):
         self.min_additional_delay = max(0.0, float(min_additional_delay))
 
 
+def _retry_delay_seconds(
+    attempt: int,
+    *,
+    base_delay: float,
+    backoff: float,
+    max_delay: float,
+    min_additional_delay: float,
+) -> float:
+    cap = min(base_delay * (backoff**attempt), max_delay)
+    return max(random.uniform(0, cap), min_additional_delay)
+
+
 def retry_sync(
     func: Callable[[], T],
-    max_retries: int = 3,
-    base_delay: float = 1.0,
-    backoff: float = 2.0,
+    max_retries: int = DEFAULT_SDK_MAX_RETRIES,
+    base_delay: float = DEFAULT_SDK_BASE_DELAY,
+    backoff: float = DEFAULT_SDK_BACKOFF,
+    max_delay: float = DEFAULT_SDK_MAX_DELAY,
     func_name: Optional[str] = None,
 ) -> T:
     """
-    Retry a synchronous callable with exponential backoff.
+    Retry a synchronous callable with exponential full jitter.
 
     Retries when ``func`` raises :class:`WantsRetry`. Sleeps
-    ``max(base_delay * (backoff ** attempt), exc.min_additional_delay)`` before the
-    next attempt so callers can raise ``WantsRetry(seconds)`` to honor a minimum
+    ``max(random.uniform(0, cap), exc.min_additional_delay)`` where
+    ``cap = min(base_delay * (backoff ** attempt), max_delay)`` before the next
+    attempt so callers can raise ``WantsRetry(seconds)`` to honor a minimum
     delay (for example from ``Retry-After``) without putting protocol logic here.
 
     Args:
         func: Callable to invoke (no arguments).
-        max_retries: Total number of attempts (same semantics as ``retry_async``).
+        max_retries: Retries after the first attempt (``max_retries=2`` -> 3 total).
         base_delay: Initial delay factor in seconds.
         backoff: Exponential multiplier applied per retry attempt.
+        max_delay: Upper bound on jitter cap in seconds.
         func_name: Optional label for logging.
 
     Returns:
@@ -54,13 +77,14 @@ def retry_sync(
         func_name = getattr(func, "__name__", "unknown_function")
 
     last_exception: BaseException | None = None
+    max_attempts = max_retries + 1
 
-    for attempt in range(max_retries):
+    for attempt in range(max_attempts):
         try:
             return func()
         except WantsRetry as e:
             last_exception = e
-            if attempt == max_retries - 1:
+            if attempt == max_attempts - 1:
                 logger.error(
                     "Final retry attempt failed for %s",
                     func_name,
@@ -68,25 +92,30 @@ def retry_sync(
                         "error_type": type(e).__name__,
                         "error_message": str(e),
                         "attempt": attempt + 1,
-                        "max_retries": max_retries,
+                        "max_attempts": max_attempts,
                     },
                 )
                 raise
 
-            extra = float(e.min_additional_delay or 0.0)
-            delay = max(base_delay * (backoff**attempt), extra)
+            delay = _retry_delay_seconds(
+                attempt,
+                base_delay=base_delay,
+                backoff=backoff,
+                max_delay=max_delay,
+                min_additional_delay=float(e.min_additional_delay or 0.0),
+            )
 
             logger.warning(
                 "Transient error in %s, retrying in %.2fs (attempt %d/%d)",
                 func_name,
                 delay,
                 attempt + 1,
-                max_retries,
+                max_attempts,
                 extra={
                     "error_type": type(e).__name__,
                     "error_message": str(e),
                     "attempt": attempt + 1,
-                    "max_retries": max_retries,
+                    "max_attempts": max_attempts,
                     "next_retry_delay": delay,
                 },
             )
@@ -100,24 +129,27 @@ def retry_sync(
 
 async def retry_async(
     func: Callable[[], Awaitable[T]],
-    max_retries: int = 3,
-    base_delay: float = 1.0,
-    backoff: float = 2.0,
+    max_retries: int = DEFAULT_SDK_MAX_RETRIES,
+    base_delay: float = DEFAULT_SDK_BASE_DELAY,
+    backoff: float = DEFAULT_SDK_BACKOFF,
+    max_delay: float = DEFAULT_SDK_MAX_DELAY,
     func_name: Optional[str] = None,
 ) -> T:
     """
-    Retry an async callable with exponential backoff.
+    Retry an async callable with exponential full jitter.
 
     Retries when ``func`` raises :class:`WantsRetry`. Sleeps
-    ``max(base_delay * (backoff ** attempt), exc.min_additional_delay)`` before the
-    next attempt so callers can raise ``WantsRetry(seconds)`` to honor a minimum
+    ``max(random.uniform(0, cap), exc.min_additional_delay)`` where
+    ``cap = min(base_delay * (backoff ** attempt), max_delay)`` before the next
+    attempt so callers can raise ``WantsRetry(seconds)`` to honor a minimum
     delay (for example from ``Retry-After``) without putting protocol logic here.
 
     Args:
         func: Async callable to invoke (no arguments).
-        max_retries: Total number of attempts (same semantics as ``retry_sync``).
+        max_retries: Retries after the first attempt (``max_retries=2`` -> 3 total).
         base_delay: Initial delay factor in seconds.
         backoff: Exponential multiplier applied per retry attempt.
+        max_delay: Upper bound on jitter cap in seconds.
         func_name: Optional label for logging.
 
     Returns:
@@ -130,13 +162,14 @@ async def retry_async(
         func_name = getattr(func, "__name__", "unknown_function")
 
     last_exception: BaseException | None = None
+    max_attempts = max_retries + 1
 
-    for attempt in range(max_retries):
+    for attempt in range(max_attempts):
         try:
             return await func()
         except WantsRetry as e:
             last_exception = e
-            if attempt == max_retries - 1:
+            if attempt == max_attempts - 1:
                 logger.error(
                     "Final retry attempt failed for %s",
                     func_name,
@@ -144,25 +177,30 @@ async def retry_async(
                         "error_type": type(e).__name__,
                         "error_message": str(e),
                         "attempt": attempt + 1,
-                        "max_retries": max_retries,
+                        "max_attempts": max_attempts,
                     },
                 )
                 raise
 
-            extra = float(e.min_additional_delay or 0.0)
-            delay = max(base_delay * (backoff**attempt), extra)
+            delay = _retry_delay_seconds(
+                attempt,
+                base_delay=base_delay,
+                backoff=backoff,
+                max_delay=max_delay,
+                min_additional_delay=float(e.min_additional_delay or 0.0),
+            )
 
             logger.warning(
                 "Transient error in %s, retrying in %.2fs (attempt %d/%d)",
                 func_name,
                 delay,
                 attempt + 1,
-                max_retries,
+                max_attempts,
                 extra={
                     "error_type": type(e).__name__,
                     "error_message": str(e),
                     "attempt": attempt + 1,
-                    "max_retries": max_retries,
+                    "max_attempts": max_attempts,
                     "next_retry_delay": delay,
                 },
             )
