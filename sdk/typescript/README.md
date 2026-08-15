@@ -17,9 +17,11 @@ non-streaming chat, streaming chat, batch chat, and sessions.
 npm install @chatvector/sdk
 ```
 
-The package is ESM-first and also provides a CommonJS `require` entry point.
-The `@chatvector` npm scope must be confirmed by maintainers before the first
-public release.
+The package is published publicly on npm as `@chatvector/sdk`. It is ESM-first
+and also provides a CommonJS `require` entry point.
+
+Maintainers: see [RELEASING.md](./RELEASING.md) for npm scope access, semver
+policy, and the tagged release workflow.
 
 ## Quickstart
 

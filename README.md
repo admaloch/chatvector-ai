@@ -347,6 +347,39 @@ In development (`APP_ENV=development`), the `api_key` parameter can be omitted ‚
 
 See [sdk/python/README.md](sdk/python/README.md) for authentication, error handling, and runnable examples.
 
+### TypeScript SDK
+
+The Node.js/TypeScript client is published on npm as `@chatvector/sdk`:
+
+```bash
+npm install @chatvector/sdk
+```
+
+```ts
+import { ChatVectorClient } from "@chatvector/sdk";
+
+const client = new ChatVectorClient({
+  baseUrl: process.env.CHATVECTOR_BASE_URL!,
+  apiKey: process.env.CHATVECTOR_API_KEY!,
+});
+
+const uploaded = await client.uploadDocument({ path: "./report.pdf" });
+await client.waitForReady(uploaded.documentId, { timeoutMs: 90_000 });
+
+const session = await client.createSession();
+const answer = await client.chat({
+  question: "What are the key findings?",
+  docId: uploaded.documentId,
+  sessionId: session.id,
+  scope: "session",
+});
+console.log(answer.answer);
+```
+
+See [sdk/typescript/README.md](sdk/typescript/README.md) for streaming chat,
+error handling, and the Fastify proxy example. Maintainers: see
+[sdk/typescript/RELEASING.md](sdk/typescript/RELEASING.md) for publish steps.
+
 ---
 
 ## ü§ù Contributing
