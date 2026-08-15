@@ -4,7 +4,12 @@ import logging
 
 from core.config import config, get_embedding_dim
 from services.providers import get_embedding_provider
-from utils.retry import retry_async
+from utils.retry import (
+    DEFAULT_BACKOFF,
+    DEFAULT_BASE_DELAY,
+    DEFAULT_MAX_RETRIES,
+    retry_async,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +33,9 @@ async def get_embeddings(texts: list[str]) -> list[list[float]]:
 
     return await retry_async(
         _embed,
-        max_retries=3,
-        base_delay=1.0,
-        backoff=2.0,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=DEFAULT_BASE_DELAY,
+        backoff=DEFAULT_BACKOFF,
         timeout=float(config.EMBEDDING_HTTP_TIMEOUT_SEC),
         func_name="embedding_service.get_embeddings",
     )

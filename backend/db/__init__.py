@@ -11,7 +11,13 @@ import logging
 import threading
 from contextlib import asynccontextmanager
 
-from utils.retry import retry_async
+from utils.retry import (
+    DEFAULT_BACKOFF,
+    DEFAULT_BASE_DELAY,
+    DEFAULT_DB_TIMEOUT_SEC,
+    DEFAULT_MAX_RETRIES,
+    retry_async,
+)
 from .base import ChunkMatch, ChunkRecord
 from .tenant_scope import require_tenant_id
 
@@ -77,10 +83,10 @@ async def create_document(filename: str, tenant_id: str) -> str:
 
     return await retry_async(
         _create,
-        max_retries=3,
-        base_delay=1.0,
-        backoff=2.0,
-        timeout=10.0,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=DEFAULT_BASE_DELAY,
+        backoff=DEFAULT_BACKOFF,
+        timeout=DEFAULT_DB_TIMEOUT_SEC,
         func_name=f"{service.__class__.__name__}.create_document",
     )
 
@@ -100,10 +106,10 @@ async def store_chunks_with_embeddings(
 
     return await retry_async(
         _store,
-        max_retries=3,
-        base_delay=1.0,
-        backoff=2.0,
-        timeout=10.0,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=DEFAULT_BASE_DELAY,
+        backoff=DEFAULT_BACKOFF,
+        timeout=DEFAULT_DB_TIMEOUT_SEC,
         func_name=f"{service.__class__.__name__}.store_chunks_with_embeddings",
     )
 
@@ -117,10 +123,10 @@ async def get_document(doc_id: str, tenant_id: str) -> dict:
 
     return await retry_async(
         _get,
-        max_retries=3,
-        base_delay=1.0,
-        backoff=2.0,
-        timeout=10.0,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=DEFAULT_BASE_DELAY,
+        backoff=DEFAULT_BACKOFF,
+        timeout=DEFAULT_DB_TIMEOUT_SEC,
         func_name=f"{service.__class__.__name__}.get_document",
     )
 
@@ -140,10 +146,10 @@ async def create_document_with_chunks_atomic(
 
     return await retry_async(
         _atomic,
-        max_retries=3,
-        base_delay=1.0,
-        backoff=2.0,
-        timeout=10.0,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=DEFAULT_BASE_DELAY,
+        backoff=DEFAULT_BACKOFF,
+        timeout=DEFAULT_DB_TIMEOUT_SEC,
         func_name=f"{service.__class__.__name__}.create_document_with_chunks_atomic",
     )
 
@@ -172,10 +178,10 @@ async def find_similar_chunks(
 
     return await retry_async(
         _search,
-        max_retries=3,
-        base_delay=1.0,
-        backoff=2.0,
-        timeout=10.0,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=DEFAULT_BASE_DELAY,
+        backoff=DEFAULT_BACKOFF,
+        timeout=DEFAULT_DB_TIMEOUT_SEC,
         func_name=f"{service.__class__.__name__}.find_similar_chunks",
     )
 
@@ -276,10 +282,10 @@ async def fail_stale_documents_global(statuses: list[str]) -> set[str]:
 
     return await retry_async(
         _fail_stale,
-        max_retries=3,
-        base_delay=1.0,
-        backoff=2.0,
-        timeout=10.0,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=DEFAULT_BASE_DELAY,
+        backoff=DEFAULT_BACKOFF,
+        timeout=DEFAULT_DB_TIMEOUT_SEC,
         func_name=f"{service.__class__.__name__}.fail_stale_documents_global",
     )
 
