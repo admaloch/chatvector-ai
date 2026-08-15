@@ -1399,6 +1399,34 @@ LOG_LEVEL=INFO
 # See backend/.env.example for all provider options
 ```
 
+### Mixed LLM and embedding providers
+
+LLM and embedding providers are configured independently via `LLM_PROVIDER` and
+`EMBEDDING_PROVIDER`. Any supported LLM can pair with any supported embedding
+provider — for example Claude for generation with Voyage for embeddings:
+
+```env
+LLM_PROVIDER=anthropic
+EMBEDDING_PROVIDER=voyage
+ANTHROPIC_API_KEY=your_anthropic_api_key
+VOYAGE_API_KEY=your_voyage_api_key
+```
+
+| Role | Providers |
+|------|-----------|
+| LLM (`LLM_PROVIDER`) | `gemini`, `openai`, `ollama`, `anthropic` |
+| Embedding (`EMBEDDING_PROVIDER`) | `gemini`, `openai`, `ollama`, `voyage` |
+
+All 16 combinations are supported. Credential requirements are per provider
+(see `backend/.env.example`). On startup (except when `APP_ENV=test`), the
+backend validates provider names, required API keys, and streaming compatibility
+before accepting traffic. Invalid configurations fail fast with actionable
+error messages.
+
+> **Note:** Changing `EMBEDDING_PROVIDER` or `EMBEDDING_MODEL` changes vector
+> dimensions. Re-embed documents or use a fresh database after switching
+> embedding providers.
+
 ### Authentication variables
 
 | Variable | Default | Description |
