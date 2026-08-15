@@ -37,7 +37,17 @@ from chatvector import ChatVectorClient
 
 with ChatVectorClient(base_url="http://localhost:8000") as client:
     upload = client.upload_document("handbook.pdf")
+
+    # Option 1: poll until ready
     ready = client.wait_for_ready(upload.document_id, timeout=90, interval=3)
+
+    # Option 2: subscribe to ingestion progress over SSE
+    for status in client.iter_document_status(upload.document_id, timeout=120):
+        print(status.status, status.chunks)
+        if status.status in {"completed", "failed"}:
+            ready = status
+            break
+
     answer = client.chat(
         question="What are the onboarding steps?",
         doc_id=ready.document_id,
@@ -145,6 +155,26 @@ Each `sources[]` item may include `score` and `score_type` (`vector`,
 Non-streaming `chat()` responses include `latency_ms` and `model` on the
 `ChatResponse` dataclass (same fields as the `complete` event in streaming).
 
+## Document Status Streaming
+
+Subscribe to ingestion progress over SSE instead of polling `wait_for_ready()`.
+
+```python
+from chatvector import ChatVectorClient
+
+with ChatVectorClient(base_url="http://localhost:8000", api_key="cv_live_...") as client:
+    upload = client.upload_document("handbook.pdf")
+
+    for status in client.iter_document_status(upload.document_id, timeout=120):
+        print(status.status, status.chunks, status.queue_position)
+        if status.status in {"completed", "failed"}:
+            break
+```
+
+Each event is a typed `DocumentStatus` snapshot. Backend `error` events are
+converted into structured SDK exceptions. Stop iterating early to cancel the
+stream; the SDK closes the underlying HTTP response automatically.
+
 ## Batch Chat
 
 Run multiple queries in one request. Each query can target a different document.
@@ -204,5 +234,4 @@ The backend currently exposes document upload at `/upload`. The SDK targets `/in
 ## Current Gaps
 
 - **No async client** — synchronous `httpx` only
-- **No ingestion SSE client** — use `wait_for_ready()` polling or call `/documents/{id}/status/stream` directly
 - **No per-component retrieval scores** — citations expose collapsed `score` + `score_type` only
