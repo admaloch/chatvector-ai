@@ -3,6 +3,11 @@ from dotenv import load_dotenv
 import logging
 import os
 
+from core.provider_capabilities import (
+    EMBEDDING_PROVIDER_NAMES,
+    LLM_PROVIDER_NAMES,
+)
+
 logger = logging.getLogger(__name__)
 
 # Backend root is the expected location of .env
@@ -24,8 +29,8 @@ else:
 STALE_INGESTION_STATUSES = ["queued", "retrying", "extracting", "chunking", "embedding", "storing"]
 VALID_CHUNKING_STRATEGIES = {"fixed", "paragraph", "semantic"}
 VALID_QUERY_TRANSFORMATION_STRATEGIES = {"rewrite", "expand", "stepback"}
-VALID_LLM_PROVIDERS = {"gemini", "openai", "ollama", "anthropic"}
-VALID_EMBEDDING_PROVIDERS = {"gemini", "openai", "ollama", "voyage"}
+VALID_LLM_PROVIDERS = set(LLM_PROVIDER_NAMES)
+VALID_EMBEDDING_PROVIDERS = set(EMBEDDING_PROVIDER_NAMES)
 
 
 def _get_chunking_strategy() -> str:
