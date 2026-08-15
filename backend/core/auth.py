@@ -67,7 +67,11 @@ async def require_auth(request: Request) -> AuthContext:
 
     result = await validate_api_key(raw_key)
     if result is None:
-        raise _401("invalid_api_key", "API key is invalid or has been revoked.")
+        raise _401("invalid_api_key", "API key is invalid.")
+    if result == "revoked":
+        raise _401("revoked_api_key", "API key has been revoked.")
+    if result == "expired":
+        raise _401("expired_api_key", "API key has expired.")
 
     tenant_id, api_key_id = result
     request.state.tenant_id = tenant_id

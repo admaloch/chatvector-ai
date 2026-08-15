@@ -11,7 +11,7 @@ Lookup flow:
   2. Fetch the api_keys row by prefix
   3. SHA-256 hash the presented key
   4. Constant-time compare with stored hash
-  5. Verify status == 'active'
+  5. Verify status == 'active' and key is not expired
   6. Return the associated tenant_id
 """
 
@@ -22,7 +22,8 @@ import hmac
 import logging
 import os
 import secrets
-from typing import Optional
+from datetime import datetime
+from typing import Literal, Optional, Union
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -40,6 +41,8 @@ logger = logging.getLogger(__name__)
 _KEY_PREFIX_BYTES = 4   # 8 hex chars
 _KEY_PREFIX_LEN = _KEY_PREFIX_BYTES * 2
 _KEY_SECRET_LEN = 32    # URL-safe base64 chars
+
+ValidateApiKeyResult = Union[tuple[str, str], Literal["revoked", "expired"]]
 
 
 def _make_session_factory() -> sessionmaker:
@@ -98,6 +101,12 @@ def _parse_prefix(raw_key: str) -> Optional[str]:
     return rest[:dot]
 
 
+def _is_expired(expires_at: datetime | None) -> bool:
+    if expires_at is None:
+        return False
+    return expires_at <= datetime.utcnow()
+
+
 async def ensure_tenant_exists(tenant_id: str, name: str) -> bool:
     """Ensure a tenant row exists with the given id.
 
@@ -153,7 +162,12 @@ async def create_tenant(name: str, tenant_id: Optional[str] = None) -> Tenant:
     return tenant
 
 
-async def create_api_key(tenant_id: str) -> tuple[str, ApiKey]:
+async def create_api_key(
+    tenant_id: str,
+    *,
+    external_user_id: str | None = None,
+    expires_at: datetime | None = None,
+) -> tuple[str, ApiKey]:
     """Create an API key for a tenant.
 
     Returns (raw_key, ApiKey orm row).  The raw_key is shown once and never
@@ -169,6 +183,8 @@ async def create_api_key(tenant_id: str) -> tuple[str, ApiKey]:
                 prefix=prefix,
                 key_hash=key_hash,
                 status="active",
+                external_user_id=external_user_id,
+                expires_at=expires_at,
             )
             session.add(api_key)
 
@@ -176,11 +192,16 @@ async def create_api_key(tenant_id: str) -> tuple[str, ApiKey]:
     return raw_key, api_key
 
 
-async def validate_api_key(raw_key: str) -> Optional[tuple[str, str]]:
+async def validate_api_key(raw_key: str) -> ValidateApiKeyResult | None:
     """Validate a raw API key.
 
-    Returns (tenant_id, api_key_id) on success, or None on any failure.
-    Does NOT raise — the caller decides how to handle None.
+    Returns:
+      - (tenant_id, api_key_id) on success
+      - "revoked" when the hash matches but status != active
+      - "expired" when the hash matches, status is active, but expires_at is past
+      - None on any other failure (malformed, unknown prefix, hash mismatch)
+
+    Does NOT raise — the caller decides how to handle failures.
     """
     prefix = _parse_prefix(raw_key)
     if prefix is None:
@@ -206,22 +227,31 @@ async def validate_api_key(raw_key: str) -> Optional[tuple[str, str]]:
         return None
 
     if api_key.status != "active":
-        return None
+        return "revoked"
+
+    if _is_expired(api_key.expires_at):
+        return "expired"
 
     return api_key.tenant_id, str(api_key.id)
+
 
 async def list_tenant_keys(tenant_id: str) -> list[ApiKey]:
     """List all API keys for a tenant (metadata only — no raw secrets exist to return)."""
 
     factory = _get_session_factory()
     async with factory() as session:
-            result = await session.execute(
-                select(ApiKey).where(ApiKey.tenant_id == tenant_id)
-            )
-            return list(result.scalars().all())
+        result = await session.execute(
+            select(ApiKey).where(ApiKey.tenant_id == tenant_id)
+        )
+        return list(result.scalars().all())
 
-async def revoke_api_key(tenant_id: str, key_id: Optional[str] = None, prefix: Optional[str] = None) -> bool:         
-    factory = _get_session_factory() 
+
+async def revoke_api_key(
+    tenant_id: str,
+    key_id: Optional[str] = None,
+    prefix: Optional[str] = None,
+) -> bool:
+    factory = _get_session_factory()
     async with factory() as session:
         async with session.begin():
             query = select(ApiKey).where(ApiKey.tenant_id == tenant_id)
@@ -240,4 +270,103 @@ async def revoke_api_key(tenant_id: str, key_id: Optional[str] = None, prefix: O
                 api_key.status = "revoked"
 
     logger.info("Revoked API key id=%s for tenant=%s", key_id or prefix, tenant_id)
+    return True
+
+
+async def rotate_api_key(tenant_id: str, key_id: str) -> tuple[str, ApiKey] | None:
+    """Revoke an existing key and issue a new one for the same tenant.
+
+    Returns (raw_key, new ApiKey) or None when the key is not found.
+    """
+    factory = _get_session_factory()
+    async with factory() as session:
+        async with session.begin():
+            result = await session.execute(
+                select(ApiKey).where(
+                    ApiKey.tenant_id == tenant_id,
+                    ApiKey.id == key_id,
+                )
+            )
+            old_key = result.scalar_one_or_none()
+            if old_key is None:
+                return None
+
+            if old_key.status != "revoked":
+                old_key.status = "revoked"
+
+            raw_key, prefix, key_hash = generate_raw_key()
+            new_key = ApiKey(
+                tenant_id=tenant_id,
+                prefix=prefix,
+                key_hash=key_hash,
+                status="active",
+                external_user_id=old_key.external_user_id,
+                expires_at=old_key.expires_at,
+            )
+            session.add(new_key)
+
+    logger.info(
+        "Rotated API key id=%s for tenant=%s -> new id=%s",
+        key_id,
+        tenant_id,
+        new_key.id,
+    )
+    return raw_key, new_key
+
+
+async def set_api_key_expiry(
+    tenant_id: str,
+    key_id: str,
+    expires_at: datetime | None,
+) -> bool:
+    """Set or clear expires_at for a tenant API key."""
+    factory = _get_session_factory()
+    async with factory() as session:
+        async with session.begin():
+            result = await session.execute(
+                select(ApiKey).where(
+                    ApiKey.tenant_id == tenant_id,
+                    ApiKey.id == key_id,
+                )
+            )
+            api_key = result.scalar_one_or_none()
+            if api_key is None:
+                return False
+            api_key.expires_at = expires_at
+
+    logger.info(
+        "Set expiry for API key id=%s tenant=%s expires_at=%s",
+        key_id,
+        tenant_id,
+        expires_at,
+    )
+    return True
+
+
+async def set_api_key_external_user_id(
+    tenant_id: str,
+    key_id: str,
+    external_user_id: str | None,
+) -> bool:
+    """Assign or clear external_user_id for a tenant API key."""
+    factory = _get_session_factory()
+    async with factory() as session:
+        async with session.begin():
+            result = await session.execute(
+                select(ApiKey).where(
+                    ApiKey.tenant_id == tenant_id,
+                    ApiKey.id == key_id,
+                )
+            )
+            api_key = result.scalar_one_or_none()
+            if api_key is None:
+                return False
+            api_key.external_user_id = external_user_id
+
+    logger.info(
+        "Set external_user_id for API key id=%s tenant=%s external_user_id=%r",
+        key_id,
+        tenant_id,
+        external_user_id,
+    )
     return True
