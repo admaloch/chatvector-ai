@@ -24,6 +24,8 @@ describe("cleanupSessionDocuments", () => {
     vi.mocked(getSession).mockResolvedValue({
       id: "session-1",
       created_at: "2026-01-01T00:00:00Z",
+      last_active: "2026-01-01T00:00:00Z",
+      metadata: {},
       document_ids: ["doc-a", "doc-b"],
     });
     vi.mocked(deleteDocument).mockResolvedValue({ status: "gone" });
@@ -40,6 +42,8 @@ describe("cleanupSessionDocuments", () => {
     vi.mocked(getSession).mockResolvedValue({
       id: "session-1",
       created_at: "2026-01-01T00:00:00Z",
+      last_active: "2026-01-01T00:00:00Z",
+      metadata: {},
       document_ids: ["doc-processing"],
     });
     vi.mocked(deleteDocument).mockResolvedValue({

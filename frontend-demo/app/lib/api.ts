@@ -345,8 +345,8 @@ export type DocumentSummary = {
   document_id: string;
   file_name: string;
   status: string;
-  created_at?: string | null;
-  updated_at?: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 export type DocumentListResponse = {
