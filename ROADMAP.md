@@ -4,7 +4,7 @@ This document outlines the current development focus and future direction of the
 
 ---
 
-## ✅ Phase 1 — Core Engine Stabilization (Complete)
+## Phase 1 — Core Engine Stabilization (Complete)
 
 Phase 1 focused on building and hardening the foundational RAG pipeline.
 
@@ -26,7 +26,7 @@ Phase 1 focused on building and hardening the foundational RAG pipeline.
 
 ---
 
-## ✅ Phase 2 — Capability Expansion & Developer Experience (Complete)
+## Phase 2 — Capability Expansion & Developer Experience (Complete)
 
 Phase 2 expanded flexibility, retrieval quality, and usability while maintaining backend-first design.
 
@@ -56,7 +56,7 @@ Phase 2 expanded flexibility, retrieval quality, and usability while maintaining
 
 ---
 
-## ✅ Phase 2.5 — Hardening & Consistency Layer (Complete)
+## Phase 2.5 — Hardening & Consistency Layer (Complete)
 
 A focused stabilization pass based on a backend audit conducted ahead of Phase 3.
 
@@ -75,7 +75,7 @@ A focused stabilization pass based on a backend audit conducted ahead of Phase 3
 
 ---
 
-## 🚧 Phase 3 — Platform Evolution (Mostly Shipped)
+## Phase 3 — Platform Evolution (Mostly Shipped)
 
 ### North Star
 
@@ -83,7 +83,7 @@ Transform ChatVector into a **multi-tenant, session-aware document intelligence 
 
 **Core Principle:** Simple by default, powerful when explicitly enabled.
 
-> **Current status:** Phase 3A and 3B backend platform work is largely complete — API-key authentication, tenant isolation, durable sessions, streaming, hybrid retrieval, Python and TypeScript SDKs, component score metadata, and the expanded frontend demo are shipped. Remaining work is frontend chat SSE wiring in the demo UI, distributed rate-limit storage, API-key lifecycle automation beyond CLI list/revoke, and documentation/examples polish.
+> **Current status:** Phase 3A and 3B backend platform work is largely complete — API-key authentication, tenant isolation, durable sessions, streaming, hybrid retrieval, Python and TypeScript SDKs, component score metadata, and the expanded frontend demo are shipped. Remaining work is distributed rate-limit storage and documentation/examples polish.
 
 ---
 
@@ -91,7 +91,7 @@ Transform ChatVector into a **multi-tenant, session-aware document intelligence 
 
 This phase introduces the primary architectural shift. Phase 3B and 3C work builds on this foundation.
 
-#### ✅ Completed
+#### Completed
 
 **Session-based chat (document-scoped)**
 
@@ -152,18 +152,22 @@ This phase introduces the primary architectural shift. Phase 3B and 3C work buil
 
 **API-key CLI tooling**
 
-- `list-tenant-keys` and `revoke-tenant-key` commands alongside `create-tenant-key`
+- `create-tenant-key`, `list-tenant-keys`, `revoke-tenant-key`
+- `rotate-tenant-key`, `set-tenant-key-expiry`, `set-tenant-key-external-user-id`
 
-#### ⏳ Remaining
+**Frontend demo chat streaming**
 
-**API-key lifecycle tooling**
+- Demo chat wired to `/chat/stream` with fallback to `POST /chat` when streaming is disabled
 
-- Programmatic rotation, expiration, and revocation workflows beyond CLI create/list/revoke and DB status updates
-- Optional `external_user_id` field for developer-side user mapping
+**Tenant document listing**
 
-**Frontend demo chat SSE**
+- `GET /documents` returns tenant-scoped document summaries for the batch demo and integrators
 
-- Backend `/chat/stream` is ready; the demo chat page still uses non-streaming `POST /chat` with a simulated character-by-character typing animation
+#### Remaining
+
+**API-key lifecycle automation (optional follow-up)**
+
+- HTTP/API workflows for rotation and revocation beyond the CLI commands above
 
 **Distributed rate limiting**
 
@@ -175,7 +179,7 @@ This phase introduces the primary architectural shift. Phase 3B and 3C work buil
 
 Build on the platform foundation to improve response quality and expand developer reach.
 
-#### ✅ Completed
+#### Completed
 
 **Hybrid retrieval**
 
@@ -249,14 +253,15 @@ Build on the platform foundation to improve response quality and expand develope
 
 - Optional per-component retrieval metadata on API sources (`vector_score`, `full_text_score`, `rrf_score`, `reranker_score`, `rerank_order`)
 - Retrieval inspector displays component breakdown when the backend returns it
+- Async Python SDK client (`AsyncChatVectorClient`)
 
-#### ⏳ Remaining
+#### Remaining
 
 **Inspection and observability tooling**
 
 - Query transformation visualization (opt-in debug metadata beyond current `retrieval_debug` payloads)
-- Async Python SDK client
-- Ingestion SSE client in Python SDK (document status stream not exposed in SDK)
+- Ingestion SSE client in Python and TypeScript SDKs (document status stream not exposed in SDKs)
+- Per-component citation score fields on SDK `ChatSource` models (API already returns them)
 
 ---
 
@@ -264,29 +269,28 @@ Build on the platform foundation to improve response quality and expand develope
 
 Focus on documentation, discoverability, and real-world integration patterns.
 
-#### 10. Documentation Site
+#### Documentation Site (partially shipped)
 
-- Getting started guide
-- API reference generated from OpenAPI schema
-- SDK documentation (Python + Node)
-- Deployment guides (self-hosted and cloud)
+MkDocs Material site under `documentation/` with getting started, deployment summary, SDK pages, and OpenAPI export. Remaining polish: broader examples coverage and hosted deployment.
 
-#### 11. Live API Explorer
+#### Live API Explorer
 
 - Swagger UI or Scalar integration
 - Try-it-out functionality for all endpoints
 - Enabled in non-production environments only
 
-#### 12. Example Applications
+#### Example Applications (partially shipped)
 
-- At least two reference implementations:
-  - Node.js backend using the Node SDK
-  - Python FastAPI backend using the Python SDK
-- Demonstrate real integration patterns, not toy examples
+Reference server-side proxies exist today:
+
+- Node.js Fastify proxy — [`sdk/typescript/examples/fastify-proxy/`](sdk/typescript/examples/fastify-proxy/)
+- Python FastAPI proxy — [`sdk/python/examples/fastapi-proxy/`](sdk/python/examples/fastapi-proxy/)
+
+Remaining work: additional patterns (streaming chat in proxies, multi-document batch demos).
 
 ---
 
-## 🔮 Phase 4 — Advanced Capabilities (Future)
+## Phase 4 — Advanced Capabilities (Future)
 
 These are valuable extensions deferred until the Phase 3 platform foundation is stable.
 
@@ -320,7 +324,7 @@ These are valuable extensions deferred until the Phase 3 platform foundation is 
 
 ---
 
-## ❌ Non-Goals
+## Non-Goals
 
 ChatVector is intentionally **not** building the following:
 
@@ -330,7 +334,7 @@ ChatVector is intentionally **not** building the following:
 | Billing or subscriptions | Out of scope for an open-source backend engine |
 | Collaborative workspaces | Different product category |
 | Admin dashboards | Not needed for a developer tool |
-| API-key lifecycle UI (rotation, revocation, user mapping) | CLI and DB updates only; programmatic tooling is roadmap |
+| API-key lifecycle UI | CLI covers create, list, revoke, rotate, expiry, and `external_user_id`; no first-party admin UI planned |
 | OAuth, RBAC, or per-user login | API-key auth only; application-layer identity is the developer's responsibility |
 | Full SaaS product layer | Conflicts with backend-first positioning |
 | Elasticsearch dependency | pgvector + PostgreSQL full-text covers the same ground at this scale |
@@ -341,18 +345,18 @@ ChatVector is intentionally **not** building the following:
 
 Progress toward the Phase 3 north star:
 
-- ✅ Stateful document conversations with persisted session memory
-- ✅ Streaming chat and ingestion progress (SSE)
-- ✅ Structured streaming `complete` events with citations, `latency_ms`, and `model`
-- ✅ Hybrid retrieval, baseline reranking, and configurable retrieval scopes
-- ✅ Provider flexibility across Gemini, OpenAI, Ollama, Claude, and Voyage embeddings
-- ✅ Response personas, citation relevance scores/score types, and response metadata (`latency_ms`, `model`)
-- ✅ Bearer API-key authentication and strict tenant isolation in production
-- ✅ Python SDK with sessions, streaming, and retrieval scope support
-- ✅ TypeScript SDK v0 with upload, chat, batch, sessions, and streaming
-- ✅ SQLAlchemy/PostgreSQL as the only database backend (`DATABASE_URL` in all environments)
-- ✅ Frontend demo: chat, batch compare/synthesize, status, retrieval controls, retrieval inspector with component scores
-- ⏳ Frontend demo chat SSE streaming (backend ready; UI still uses `POST /chat` with simulated typing)
-- ✅ Durable Postgres-backed session metadata (sessions table + session_documents table; fully persistent)
-- ⏳ Redis-backed distributed rate-limit storage across workers
-- ⏳ Documentation site, examples, and advanced inspection tooling in progress
+- Stateful document conversations with persisted session memory
+- Streaming chat and ingestion progress (SSE), including demo UI wired to `/chat/stream`
+- Structured streaming `complete` events with citations, `latency_ms`, and `model`
+- Hybrid retrieval, baseline reranking, and configurable retrieval scopes
+- Provider flexibility across Gemini, OpenAI, Ollama, Claude, and Voyage embeddings
+- Response personas, citation relevance scores/score types, and response metadata (`latency_ms`, `model`)
+- Bearer API-key authentication and strict tenant isolation in production
+- Python SDK with sessions, streaming, and retrieval scope support
+- TypeScript SDK v0 with upload, chat, batch, sessions, and streaming
+- SQLAlchemy/PostgreSQL as the only database backend (`DATABASE_URL` in all environments)
+- Frontend demo: chat, batch compare/synthesize, status, retrieval controls, retrieval inspector with component scores
+- Tenant document listing (`GET /documents`) for batch and integrators
+- Durable Postgres-backed session metadata (sessions table + session_documents table; fully persistent)
+- **Remaining:** Redis-backed distributed rate-limit storage across workers
+- **In progress:** Documentation site, examples, and advanced inspection tooling

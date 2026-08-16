@@ -1,13 +1,13 @@
 # Contributing to ChatVector-AI
 
-## 🤝 First Time Contributing? Welcome!
+## First Time Contributing? Welcome!
 
-There is a range of tasks for beginners to more advanced developers
+There is a range of tasks for beginners to more advanced developers.
 
 This guide will walk you through the process step-by-step.
 
 - Watch our [Contributor Video Guide](https://www.loom.com/share/c41bdbff541f47d49efcb48920cba382)
-- For initial project setup see -- \*\*[📘 Readme](README.md)
+- For initial project setup see [README](README.md)
 
 ### Start Here:
 
@@ -39,9 +39,9 @@ If you're looking to contribute to the UI or user experience:
   - Manual check in the browser when UI behavior changes.
 - For setup details, see [frontend-demo/README.md](frontend-demo/README.md) and [DEVELOPMENT.md → Frontend](DEVELOPMENT.md#frontend).
 
-   ***
+---
 
-## 📝 Branch and Commit Naming Convention
+## Branch and Commit Naming Convention
 
 **Format:** `type/description`
 
@@ -66,12 +66,12 @@ Maintainers should review and merge according to project policy.
 **Python:**
 
 ```python
-# 👍 Good - Type hints and docstrings
+# Good — type hints and docstrings
 def process_document_chunks(document_text: str) -> list[str]:
     """Split document into chunks for processing."""
     pass
 
-# 👎 Avoid - Unclear purpose
+# Avoid — unclear purpose
 def chunk(
 ```
 
@@ -79,17 +79,13 @@ def chunk(
 
 ## PR Process
 
-**Check the [Readme](https://github.com/chatvector-ai/chatvector-ai/blob/main/README.md)** - For instructions on project setup
+**Check the [README](https://github.com/chatvector-ai/chatvector-ai/blob/main/README.md)** for instructions on project setup.
 
 ### 1. Create Your Feature Branch
 
-```
-Follow the branching workflow described here:
-
-📄 See: `development.md → Creating a new feature branch`
+Follow the branching workflow in [DEVELOPMENT.md → Creating a new feature branch](DEVELOPMENT.md).
 
 This document focuses on contribution rules and expectations.
-```
 
 ### 2. Open Pull Request
 
@@ -110,7 +106,7 @@ This document focuses on contribution rules and expectations.
 ## Screenshots (if UI changes):
 ```
 
-🎯 Before Submitting
+### Before Submitting
 
 1. Run the test suite and confirm it passes: `make tests` (Docker) or `cd backend && pytest tests/ -v`
 2. Test your changes manually using FastAPI `/docs`

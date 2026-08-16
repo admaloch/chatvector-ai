@@ -218,7 +218,7 @@ export default function UploadModal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
       style={{
-        backgroundColor: "rgba(2, 6, 23, 0.72)",
+        backgroundColor: "color-mix(in srgb, var(--background) 72%, transparent)",
         backdropFilter: "blur(10px)",
       }}
       onClick={onClose}
@@ -246,8 +246,8 @@ export default function UploadModal({
                 animation: border-sweep 1.45s linear forwards;
                 background: conic-gradient(
                   from 180deg at 50% 50%,
-                  #34d399 0deg,
-                  #34d399 var(--border-sweep),
+                  var(--success) 0deg,
+                  var(--success) var(--border-sweep),
                   transparent var(--border-sweep)
                 );
                 -webkit-mask:
@@ -357,24 +357,25 @@ export default function UploadModal({
               <div className="flex w-48 shrink-0 flex-col items-center justify-center gap-4 text-center">
                 {pipelineVisuallyComplete ? (
                   <>
-                    <div className="flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500/15 ring-2 ring-emerald-400/30">
+                    <div className="flex h-24 w-24 items-center justify-center rounded-full bg-success/15 ring-2 ring-success/30">
                       <svg
                         width="44"
                         height="44"
                         viewBox="0 0 20 20"
                         fill="none"
                         aria-hidden
+                        className="text-success"
                       >
                         <path
                           d="M4 10l4.5 4.5L16 6"
-                          stroke="#34d399"
+                          stroke="currentColor"
                           strokeWidth="2.25"
                           strokeLinecap="round"
                           strokeLinejoin="round"
                         />
                       </svg>
                     </div>
-                    <p className="text-base font-semibold leading-snug text-emerald-400">
+                    <p className="text-base font-semibold leading-snug text-success-text">
                       Upload
                       <br />
                       Successful
@@ -385,10 +386,10 @@ export default function UploadModal({
                   </>
                 ) : (
                   <>
-                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue/10 ring-1 ring-blue/20">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-info/10 ring-1 ring-info/20">
                       <FileText
                         size={28}
-                        className="text-blue"
+                        className="text-info"
                         strokeWidth={1.75}
                         aria-hidden
                       />
@@ -399,14 +400,28 @@ export default function UploadModal({
                     >
                       {lastFile?.name ?? "Document"}
                     </p>
-                    {!showServerFailed && (
+                    {!showServerFailed ? (
                       <Loader2
                         size={28}
-                        className="animate-spin text-muted"
+                        className="animate-spin text-accent"
                         strokeWidth={2}
                         aria-hidden
                       />
-                    )} 
+                    ) : (
+                      <>
+                        <AlertCircle
+                          size={28}
+                          className="text-danger"
+                          strokeWidth={2}
+                          aria-hidden
+                        />
+                        {attachment?.errorMessage && (
+                          <p className="text-xs text-danger-text/90">
+                            {attachment.errorMessage.slice(0, 80)}
+                          </p>
+                        )}
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -414,14 +429,14 @@ export default function UploadModal({
           )}
           {showHttpFailed && (
             <div className="flex flex-col items-center gap-4 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10 ring-1 ring-red-500/20">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-danger/10 ring-1 ring-danger/20">
                 <AlertCircle
-                  className="h-7 w-7 text-red-400"
+                  className="h-7 w-7 text-danger"
                   strokeWidth={1.75}
                   aria-hidden
                 />
               </div>
-              <p className="max-w-[280px] whitespace-pre-wrap text-base font-medium text-red-400">
+              <p className="max-w-[280px] whitespace-pre-wrap text-base font-medium text-danger-text">
                 {uploadErrorMessage ?? "Upload failed. Please try again."}
               </p>
               <button
@@ -443,7 +458,7 @@ export default function UploadModal({
               </div>
               <p className="max-w-[280px] text-center text-base text-muted">
                 Drop a file here or{" "}
-                <span className="font-medium text-accent">browse</span>
+                <span className="font-medium text-accent-text">browse</span>
               </p>
               <p className="mt-2 text-sm text-subtle">PDF · TXT · DOCX</p>
             </>

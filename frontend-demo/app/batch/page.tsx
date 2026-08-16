@@ -154,7 +154,7 @@ export default function BatchPage() {
       aria-busy={!documentsLoaded || !retrievalLoaded}
     >
       <div className="mb-8">
-        <div className="flex items-center gap-2 text-accent">
+        <div className="flex items-center gap-2 text-accent-text">
           <Layers size={20} />
           <span className="text-sm font-medium uppercase tracking-wide">
             Batch Query
@@ -274,7 +274,7 @@ export default function BatchPage() {
               type="button"
               onClick={handleSubmit}
               disabled={!canSubmit}
-              className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-accent px-5 py-2.5 font-medium text-surface transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-accent px-5 py-2.5 font-medium text-accent-foreground transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {inflight && <Loader2 size={16} className="animate-spin" />}
               {inflight
@@ -292,7 +292,7 @@ export default function BatchPage() {
               <span>
                 <strong>{summary.count}</strong> total
               </span>
-              <span className="text-green-500">
+              <span className="text-accent-text">
                 <strong>{summary.success}</strong> succeeded
               </span>
               <span className={summary.failure > 0 ? "text-red-500" : "text-muted"}>

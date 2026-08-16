@@ -17,7 +17,7 @@ export default function MetricsPanel({ metrics, uptime, version }: MetricsPanelP
 
   return (
     <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-      <h3 className="mb-4 font-mono text-[0.78rem] uppercase tracking-[2px] text-accent">
+      <h3 className="mb-4 font-mono text-[0.78rem] uppercase tracking-[2px] text-accent-text">
         System Metrics
       </h3>
 

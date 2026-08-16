@@ -6,15 +6,15 @@ This folder contains the ChatVector frontend demo. It is a Next.js app for tryin
 
 | Page | Path | Capabilities |
 | --- | --- | --- |
-| Chat | `/chat` | Document upload, session sidebar, retrieval scope/match-count controls, retrieval inspector, cited answers |
-| Batch | `/batch` | Compare and synthesize modes across uploaded documents |
+| Chat | `/chat` | Document upload, Postgres-backed session sidebar, retrieval scope/match-count controls, retrieval inspector, cited answers via SSE |
+| Batch | `/batch` | Compare and synthesize modes; tenant document list from `GET /documents` |
 | Status | `/status` | Live backend health and system metrics |
 
 The header groups **Demo** (Chat, Batch, Status) and **Docs** (Getting Started, Architecture, SDK, Roadmap, Contributing) links.
 
-**Streaming status:** ingestion progress uses SSE (`/documents/{id}/status/stream`) with polling fallback. While a document is `queued`, the backend may return `queue_position` (1 = next to process); the demo shows this on attachment chips when position is greater than 1.
+**Streaming status:** Chat uses `/chat/stream` when `ENABLE_STREAMING=true` on the backend, with automatic fallback to `POST /chat` if streaming is disabled. Ingestion progress uses SSE (`/documents/{id}/status/stream`) with polling fallback. While a document is `queued`, the backend may return `queue_position` (1 = next to process); the demo shows this on attachment chips when position is greater than 1.
 
-Chat in this demo still uses non-streaming `POST /chat` — backend `/chat/stream` and the Python SDK streaming client are available for integrators. The chat UI simulates typing with a character-by-character animation in `MessageList.tsx`; this is **not** real SSE token streaming.
+**Batch documents:** The batch page loads the tenant document list from `GET /documents` on each visit — not from browser localStorage.
 
 ## Prerequisites
 

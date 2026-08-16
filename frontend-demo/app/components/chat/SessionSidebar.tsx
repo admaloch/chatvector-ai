@@ -54,7 +54,7 @@ export default function SessionSidebar({
                 disabled={isDeleting}
                 className={`min-w-0 flex-1 text-left px-3 py-2 text-sm transition-colors truncate ${
                   isActive
-                    ? "text-accent font-medium"
+                    ? "text-accent-text font-medium"
                     : "text-muted hover:text-foreground"
                 } disabled:opacity-60`}
               >

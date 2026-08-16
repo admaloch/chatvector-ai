@@ -59,7 +59,7 @@ export default function ComponentHealthPanel({
 }: ComponentHealthPanelProps) {
   return (
     <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-      <h3 className="mb-4 font-mono text-[0.78rem] uppercase tracking-[2px] text-accent">
+      <h3 className="mb-4 font-mono text-[0.78rem] uppercase tracking-[2px] text-accent-text">
         Component Health
       </h3>
       <div className="space-y-4">

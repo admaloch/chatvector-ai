@@ -18,32 +18,32 @@ Think of it as an engine developers can use to build document-aware applications
 
 ---
 
-⭐ **Star the repo to follow progress and support the project!**
+**Star the repo to follow progress and support the project!**
 
 [![GitHub stars](https://img.shields.io/github/stars/chatvector-ai/chatvector-ai?style=social)](https://github.com/chatvector-ai/chatvector-ai)
 
 ---
 
-## 🔗 Quick Links
+## Quick Links
 
-[![Documentation](https://img.shields.io/badge/Documentation-Developer%20Guide-6366f1?style=for-the-badge&logo=bookstack&logoColor=white)](documentation/README.md) [![Good First Issues](https://img.shields.io/badge/Good%20First%20Issues-Start%20Here-brightgreen?style=for-the-badge&logo=github)](https://github.com/chatvector-ai/chatvector-ai/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) [![Roadmap](https://img.shields.io/badge/Roadmap-Project%20Plan-1f6feb?style=for-the-badge&logo=bookstack&logoColor=white)](ROADMAP.md) [![Quick Setup](https://img.shields.io/badge/Quick%20Setup-5%20Min-2496ED?style=for-the-badge&logo=docker&logoColor=white)](#-quick-start) [![Project Board](https://img.shields.io/badge/Project%20Board-Track%20Progress-6f42c1?style=for-the-badge&logo=github&logoColor=white)](https://github.com/orgs/chatvector-ai/projects/2) [![Dev Notes](https://img.shields.io/badge/Dev%20Notes-Maintainer%20Guide-6e7781?style=for-the-badge&logo=markdown&logoColor=white)](DEVELOPMENT.md) [![Deployment](https://img.shields.io/badge/Deployment-Production%20Guide-0d9488?style=for-the-badge&logo=markdown&logoColor=white)](DEPLOYMENT.md) [![Architecture](https://img.shields.io/badge/Architecture-Overview-purple?style=for-the-badge&logo=markdown&logoColor=white)](ARCHITECTURE.md) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge&logo=markdown&logoColor=white)](https://opensource.org/license/mit) [![Contributing Docs](https://img.shields.io/badge/Contributing%20Docs-Read%20Guide-0E8A16?style=for-the-badge&logo=bookstack&logoColor=white)](CONTRIBUTING.md) [![Contributing Video](https://img.shields.io/badge/Contributing%20Video-Watch-F24E1E?style=for-the-badge&logo=loom&logoColor=white)](https://www.loom.com/share/c41bdbff541f47d49efcb48920cba382) [![Discussions](https://img.shields.io/badge/Discussions-Ask%20%26%20Share-2da44e?style=for-the-badge&logo=github&logoColor=white)](https://github.com/chatvector-ai/chatvector-ai/discussions/51)
+[![Documentation](https://img.shields.io/badge/Documentation-Developer%20Guide-6366f1?style=for-the-badge&logo=bookstack&logoColor=white)](documentation/README.md) [![Good First Issues](https://img.shields.io/badge/Good%20First%20Issues-Start%20Here-brightgreen?style=for-the-badge&logo=github)](https://github.com/chatvector-ai/chatvector-ai/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) [![Roadmap](https://img.shields.io/badge/Roadmap-Project%20Plan-1f6feb?style=for-the-badge&logo=bookstack&logoColor=white)](ROADMAP.md) [![Quick Setup](https://img.shields.io/badge/Quick%20Setup-5%20Min-2496ED?style=for-the-badge&logo=docker&logoColor=white)](#quick-start) [![Project Board](https://img.shields.io/badge/Project%20Board-Track%20Progress-6f42c1?style=for-the-badge&logo=github&logoColor=white)](https://github.com/orgs/chatvector-ai/projects/2) [![Dev Notes](https://img.shields.io/badge/Dev%20Notes-Maintainer%20Guide-6e7781?style=for-the-badge&logo=markdown&logoColor=white)](DEVELOPMENT.md) [![Deployment](https://img.shields.io/badge/Deployment-Production%20Guide-0d9488?style=for-the-badge&logo=markdown&logoColor=white)](DEPLOYMENT.md) [![Architecture](https://img.shields.io/badge/Architecture-Overview-purple?style=for-the-badge&logo=markdown&logoColor=white)](ARCHITECTURE.md) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge&logo=markdown&logoColor=white)](https://opensource.org/license/mit) [![Contributing Docs](https://img.shields.io/badge/Contributing%20Docs-Read%20Guide-0E8A16?style=for-the-badge&logo=bookstack&logoColor=white)](CONTRIBUTING.md) [![Contributing Video](https://img.shields.io/badge/Contributing%20Video-Watch-F24E1E?style=for-the-badge&logo=loom&logoColor=white)](https://www.loom.com/share/c41bdbff541f47d49efcb48920cba382) [![Discussions](https://img.shields.io/badge/Discussions-Ask%20%26%20Share-2da44e?style=for-the-badge&logo=github&logoColor=white)](https://github.com/chatvector-ai/chatvector-ai/discussions/51)
 
 ---
 
-## 📌 Table of Contents
+## Table of Contents
 
-- [What is ChatVector?](#-what-is-chatvector)
+- [What is ChatVector?](#what-is-chatvector)
 - [ChatVector vs Frameworks](#chatvector-vs-frameworks)
-- [Who is this for?](#-who-is-this-for)
-- [Current Status](#-current-status)
-- [Architecture Overview](#-architecture-overview)
-- [Quick Start](#-quick-start)
-- [Contributing](#-contributing)
-- [License](#-license)
+- [Who is this for?](#who-is-this-for)
+- [Current Status](#current-status)
+- [Architecture Overview](#architecture-overview)
+- [Quick Start](#quick-start)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
-## 🔎 What is ChatVector?
+## What is ChatVector?
 
 ChatVector provides a **clean, extensible backend foundation for RAG-based document intelligence**. It handles the full lifecycle of document Q&A:
 
@@ -72,7 +72,7 @@ ChatVector is designed as a **production-ready backend service**, not a general-
 
 ---
 
-## 👥 Who is this for?
+## Who is this for?
 
 ChatVector is designed for:
 
@@ -83,61 +83,60 @@ ChatVector is designed for:
 
 ---
 
-## 🚀 Current Status
+## Current Status
 
 ### Phases 1–2.5 Complete | Phase 3 Mostly Shipped
 
-Phases 1, 2, and 2.5 are complete. Phase 3 platform work is largely shipped — API-key authentication, tenant isolation, durable sessions, hybrid retrieval, Python and TypeScript SDKs, component score metadata, and the expanded frontend demo are in place. Remaining Phase 3 work is focused on frontend chat SSE wiring in the demo UI, distributed rate-limit storage, and API-key lifecycle automation beyond CLI list/revoke. See [ROADMAP.md](ROADMAP.md) for the full breakdown.
+Phases 1, 2, and 2.5 are complete. Phase 3 platform work is largely shipped — API-key authentication, tenant isolation, durable sessions, hybrid retrieval, Python and TypeScript SDKs, component score metadata, and the expanded frontend demo are in place. Remaining Phase 3 work is focused on distributed rate-limit storage across workers and documentation/examples polish. See [ROADMAP.md](ROADMAP.md) for the full breakdown.
 
 **What's working today:**
 
 **Backend**
-- ✅ PDF and text document ingestion
-- ✅ Configurable chunking strategies (fixed, paragraph, semantic)
-- ✅ Vector embeddings + semantic search via pgvector
-- ✅ PostgreSQL/pgvector via SQLAlchemy in all environments (`DATABASE_URL`)
-- ✅ Hybrid retrieval (PostgreSQL full-text + vector, RRF fusion)
-- ✅ Baseline retrieval reranking (similarity + lexical overlap)
-- ✅ Session-scoped and tenant-wide retrieval modes
-- ✅ LLM-powered answers with source citations, relevance scores, and score types
-- ✅ Query transformations (rewrite, expand, stepback) with session-history context
-- ✅ Configurable response personas and system prompt
-- ✅ Session-based chat with persisted conversation history
-- ✅ SSE streaming chat (`/chat/stream`) with structured `complete` events (citations, `latency_ms`, `model`)
-- ✅ Background ingestion queue with rate limiting, retry, and DLQ
-- ✅ Redis-backed ingestion queue (production default; in-memory fallback for local dev)
-- ✅ Bearer API-key authentication and strict tenant isolation in production
-- ✅ Per-tenant rate limiting on authenticated API routes
-- ✅ Development/test auth bypass with automatic `DEV_TENANT_ID` bootstrap
-- ✅ Structured logging with request ID tracing
-- ✅ Health checks with TTL caching on `/status`
-- ✅ Security headers, CORS hardening, input validation
-- ✅ Production Compose config + GitHub Actions CI
-- ✅ Pluggable LLM providers (Gemini, OpenAI, Ollama, Anthropic Claude)
-- ✅ Pluggable embedding providers (Gemini, OpenAI, Ollama, Voyage AI)
-- ✅ Mixed-provider configurations (e.g. Claude + Voyage)
-- ✅ Response metadata: `latency_ms` and `model` on chat and batch responses
-- ✅ Optional component score metadata on citation sources
-- ✅ Python client SDK (upload, status, chat, batch, sessions, streaming, retrieval scopes)
-- ✅ TypeScript SDK (`@chatvector/sdk`) for Node backends (upload, chat, batch, sessions, streaming)
+- PDF and text document ingestion
+- Configurable chunking strategies (fixed, paragraph, semantic)
+- Vector embeddings + semantic search via pgvector
+- PostgreSQL/pgvector via SQLAlchemy in all environments (`DATABASE_URL`)
+- Hybrid retrieval (PostgreSQL full-text + vector, RRF fusion)
+- Baseline retrieval reranking (similarity + lexical overlap)
+- Session-scoped and tenant-wide retrieval modes
+- LLM-powered answers with source citations, relevance scores, and score types
+- Query transformations (rewrite, expand, stepback) with session-history context
+- Configurable response personas and system prompt
+- Session-based chat with persisted conversation history
+- SSE streaming chat (`/chat/stream`) with structured `complete` events (citations, `latency_ms`, `model`)
+- Background ingestion queue with rate limiting, retry, and DLQ
+- Redis-backed ingestion queue (production default; in-memory fallback for local dev)
+- Bearer API-key authentication and strict tenant isolation in production
+- Per-tenant rate limiting on authenticated API routes
+- Development/test auth bypass with automatic `DEV_TENANT_ID` bootstrap
+- Structured logging with request ID tracing
+- Health checks with TTL caching on `/status`
+- Security headers, CORS hardening, input validation
+- Production Compose config + GitHub Actions CI
+- Pluggable LLM providers (Gemini, OpenAI, Ollama, Anthropic Claude)
+- Pluggable embedding providers (Gemini, OpenAI, Ollama, Voyage AI)
+- Mixed-provider configurations (e.g. Claude + Voyage)
+- Response metadata: `latency_ms` and `model` on chat and batch responses
+- Optional component score metadata on citation sources
+- Tenant document listing (`GET /documents`)
+- Python client SDK (upload, status, chat, batch, sessions, streaming, async client, retrieval scopes)
+- TypeScript SDK (`@chatvector/sdk`) for Node backends (upload, chat, batch, sessions, streaming)
 
 **Frontend Demo**
-- ✅ Document upload with live pipeline stage display and ingestion SSE progress
-- ✅ RAG chat with source citations, retrieval controls, and retrieval inspector
-- ✅ Batch compare and batch synthesize demos
-- ✅ Live system status page
-- ✅ Structured API error display and grouped Demo/Docs navigation
-- ✅ Session sidebar (client-side) and responsive design with dark/light theme
-- 🚧 Real-time chat SSE streaming in the demo UI (backend `/chat/stream` is ready; demo uses `POST /chat` with simulated typing in `MessageList.tsx`)
+- Document upload with live pipeline stage display and ingestion SSE progress
+- RAG chat with `/chat/stream` SSE (fallback to `POST /chat` when streaming is disabled)
+- Source citations, retrieval controls, and retrieval inspector
+- Batch compare and synthesize demos (document list from `GET /documents`)
+- Live system status page
+- Structured API error display and grouped Demo/Docs navigation
+- Postgres-backed session sidebar with dark/light theme
 
 **Active Phase 3 work:**
-- 🚧 Frontend demo chat SSE streaming wired to `/chat/stream`
-- 🚧 Redis-backed distributed rate-limit storage across workers
-- 🚧 API-key lifecycle automation beyond CLI create/list/revoke (rotation, expiration)
+- Redis-backed distributed rate-limit storage across workers
 
 ---
 
-## 🧠 Architecture Overview
+## Architecture Overview
 
 ### Backend Layer (Core)
 
@@ -172,7 +171,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full system design details.
 
 ---
 
-## 🎯 Quick Start
+## Quick Start
 
 After installing Docker and Node.js, start the complete ChatVector development environment with one command.
 
@@ -267,7 +266,8 @@ Useful for SSH sessions, CI, or when you prefer to open URLs yourself.
 
 1. `POST /upload` — upload a PDF, get a `document_id` and `status_endpoint`
 2. `GET /documents/{document_id}/status` — poll ingestion stage and progress
-3. `POST /chat` — ask questions using the `document_id`
+3. `GET /documents` — list document summaries for the authenticated tenant
+4. `POST /chat` or `POST /chat/stream` — ask questions using the `document_id`
 
 ---
 
@@ -382,7 +382,7 @@ error handling, and the Fastify proxy example. Maintainers: see
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 High-impact contribution areas:
 
@@ -404,6 +404,6 @@ to get started.
 
 ---
 
-## 📄 License
+## License
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/chatvector-ai/chatvector-ai/blob/main/LICENSE)

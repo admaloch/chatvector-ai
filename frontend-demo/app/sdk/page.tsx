@@ -369,7 +369,7 @@ client.delete_session(session.id)`}
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="shrink-0 self-start rounded-xl border border-border bg-surface px-2 py-0.5 font-mono text-[0.82rem] text-accent underline underline-offset-4 transition-opacity hover:opacity-80"
+                    className="shrink-0 self-start rounded-xl border border-border bg-surface px-2 py-0.5 font-mono text-[0.82rem] text-accent-text underline underline-offset-4 transition-opacity hover:opacity-80"
                   >
                     {file}
                   </a>
@@ -386,7 +386,7 @@ client.delete_session(session.id)`}
             href="https://github.com/chatvector-ai/chatvector-ai/blob/main/sdk/python/README.md"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-accent underline underline-offset-4 transition-opacity hover:opacity-80"
+            className="text-accent-text underline underline-offset-4 transition-opacity hover:opacity-80"
           >
             SDK README on GitHub
           </a>

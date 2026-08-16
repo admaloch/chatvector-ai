@@ -40,7 +40,7 @@ export default function Footer() {
             unoptimized
             className="hidden size-9 shrink-0 [[data-theme=light]_&]:block"
           />
-          <span className="text-[1.2rem] bg-gradient-to-r from-accent to-blue bg-clip-text text-transparent">
+          <span className="text-[1.2rem] text-headline-gradient">
             ChatVector
           </span>
         </div>

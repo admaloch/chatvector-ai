@@ -61,7 +61,7 @@ export default function RetrievalSettingsPanel({
               <span
                 className={`inline-block rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                   settings.scope === "session"
-                    ? "bg-accent text-surface"
+                    ? "bg-accent text-accent-foreground"
                     : "text-muted hover:text-foreground"
                 }`}
               >
@@ -80,7 +80,7 @@ export default function RetrievalSettingsPanel({
               <span
                 className={`inline-block rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                   settings.scope === "tenant"
-                    ? "bg-accent text-surface"
+                    ? "bg-accent text-accent-foreground"
                     : "text-muted hover:text-foreground"
                 }`}
               >

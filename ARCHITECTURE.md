@@ -284,6 +284,7 @@ Production never silently falls back to IP-based limiting.
 | `POST /chat/batch` | 10/minute |
 | `GET /status` | 10/minute |
 | `GET /queue/stats` | 10/minute |
+| `GET /documents` | 120/minute |
 | `GET /documents/{id}/status` | 120/minute |
 | `DELETE /documents/{id}` | 60/hour |
 
@@ -324,7 +325,7 @@ python -m backend.cli create-tenant-key --tenant "My Org" --tenant-id my-org
 
 The raw key is printed once and never stored. Set it in all API clients as the Bearer token.
 
-**Auth non-goals:** ChatVector does not provide user login/signup, OAuth, RBAC, billing, admin dashboards, or an API-key management UI. Keys are created via CLI (`python -m backend.cli create-tenant-key`) or direct DB updates; optional `external_user_id` mapping for developer-side identity is on the roadmap.
+**Auth non-goals:** ChatVector does not provide user login/signup, OAuth, RBAC, billing, or an API-key management UI. Keys are managed via CLI (`create-tenant-key`, `list-tenant-keys`, `revoke-tenant-key`, `rotate-tenant-key`, `set-tenant-key-expiry`, `set-tenant-key-external-user-id`) or direct DB updates.
 
 **Session persistence:** All session state is now fully durable. Chat message turns are stored in `chat_messages`. Session metadata (`id`, `tenant_id`, `created_at`, `last_active`) is stored in the `sessions` table and document bindings are stored in `session_documents` — both introduced by migration `007_sessions.sql`. `backend/services/session_service.py` reads and writes exclusively through `SQLAlchemyService`; the previous in-memory `_SESSIONS` dict has been removed. Sessions survive backend restarts and are shared across all Uvicorn workers (`docker-compose.prod.yml` runs `--workers 2`).
 
@@ -404,7 +405,7 @@ is still retried after TTL expires. Each result includes `cached` and
 - **Hybrid retrieval** — pgvector cosine similarity + PostgreSQL full-text search, merged via Reciprocal Rank Fusion (RRF); toggle with `HYBRID_RETRIEVAL_ENABLED`
 - **Reranking** — deterministic similarity + lexical-overlap baseline reranker after fusion
 - **Query transformations** — optional rewrite, expand, and stepback steps using session history context
-- **Citation metadata** — each source includes collapsed `score` and `score_type` (`vector`, `hybrid_rrf`, or `reranked`); per-component score breakdown is not yet exposed
+- **Citation metadata** — each source includes collapsed `score` and `score_type` (`vector`, `hybrid_rrf`, or `reranked`), plus optional per-component fields when hybrid retrieval or reranking ran: `vector_score`, `full_text_score`, `rrf_score`, `reranker_score`, and `rerank_order`
 
 - PostgreSQL with `pgvector` extension
 - Embedding dimension: auto-detected from the configured provider/model (e.g. Gemini → 3072, OpenAI → 1536, Ollama nomic-embed-text → 768)
@@ -467,6 +468,7 @@ with ChatVectorClient("http://localhost:8000", api_key="cv_live_...") as client:
 - Upload, status polling, `wait_for_ready`, non-streaming chat, batch chat
 - Session management (`create_session`, `list_sessions`, `delete_session`)
 - Streaming chat (`stream_chat`) with typed `token` and `complete` events
+- Async client (`AsyncChatVectorClient`) with the same surface as the sync client
 - Retrieval scope options (`session` / `tenant`)
 - Typed dataclass response models with citation `score` and `score_type`
 - Retry with exponential backoff and jitter
@@ -475,7 +477,7 @@ with ChatVectorClient("http://localhost:8000", api_key="cv_live_...") as client:
   `ChatVectorTimeoutError`, `ChatVectorAPIError`
 - Context manager support
 
-**Current gaps:** no async client; no ingestion SSE client (document status stream is HTTP/SSE only); no per-component retrieval score breakdown in SDK models.
+**Current gaps:** no ingestion SSE client (document status stream is HTTP/SSE only); no `GET /documents` list helper; per-component citation scores are returned by the API but not yet modeled on SDK `ChatSource` types.
 
 Install: `pip install ./sdk/python` — see [sdk/python/README.md](sdk/python/README.md)
 

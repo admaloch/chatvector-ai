@@ -17,7 +17,7 @@ const phases: Phase[] = [
     number: "Phase 1",
     title: "Stabilize & Optimize Core Engine",
     status: "Complete",
-    statusStyles: "bg-accent text-background",
+    statusStyles: "bg-accent text-accent-foreground",
     description:
       "Core RAG backend hardened for reliability, observability, and performance. Shipped features include a robust ingestion pipeline, centralized retry logic, and built-in observability.",
   },
@@ -25,7 +25,7 @@ const phases: Phase[] = [
     number: "Phase 2",
     title: "Enhance Developer Experience",
     status: "Complete",
-    statusStyles: "bg-accent text-background",
+    statusStyles: "bg-accent text-accent-foreground",
     description:
       "Expanded flexibility and developer experience: advanced chunking, query transformations, pluggable providers, Python SDK, production Docker Compose, CI, and the frontend demo.",
   },
@@ -33,7 +33,7 @@ const phases: Phase[] = [
     number: "Phase 2.5",
     title: "Hardening & Consistency",
     status: "Complete",
-    statusStyles: "bg-accent text-background",
+    statusStyles: "bg-accent text-accent-foreground",
     description:
       "Stabilization pass ahead of Phase 3: unified API error contracts, provider timeout standardization, embedding validation, logging safety, and expanded test coverage.",
   },
@@ -87,7 +87,7 @@ export default function RoadmapPage() {
             className="rounded-r-xl border border-border border-l-[3px] border-l-accent bg-surface p-8 shadow-sm"
           >
             <div className="mb-4 flex items-center justify-between">
-              <span className="text-[0.7rem] uppercase tracking-widest text-accent/80 font-mono">
+              <span className="text-[0.7rem] uppercase tracking-widest text-accent-text/80 font-mono">
                 {phase.number}
               </span>
               <span
@@ -107,7 +107,7 @@ export default function RoadmapPage() {
 
             {phase.completedItems && phase.completedItems.length > 0 && (
               <div className="mt-6">
-                <h4 className="mb-2 text-sm font-semibold uppercase tracking-wide text-accent/80">
+                <h4 className="mb-2 text-sm font-semibold uppercase tracking-wide text-accent-text/80">
                   Shipped
                 </h4>
                 <ul className="list-inside list-disc space-y-1 text-[0.95rem] leading-relaxed text-foreground/85">
@@ -141,7 +141,7 @@ export default function RoadmapPage() {
           </p>
           <Link
             href="https://github.com/orgs/chatvector-ai/projects/1"
-            className="inline-flex items-center gap-2 font-medium text-accent transition-colors hover:text-accent/80"
+            className="inline-flex items-center gap-2 font-medium text-accent-text transition-colors hover:text-accent-text/80"
           >
             Check the ChatVector-AI Development Board →
           </Link>

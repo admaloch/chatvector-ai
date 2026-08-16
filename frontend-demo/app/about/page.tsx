@@ -70,7 +70,7 @@ export default function AboutPage() {
               <thead>
                 <tr className="border-b border-border bg-background/30 text-foreground">
                   <th className="px-5 py-4 font-bold">Aspect</th>
-                  <th className="px-5 py-4 font-bold text-accent">
+                  <th className="px-5 py-4 font-bold text-accent-text">
                     ChatVector
                   </th>
                   <th className="px-5 py-4 font-bold">General Framework</th>
@@ -131,7 +131,7 @@ export default function AboutPage() {
           </p>
           <Link
             href="/getting-started"
-            className="inline-flex items-center justify-center rounded-md border border-accent bg-accent/10 px-8 py-3 text-base font-bold text-accent no-underline transition-all hover:bg-accent/20 hover:scale-[1.02]"
+            className="inline-flex items-center justify-center rounded-md border border-accent bg-accent/10 px-8 py-3 text-base font-bold text-accent-text no-underline transition-all hover:bg-accent/20 hover:scale-[1.02]"
           >
             Getting Started
           </Link>

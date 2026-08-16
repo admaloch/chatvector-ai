@@ -13,7 +13,7 @@ function PipelineStep({
     <div className="flex items-start gap-3.5 border-b border-border py-3.5">
       {/* Step badge: sub-20% alpha on accent — kept inline for exact rgba match */}
       <div
-        className="flex size-7 shrink-0 items-center justify-center rounded-md border font-mono text-xs font-bold text-accent"
+        className="flex size-7 shrink-0 items-center justify-center rounded-md border font-mono text-xs font-bold text-accent-text"
         style={{
           background: "color-mix(in srgb, var(--accent) 10%, transparent)",
           borderColor: "color-mix(in srgb, var(--accent) 20%, transparent)",

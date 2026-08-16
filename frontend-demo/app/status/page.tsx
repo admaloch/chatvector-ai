@@ -26,7 +26,7 @@ export default function StatusPage() {
           <button
             onClick={fetchStatus}
             disabled={loading}
-            className="flex items-center gap-2 rounded-lg bg-surface px-4 py-2 text-sm font-medium text-foreground border border-border hover:bg-accent/10 hover:text-accent transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-surface px-4 py-2 text-sm font-medium text-foreground border border-border hover:bg-accent/10 hover:text-accent-text transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh

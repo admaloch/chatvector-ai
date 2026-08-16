@@ -29,8 +29,10 @@ export default function MobileNavSection({
         aria-expanded={open}
         aria-controls={menuId}
         onClick={() => onOpenChange(!open)}
-        className={`inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-base no-underline transition-colors duration-200 ${
-          isActive ? "text-accent" : "text-foreground hover:text-accent"
+        className={`relative inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-base no-underline transition-colors duration-200 ${
+          isActive
+            ? "nav-link-active text-foreground"
+            : "text-foreground hover:text-accent-text"
         }`}
       >
         {label}
@@ -51,7 +53,7 @@ export default function MobileNavSection({
               <Link
                 href={href}
                 onClick={onNavigate}
-                className="block px-4 py-2 text-base text-foreground no-underline transition-colors hover:text-accent"
+                className="block px-4 py-2 text-base text-foreground no-underline transition-colors hover:text-accent-text"
               >
                 {linkLabel}
               </Link>

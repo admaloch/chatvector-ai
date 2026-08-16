@@ -107,7 +107,7 @@ export default function MessageList({
     >
       {historyLoading && messages.length === 0 && (
         <div className="flex items-end gap-2">
-          <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-accent text-background">
+          <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-surface border border-border text-muted">
             <Bot size={16} />
           </div>
           <div className="px-4 py-3 rounded-2xl rounded-bl-none bg-surface text-muted text-base animate-pulse">
@@ -131,20 +131,14 @@ export default function MessageList({
             key={msg.id}
             className={`flex items-end gap-2 ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}
           >
-            <div
-              className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center ${
-                msg.sender === "ai"
-                  ? "bg-accent text-background"
-                  : "bg-surface border border-border"
-              }`}
-            >
+            <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-surface border border-border text-muted">
               {msg.sender === "ai" ? <Bot size={16} /> : <User size={16} />}
             </div>
             <div
               className={`max-w-[75%] md:max-w-[60%] whitespace-pre-wrap break-words px-4 py-3 rounded-2xl text-base leading-relaxed ${
                 msg.sender === "ai"
                   ? "bg-surface text-foreground rounded-bl-none"
-                  : "bg-accent text-background rounded-br-none"
+                  : "chat-bubble-user rounded-br-none"
               }`}
             >
               {msg.sender === "user" ? (
@@ -169,7 +163,7 @@ export default function MessageList({
       })}
       {inflight && !streaming && (
         <div className="flex items-end gap-2">
-          <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-accent text-background">
+          <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-surface border border-border text-muted">
             <Bot size={16} />
           </div>
           <div className="px-4 py-3 rounded-2xl rounded-bl-none bg-surface text-muted text-base animate-pulse">

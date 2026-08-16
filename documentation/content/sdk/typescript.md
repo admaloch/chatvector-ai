@@ -54,6 +54,21 @@ const answer = await client.chat({
 console.log(answer.answer);
 ```
 
+## Streaming chat
+
+When the backend has streaming enabled (`ENABLE_STREAMING=true`), use `streamChat()` to consume Server-Sent Events:
+
+```typescript
+for await (const event of client.streamChat({
+  question: "Summarize this document.",
+  docId: uploaded.documentId,
+  sessionId: session.id,
+})) {
+  if (event.type === "token") process.stdout.write(event.content ?? "");
+  if (event.type === "complete") console.log(event.sources);
+}
+```
+
 ## Reference implementation
 
 The Fastify proxy example demonstrates a server-side integration pattern — upload, wait-for-ready, session creation, and scoped chat with downstream cancellation:

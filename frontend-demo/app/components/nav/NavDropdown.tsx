@@ -38,8 +38,10 @@ export default function NavDropdown({
         aria-haspopup="menu"
         aria-expanded={flyoutOpen}
         aria-controls={menuId}
-        className={`flex cursor-pointer text-[1.15rem] items-center gap-1 border-0 bg-transparent p-0 text-base no-underline transition-colors duration-200 ${
-          isActive ? "text-accent" : "text-foreground hover:text-accent"
+        className={`relative flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-[1.15rem] text-base no-underline transition-colors duration-200 ${
+          isActive
+            ? "nav-link-active text-foreground"
+            : "text-foreground hover:text-accent-text"
         }`}
       >
         {label}

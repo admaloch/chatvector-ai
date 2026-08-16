@@ -131,7 +131,7 @@ export default function ContributingPage() {
         For the full contribution guide, see{" "}
         <a
           href="https://github.com/chatvector-ai/chatvector-ai/blob/main/CONTRIBUTING.md"
-          className="text-accent hover:text-accent/80"
+          className="text-accent-text hover:text-accent-text/80"
         >
           CONTRIBUTING.md on GitHub
         </a>

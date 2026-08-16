@@ -11,7 +11,7 @@ export function getStatusColor(state: string): string {
     case "ok":
     case "connected":
     case "online":
-      return "text-green-500";
+      return "text-accent-text";
     case "degraded":
       return "text-yellow-500";
     case "unhealthy":
@@ -19,7 +19,7 @@ export function getStatusColor(state: string): string {
     case "disconnected":
       return "text-red-500";
     default:
-      if (state.includes("connected")) return "text-green-500";
+      if (state.includes("connected")) return "text-accent-text";
       if (state.includes("disconnected")) return "text-red-500";
       return "text-muted";
   }
@@ -31,7 +31,7 @@ export function getStatusIcon(state: string) {
     case "ok":
     case "connected":
     case "online":
-      return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+      return <CheckCircle2 className="h-5 w-5 text-accent-text" />;
     case "degraded":
       return <AlertCircle className="h-5 w-5 text-yellow-500" />;
     case "unhealthy":
@@ -40,7 +40,7 @@ export function getStatusIcon(state: string) {
       return <ServerCrash className="h-5 w-5 text-red-500" />;
     default:
       if (state.includes("connected")) {
-        return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+        return <CheckCircle2 className="h-5 w-5 text-accent-text" />;
       }
       if (state.includes("disconnected")) {
         return <ServerCrash className="h-5 w-5 text-red-500" />;

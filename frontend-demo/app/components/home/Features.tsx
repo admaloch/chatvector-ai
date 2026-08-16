@@ -3,7 +3,7 @@ import { Kicker } from "@/app/components/Kicker";
 const FEATURES = [
   {
     icon: "⬆",
-    color: "var(--accent)",
+    color: "var(--accent-text)",
     bg: "color-mix(in srgb, var(--accent) 10%, transparent)",
     title: "Multi-format ingestion",
     desc: "PDF, Markdown, HTML, DOCX, plain text. Drop a folder and go.",
@@ -12,7 +12,7 @@ const FEATURES = [
   {
     icon: "🔍",
     color: "var(--blue)",
-    bg: "rgba(0,128,255,0.1)",
+    bg: "color-mix(in srgb, var(--blue) 10%, transparent)",
     title: "Semantic retrieval",
     desc: "Hybrid vector + PostgreSQL full-text search with optional reranking for accurate hits.",
     tag: "retrieval",
@@ -35,8 +35,8 @@ const FEATURES = [
   },
   {
     icon: "✓",
-    color: "rgb(16, 185, 129)",
-    bg: "rgba(16,185,129,0.1)",
+    color: "var(--accent-text)",
+    bg: "color-mix(in srgb, var(--accent) 10%, transparent)",
     title: "Cited responses",
     desc: "Every answer links back to source chunks. No hallucinations, full traceability.",
     tag: "trust",
@@ -68,7 +68,7 @@ function FeatureCard({
 }) {
   // Pure CSS hover via group — no JS state needed
   return (
-    <div className="group cursor-default rounded-xl border border-border bg-background p-6 transition-all duration-[250ms] hover:-translate-y-[3px] hover:border-[rgb(61,69,85)]">
+    <div className="group cursor-default rounded-xl border border-border bg-background p-6 transition-all duration-[250ms] hover:-translate-y-[3px] hover:border-subtle">
       {/* Icon tile fill and glyph color are per-card (feature palette, not design tokens) */}
       <div
         className="mb-4 flex size-10 items-center justify-center rounded-[10px] text-[1.1rem]"
@@ -78,12 +78,11 @@ function FeatureCard({
       </div>
       <h3 className="mb-2 text-lg font-medium text-foreground">{title}</h3>
       <p className="m-0 text-lg leading-relaxed text-muted">{desc}</p>
-      {/* Tag badge: sub-20% alpha on blue — kept inline for exact rgba match */}
       <div
         className="mt-3 inline-block rounded px-2.5 py-0.5 font-mono text-sm text-blue"
         style={{
-          background: "rgba(0,128,255,0.1)",
-          border: "1px solid rgba(0,128,255,0.2)",
+          background: "color-mix(in srgb, var(--blue) 10%, transparent)",
+          border: "1px solid color-mix(in srgb, var(--blue) 20%, transparent)",
         }}
       >
         {tag}

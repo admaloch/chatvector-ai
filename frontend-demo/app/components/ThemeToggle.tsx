@@ -32,7 +32,7 @@ export default function ThemeToggle() {
       type="button"
       onClick={toggle}
       aria-label="Toggle theme"
-      className="cursor-pointer rounded-md border border-border bg-transparent p-2 text-foreground transition-colors duration-200 hover:border-accent hover:bg-accent/10 hover:text-accent"
+      className="cursor-pointer rounded-md border border-border bg-transparent p-2 text-foreground transition-colors duration-200 hover:border-accent hover:bg-accent/10 hover:text-accent-text"
     >
       {/* CSS-driven — no React state, no hydration mismatch, no flash */}
       <Sun

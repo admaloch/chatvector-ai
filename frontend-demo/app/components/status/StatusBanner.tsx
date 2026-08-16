@@ -7,7 +7,7 @@ type StatusBannerProps = {
 
 const bannerStyles: Record<SystemStatus["status"], string> = {
   healthy:
-    "border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400",
+    "border-accent/30 bg-accent/10 text-accent-text",
   degraded:
     "border-yellow-500/30 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
   unhealthy: "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400",

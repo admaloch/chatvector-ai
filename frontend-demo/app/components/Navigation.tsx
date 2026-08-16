@@ -40,8 +40,10 @@ function NavLinks({
             <Link
               href={href}
               onClick={onNavigate}
-              className={`text-base text-bold no-underline text-[1.15rem] transition-colors duration-200 ${
-                isActive ? "text-accent" : "text-foreground hover:text-accent"
+              className={`relative inline-block text-base text-bold no-underline text-[1.15rem] transition-colors duration-200 ${
+                isActive
+                  ? "nav-link-active text-foreground"
+                  : "text-foreground hover:text-accent-text"
               }`}
             >
               {label}
@@ -60,7 +62,7 @@ function GitHubNavLink() {
       target="_blank"
       rel="noopener noreferrer"
       aria-label="View ChatVector on GitHub"
-      className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-border bg-transparent p-2 text-base leading-none text-foreground no-underline transition-all duration-200 hover:border-accent hover:bg-accent/10 hover:text-accent md:px-[18px] md:py-2"
+      className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-border bg-transparent p-2 text-base leading-none text-foreground no-underline transition-all duration-200 hover:border-accent hover:bg-accent/10 hover:text-accent-text md:px-[18px] md:py-2"
     >
       <Github
         className="size-[1.1rem] shrink-0 md:hidden"

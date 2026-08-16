@@ -143,11 +143,11 @@ function StageRow({
           className={[
             "flex h-6 w-6 shrink-0 items-center justify-center rounded-full ring-1 transition-all duration-300",
             state === "completed"
-              ? "bg-emerald-500/15 ring-emerald-400/40 text-emerald-400"
+              ? "bg-success/15 ring-success/35 text-success"
               : state === "active"
-                ? "bg-blue/10 ring-blue/30 text-blue"
+                ? "bg-accent/15 ring-accent/40 text-accent"
                 : state === "failed"
-                  ? "bg-red-500/10 ring-red-500/30 text-red-400"
+                  ? "bg-danger/10 ring-danger/30 text-danger"
                   : "bg-surface ring-border text-muted/40",
           ].join(" ")}
         >
@@ -168,7 +168,7 @@ function StageRow({
           <div
             className={[
               "mt-1 w-px flex-1 min-h-[1.25rem] transition-colors duration-500",
-              state === "completed" ? "bg-emerald-400/25" : "bg-border/60",
+              state === "completed" ? "bg-success/25" : "bg-border/60",
             ].join(" ")}
           />
         )}
@@ -180,11 +180,11 @@ function StageRow({
           className={[
             "text-sm font-medium leading-none transition-colors duration-200",
             state === "completed"
-              ? "text-emerald-400"
+              ? "text-success-text"
               : state === "active"
-                ? "text-foreground"
+                ? "text-accent-text"
                 : state === "failed"
-                  ? "text-red-400"
+                  ? "text-danger-text"
                   : "text-muted/50",
           ].join(" ")}
         >
@@ -196,7 +196,7 @@ function StageRow({
           </p>
         )}
         {state === "failed" && errorMessage && (
-          <p className="absolute top-full -mt-3 text-xs text-red-400/80">
+          <p className="absolute top-full -mt-3 text-xs text-danger-text/80">
             {errorMessage.slice(0, 80)}
           </p>
         )}

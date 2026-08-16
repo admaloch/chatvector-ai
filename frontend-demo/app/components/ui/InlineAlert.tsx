@@ -5,7 +5,7 @@ type Variant = "error" | "info";
 
 const variantClasses: Record<Variant, string> = {
   error: "border-red-500/40 bg-red-500/10 text-red-500",
-  info: "border-accent/40 bg-accent/10 text-accent",
+  info: "border-accent/40 bg-accent/10 text-accent-text",
 };
 
 type Props = {

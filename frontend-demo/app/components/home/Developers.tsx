@@ -96,7 +96,7 @@ export default function Developers() {
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2.5"
-                  className="mt-0.5 shrink-0 text-accent"
+                  className="mt-0.5 shrink-0 text-accent-text"
                 >
                   <polyline points="20 6 9 17 4 12" />
                 </svg>

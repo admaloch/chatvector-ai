@@ -35,7 +35,7 @@ export function BatchResultCard({
         {isError ? (
           <AlertCircle size={16} className="shrink-0 text-red-500" />
         ) : (
-          <CheckCircle2 size={16} className="shrink-0 text-green-500" />
+          <CheckCircle2 size={16} className="shrink-0 text-accent-text" />
         )}
         <span className="truncate text-sm font-medium" title={title}>
           {title}

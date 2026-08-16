@@ -1,7 +1,7 @@
-# Proposal: Node-first TypeScript SDK v0
+# TypeScript SDK v0 — design and implementation record
 
-**Status:** proposed
-**Scope:** server-side Node.js SDK only; implementation intentionally deferred
+**Status:** implemented (v0 shipped as `@chatvector/sdk`)
+**Scope:** server-side Node.js SDK only
 
 ## Decision summary
 
@@ -12,8 +12,8 @@
 | Runtime | Node.js 22 and 24 LTS; `engines.node: ">=22"` |
 | Module formats | ESM-first package with supported CJS entry point |
 | HTTP stack | Native Node `fetch`, `FormData`, `Blob`, `fs.openAsBlob`, and `AbortController`; no runtime dependencies |
-| v0 features | Upload/ingest compatibility, status polling, `waitForReady`, non-streaming chat, batch chat, sessions, cancellation, typed errors, and retry controls |
-| Deferred | Chat SSE, document-status SSE, browsers, React, edge/browser runtimes, logging, and pagination |
+| v0 features | Upload/ingest compatibility, status polling, `waitForReady`, non-streaming chat, streaming chat (`streamChat`), batch chat, sessions, cancellation, typed errors, and retry controls |
+| Deferred | Document-status SSE, browsers, React, edge/browser runtimes, logging, pagination, and `GET /documents` list helper |
 
 The package name requires control of the `@chatvector` npm organization before
 release. Publish with public access and npm provenance. Do not fall back to an
@@ -58,7 +58,7 @@ sdk/
         retry.ts                   # retry decision and backoff calculation
         upload.ts                  # Node path/blob/bytes multipart adapter
         time.ts                    # injectable clock/sleep for tests
-        sse.ts                     # added in rollout phase 2, not v0
+        sse.ts                     # chat stream SSE parser (POST /chat/stream)
       browser-stub.ts              # intentional server-only error entry, not a browser SDK
     tests/
       unit/
@@ -83,8 +83,8 @@ facade, but it delegates to the resource modules above so the implementation
 does not become a god object. Future plural namespaces (`client.documents`,
 `client.chats`, `client.sessions`) may be introduced additively; flat methods
 remain compatible. `internal/` is not exported and may change without a semver
-guarantee. The first scaffold must not add the phase-2 `sse.ts`
-implementation; the placeholder only reserves the ownership boundary.
+guarantee. `internal/sse.ts` implements chat streaming; document-status SSE
+remains out of scope for v0.
 
 ## Runtime and packaging
 
@@ -164,6 +164,7 @@ class ChatVectorClient {
   waitForReady(documentId: string, options?: WaitForReadyOptions): Promise<DocumentStatus>;
 
   chat(request: ChatRequest, options?: RequestOptions): Promise<ChatResponse>;
+  streamChat(request: ChatRequest, options?: RequestOptions): AsyncIterable<ChatStreamEvent>;
   batchChat(request: BatchChatRequest, options?: RequestOptions): Promise<BatchChatResponse>;
 
   createSession(input?: CreateSessionInput, options?: RequestOptions): Promise<Session>;
@@ -179,8 +180,10 @@ class ChatVectorClient {
 | --- | --- | --- |
 | `uploadDocument` | `POST /ingest`, then `POST /upload` only on `404` | matches Python compatibility behavior; multipart field name is `file` |
 | `getDocumentStatus` | `GET /documents/{documentId}/status` | returns live queue position while queued |
+| `listDocuments` | `GET /documents` | tenant-scoped document summaries (not in SDK v0 — use HTTP client or demo API module) |
 | `waitForReady` | repeated document-status calls | terminal `completed` returns; terminal `failed` throws |
 | `chat` | `POST /chat` | supports a document, session, match count, and retrieval scope |
+| `streamChat` | `POST /chat/stream` | SSE `token` and `complete` events; requires `ENABLE_STREAMING=true` on the backend |
 | `batchChat` | `POST /chat/batch` | supports batch- and item-level sessions/scopes |
 | `listSessions` | `GET /sessions` | direct, unpaginated backend response; no SDK pagination |
 | other session methods | `/sessions` and `/sessions/{sessionId}` | create, get, delete |
@@ -508,14 +511,14 @@ type ChatStreamEvent =
 client.streamChat(request: ChatRequest, options?: RequestOptions): AsyncIterable<ChatStreamEvent>;
 ```
 
-It will issue `POST /chat/stream` with `fetch`, parse `token`, `complete`, and
-`error` SSE records, ignore the legacy `done`/`[DONE]` marker, and map
-structured `error` records to the same error hierarchy as Python. It will not
+`client.streamChat()` issues `POST /chat/stream` with `fetch`, parses `token`, `complete`, and
+`error` SSE records, ignores the legacy `done`/`[DONE]` marker, and maps
+structured `error` records to the same error hierarchy as Python. It does not
 use browser `EventSource`, because this endpoint requires a POST request and
 authorization header. Never retry a stream once it starts.
 
-Document-status SSE (`GET /documents/{id}/status/stream`) is also deferred;
-`waitForReady` polling is the v0 ingestion-progress API.
+Document-status SSE (`GET /documents/{id}/status/stream`) is not exposed in the
+TypeScript SDK v0; `waitForReady` polling is the supported ingestion-progress API.
 
 ## Tests and CI
 
@@ -593,7 +596,7 @@ This section records intentional divergences from the Python
 * Browser, React, Next.js client-component, React Native, or edge-runtime SDKs.
 * Any pattern that places a ChatVector API key in a bundle, `NEXT_PUBLIC_*`
   variable, local storage, or browser request.
-* Streaming chat and document-status SSE.
+* Streaming document-status SSE (`GET /documents/{id}/status/stream`).
 * An async/sync dual-client split; TypeScript's Promise API is already async.
 * Full backend-route parity, API-key lifecycle operations, tenant management,
   document deletion, status SSE, debug/observability endpoints, or a generated
@@ -605,22 +608,23 @@ This section records intentional divergences from the Python
 * UI components, React hooks, middleware packages, logger/telemetry APIs, and
   a framework integration matrix.
 
-## Scaffold-package issue checklist
+## Implementation checklist (v0)
 
-A follow-up implementation issue should be considered well-scoped when it
-includes all of the following:
+The items below tracked the initial `@chatvector/sdk` release. They are complete
+unless noted as follow-up work.
 
-- [ ] Confirm control of the `@chatvector` npm scope and configure protected,
+- [x] Confirm control of the `@chatvector` npm scope and configure protected,
       provenance-enabled public publishing.
-- [ ] Create the layout above and `@chatvector/sdk` package metadata with
-      `0.1.0` versioning, MIT license, `files: ["dist", "README.md", "LICENSE"]`,
+- [x] Create the layout above and `@chatvector/sdk` package metadata with
+      semver versioning, MIT license, `files: ["dist", "README.md", "LICENSE"]`,
       and no runtime dependencies.
-- [ ] Implement every v0 method and type in this document, but no streaming
-      method or browser entry point.
-- [ ] Keep Node filesystem imports out of the root entry and ship the
+- [x] Implement every v0 method and type in this document, including
+      `streamChat` and the intentional browser server-only stub.
+- [x] Keep Node filesystem imports out of the root entry and ship the
       intentional browser server-only stub; it must not expose browser support.
-- [ ] Add the required mock-fetch unit tests, Node 22/24 CI matrix, and
+- [x] Add the required mock-fetch unit tests, Node 22/24 CI matrix, and
       ESM/CJS/browser-stub packed-artifact smoke tests.
-- [ ] Add the Fastify server-side proxy example and its key-safety warning.
-- [ ] Add installation, quickstart, error/retry, and runtime-support sections
+- [x] Add the Fastify server-side proxy example and its key-safety warning.
+- [x] Add installation, quickstart, error/retry, and runtime-support sections
       to the SDK README.
+- [ ] Follow-up: expose `GET /documents` and document-status SSE in a future minor release.

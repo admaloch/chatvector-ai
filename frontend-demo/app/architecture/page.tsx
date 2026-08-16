@@ -92,7 +92,7 @@ export default function ArchitecturePage() {
                   ],
                 ].map(([label, dev, prod]) => (
                   <tr key={label}>
-                    <td className="border-b border-border px-4 py-3 font-mono text-[0.8rem] text-accent">
+                    <td className="border-b border-border px-4 py-3 font-mono text-[0.8rem] text-accent-text">
                       {label}
                     </td>
                     <td className="border-b border-border px-4 py-3">{dev}</td>
@@ -123,7 +123,7 @@ export default function ArchitecturePage() {
               href="https://github.com/chatvector-ai/chatvector-ai/issues/44"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-accent hover:text-accent/80"
+              className="text-accent-text hover:text-accent-text/80"
             >
               #44
             </a>
@@ -246,7 +246,7 @@ LIMIT  $top_k;`}
           href="https://github.com/chatvector-ai/chatvector-ai/blob/main/ARCHITECTURE.md"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-accent hover:text-accent/80"
+          className="text-accent-text hover:text-accent-text/80"
         >
           ARCHITECTURE.md on GitHub
         </a>

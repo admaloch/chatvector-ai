@@ -41,7 +41,7 @@ After the database schema is applied, create the first tenant key:
 python -m backend.cli create-tenant-key --tenant "My Org" --tenant-id my-org
 ```
 
-Store the printed secret securely. Keys are not retrievable after creation.
+Store the printed secret securely. Keys are not retrievable after creation. Use `rotate-tenant-key`, `set-tenant-key-expiry`, and `set-tenant-key-external-user-id` for lifecycle management (see `DEVELOPMENT.md`).
 
 ## Production Compose
 

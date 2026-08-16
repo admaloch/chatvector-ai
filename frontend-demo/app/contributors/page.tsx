@@ -97,7 +97,7 @@ export default function ContributorsPage() {
                 className="mb-3 rounded-full"
               />
 
-              <p className="font-mono text-accent">@{c.login}</p>
+              <p className="font-mono text-accent-text">@{c.login}</p>
 
               <p className="text-sm text-foreground/80">
                 {c.contributions} contributions

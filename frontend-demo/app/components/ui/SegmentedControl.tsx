@@ -41,7 +41,7 @@ export function SegmentedControl<T extends string>({
           <span
             className={`inline-block rounded-md px-4 py-2 text-sm font-medium transition-colors ${
               value === option.value
-                ? "bg-accent text-surface"
+                ? "bg-accent text-accent-foreground"
                 : "text-muted hover:text-foreground"
             }`}
           >

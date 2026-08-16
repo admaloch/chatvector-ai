@@ -23,7 +23,7 @@ export default function NavBrand() {
         unoptimized
         className="size-9 shrink-0 hidden md:size-10 lg:size-12 [[data-theme=light]_&]:block"
       />
-      <span className="whitespace-nowrap text-[1.2rem] leading-tight text-transparent md:text-[1.45rem] lg:text-[1.7rem] bg-gradient-to-r from-accent to-blue bg-clip-text">
+      <span className="whitespace-nowrap text-[1.2rem] leading-tight md:text-[1.45rem] lg:text-[1.7rem] text-headline-gradient">
         ChatVector
       </span>
     </Link>

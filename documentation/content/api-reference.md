@@ -25,6 +25,7 @@ Create keys with `python -m backend.cli create-tenant-key`. See [Getting Started
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/upload` | Upload a document for background ingestion |
+| `GET` | `/documents` | List tenant document summaries |
 | `GET` | `/documents/{document_id}/status` | Poll ingestion status |
 | `GET` | `/documents/{document_id}/status/stream` | SSE ingestion progress |
 | `DELETE` | `/documents/{document_id}` | Delete a document |

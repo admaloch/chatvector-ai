@@ -427,7 +427,8 @@ database strategy pattern and retry behavior.
 
 `POST /upload` returns immediately with a `document_id` and
 `status_endpoint`. Processing happens in the background via an async
-worker pool. Poll `GET /documents/{id}/status` for progress.
+worker pool. Poll `GET /documents/{id}/status` for progress, or list tenant
+documents with `GET /documents`.
 
 **Status flow:**
 
@@ -438,6 +439,10 @@ queued → extracting → chunking → embedding → storing → completed
 ### Status updates: poll vs stream
 
 There are two ways to track ingestion progress after upload:
+
+**List:** `GET /documents`
+Returns `{ tenant_id, documents: [{ document_id, file_name, status, created_at, updated_at }] }`
+for the authenticated tenant. Used by the batch demo to populate the document picker.
 
 **Poll:** `GET /documents/{document_id}/status`
 Standard JSON response. Works with any HTTP client and is the recommended
@@ -1191,8 +1196,8 @@ The frontend demo lives in `frontend-demo/` and is a Next.js app. It is a
 
 | Page | Path | What it demonstrates |
 | --- | --- | --- |
-| Chat | `/chat` | Upload, session sidebar, retrieval controls, retrieval inspector, cited answers (`POST /chat`) |
-| Batch | `/batch` | Compare and synthesize modes against multiple documents |
+| Chat | `/chat` | Upload, Postgres-backed session sidebar, retrieval controls, retrieval inspector, cited answers (`POST /chat/stream` with sync fallback) |
+| Batch | `/batch` | Compare and synthesize modes; document list loaded from `GET /documents` |
 | Status | `/status` | Live backend health and system metrics |
 
 Navigation groups Demo and Docs links in the header. Structured API errors from
@@ -1203,10 +1208,13 @@ polling fallback. While a document is `queued`, the backend may return
 `queue_position` (1 = next to process); the demo surfaces this on attachment
 chips when position is greater than 1.
 
-Chat in the demo still uses non-streaming `POST /chat` even though the backend
-`/chat/stream` endpoint and Python SDK streaming are available. The chat UI
-simulates typing with a character-by-character animation in
-`MessageList.tsx` — this is **not** real SSE token streaming.
+Chat in the demo uses `/chat/stream` when streaming is enabled on the backend,
+with fallback to non-streaming `POST /chat`. Historical messages loaded from
+the session API may still use the character animation in `MessageList.tsx` for
+display polish; live responses stream tokens when SSE is available.
+
+The batch demo loads documents from `GET /documents` (tenant-scoped) rather
+than a browser-local document registry.
 
 ### Prerequisites
 
@@ -1443,7 +1451,7 @@ works without running the tenant CLI first.
 In **production**, tenants and API keys are **not** auto-created. Use the CLI
 below before pointing clients at the API.
 
-> **Warning:** A startup log message (`⚠️ Authentication bypass is ACTIVE`) is
+> **Warning:** A startup log message (`Authentication bypass is ACTIVE`) is
 > printed whenever `APP_ENV` is not `production`. If you see this message on a
 > shared or public server, set `APP_ENV=production` immediately.
 

@@ -49,7 +49,7 @@ export default function GettingStartedPage() {
               <li>
                 <span className="font-medium text-foreground">Star the repo.</span>{" "}
                 <a
-                  className="text-accent underline decoration-transparent hover:decoration-accent"
+                  className="text-accent-text underline decoration-transparent hover:decoration-accent"
                   href="https://github.com/chatvector-ai/chatvector-ai"
                   target="_blank"
                   rel="noreferrer"
@@ -200,7 +200,7 @@ POST /chat      -> ask questions with citations`}
               For full setup details, see the{" "}
               <a
                 href="https://github.com/chatvector-ai/chatvector-ai/blob/main/README.md"
-                className="text-accent underline decoration-transparent hover:decoration-accent"
+                className="text-accent-text underline decoration-transparent hover:decoration-accent"
                 target="_blank"
                 rel="noreferrer"
               >

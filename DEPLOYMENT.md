@@ -116,6 +116,9 @@ Manage keys after bootstrap:
 
 ```bash
 python -m backend.cli list-tenant-keys --tenant-id my-org
+python -m backend.cli rotate-tenant-key --tenant-id my-org --key-id <key-id>
+python -m backend.cli set-tenant-key-expiry --tenant-id my-org --key-id <key-id> --expires-at "2027-01-01T00:00:00Z"
+python -m backend.cli set-tenant-key-external-user-id --tenant-id my-org --key-id <key-id> --external-user-id user_123
 python -m backend.cli revoke-tenant-key --tenant-id my-org --key-id <key-id>
 ```
 
