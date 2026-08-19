@@ -75,8 +75,11 @@ from core.config import config
 from db.base import ChunkRecord
 from db.tenant_scope import require_tenant_id
 from services.embedding_service import get_embeddings
-from services.extraction_service import PageBoundary, extract_text_with_metadata
-from services.text_cleaning_service import clean_text
+from services.extraction_service import (
+    PageBoundary,
+    extract_text_with_metadata,
+    prepare_extracted_document_for_chunking,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -599,9 +602,10 @@ def _resolve_page_number(
     page_boundaries: list[PageBoundary],
 ) -> int | None:
     """
-    Return the 1-based page number that contains *offset*, or None for non-PDF.
+    Return the 1-based page number that contains *offset* in cleaned document text.
 
-    Uses binary search on the sorted start_offset values for O(log n) lookup.
+    *offset* and *page_boundaries* must refer to the same normalized text produced
+    by ``prepare_extracted_document_for_chunking``.
     """
     if not page_boundaries:
         return None
@@ -901,7 +905,9 @@ class IngestionPipeline:
             await self._update_status(doc_id=doc_id, status="extracting", tenant_id=tenant_id)
             file_meta = _FileMetadata(content_type=file.content_type, filename=safe_filename)
             file_text, page_boundaries = await extract_text_with_metadata(file_meta, file_bytes)
-            file_text = clean_text(file_text)
+            file_text, page_boundaries = prepare_extracted_document_for_chunking(
+                file_text, page_boundaries
+            )
 
             if not file_text:
                 raise UploadPipelineError(
@@ -1015,7 +1021,9 @@ class IngestionPipeline:
         try:
             await self._update_status(doc_id=doc_id, status="extracting", tenant_id=tenant_id)
             file_text, page_boundaries = await extract_text_with_metadata(file_meta, file_bytes)  # type: ignore[arg-type]
-            file_text = clean_text(file_text)
+            file_text, page_boundaries = prepare_extracted_document_for_chunking(
+                file_text, page_boundaries
+            )
 
             if not file_text:
                 raise UploadPipelineError(

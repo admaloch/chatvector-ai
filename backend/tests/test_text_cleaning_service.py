@@ -1,8 +1,7 @@
 """Unit tests for the text cleaning and normalization service.
 
-clean_text() uses a "nuclear" flattening approach: ALL line breaks are
-converted to spaces, producing a single flat prose string. This maximises
-reflow of PDF-extracted fragments while keeping the implementation simple.
+Isolated line breaks are collapsed to spaces (PDF reflow). Blank-line paragraph
+breaks are preserved as ``\\n\\n`` for paragraph- and semantic chunking.
 """
 
 import pytest
@@ -93,7 +92,7 @@ class TestHyphenatedLineBreaks:
 
 
 class TestLineBreakFlattening:
-    """All line breaks — regardless of type or surrounding punctuation — become spaces."""
+    """Isolated line breaks become spaces; blank lines become paragraph breaks."""
 
     def test_single_newline_becomes_space(self):
         assert clean_text("first\nsecond") == "first second"
@@ -104,14 +103,14 @@ class TestLineBreakFlattening:
     def test_cr_becomes_space(self):
         assert clean_text("first\rsecond") == "first second"
 
-    def test_multiple_newlines_become_single_space(self):
-        assert clean_text("first\n\n\nsecond") == "first second"
+    def test_multiple_newlines_become_paragraph_break(self):
+        assert clean_text("first\n\n\nsecond") == "first\n\nsecond"
 
-    def test_blank_lines_become_single_space(self):
-        assert clean_text("para one\n\n\n\npara two") == "para one para two"
+    def test_blank_lines_become_paragraph_break(self):
+        assert clean_text("para one\n\n\n\npara two") == "para one\n\npara two"
 
     def test_punctuated_lines_also_joined(self):
-        # Terminal punctuation does NOT prevent joining in the nuclear approach
+        # Single line break within a paragraph is still reflowed
         result = clean_text("Sentence one.\nSentence two.")
         assert result == "Sentence one. Sentence two."
 
@@ -194,10 +193,21 @@ class TestPDFReflowArtifacts:
         result = clean_text("The quick brown fox\njumps over\nthe lazy dog.")
         assert result == "The quick brown fox jumps over the lazy dog."
 
-    def test_no_newlines_in_output(self):
+    def test_no_single_newlines_in_word_per_line_reflow(self):
         raw = "line one\nline two\nline three"
         result = clean_text(raw)
         assert "\n" not in result
+
+
+class TestParagraphPreservation:
+    def test_heading_and_paragraphs_preserve_blank_line_boundaries(self):
+        raw = "# Heading\n\nFirst paragraph.\n\nSecond paragraph."
+        result = clean_text(raw)
+        assert result == "# Heading\n\nFirst paragraph.\n\nSecond paragraph."
+
+    def test_plain_paragraphs_preserve_blank_line_boundaries(self):
+        raw = "Paragraph one.\n\nParagraph two."
+        assert clean_text(raw) == "Paragraph one.\n\nParagraph two."
 
 
 class TestRealWorldPatterns:
@@ -213,9 +223,11 @@ class TestRealWorldPatterns:
         )
         result = clean_text(raw)
         assert "architecture" in result   # hyphenated break rejoined
-        assert "\n" not in result         # no stray newlines
         assert "CHAPTER 1" in result
         assert "Page 1" in result
+        # Blank-line padding becomes paragraph breaks, not stray single newlines
+        assert "\n\n" in result
+        assert "CHAPTER 1\n\n" in result or result.startswith("CHAPTER 1")
 
     def test_txt_file_with_tabs_and_multiple_spaces(self):
         raw = "Name:\t\tJohn   Doe\nAge:\t\t 30\nCity:   New   York"

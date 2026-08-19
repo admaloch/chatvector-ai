@@ -201,6 +201,8 @@ Chunking is configurable via `CHUNKING_STRATEGY` env var.
 
 All strategies populate chunk metadata: `page_number`, `character_offset_start`,
 `character_offset_end`, `chunk_index`, and detected `heading` where available.
+Character offsets and PDF page boundaries refer to the same cleaned document
+text produced after extraction normalization.
 
 Implemented via a strategy pattern in `backend/services/ingestion_pipeline.py` —
 new strategies can be added without touching pipeline orchestration logic.

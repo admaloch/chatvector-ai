@@ -3,8 +3,8 @@ Text cleaning and normalization for extracted document content.
 Applied between extraction and chunking to improve embedding quality
 and downstream RAG retrieval accuracy.
 
-Strategy: "nuclear" flattening — all line breaks are converted to spaces,
-producing a single clean prose string suitable for chunking and embedding.
+Isolated line breaks (typical PDF reflow artifacts) are collapsed to spaces.
+Runs of blank lines are preserved as canonical paragraph breaks (``\\n\\n``).
 """
 
 import logging
@@ -12,6 +12,9 @@ import re
 import unicodedata
 
 logger = logging.getLogger(__name__)
+
+# Temporary marker while collapsing single line breaks; must not contain ``\\n``.
+_PARAGRAPH_PLACEHOLDER = "\uE000PARA\uE001"
 
 
 def clean_text(text: str) -> str:
@@ -29,10 +32,14 @@ def clean_text(text: str) -> str:
     # 4. Remove soft hyphens; rejoin hyphenated line breaks (PDF word-wrap artifact)
     text = text.replace("\u00ad", "")
     text = re.sub(r"-\n(\S)", r"\1", text)
-    # 5. Flatten all remaining line breaks to spaces
-    text = text.replace("\n", " ").replace("\r", " ")
-    # 6. Normalize all whitespace runs (spaces and tabs) to a single space
+    # 5. Normalize line endings, preserve paragraph breaks, collapse isolated breaks
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"\n{2,}", _PARAGRAPH_PLACEHOLDER, text)
+    text = text.replace("\n", " ")
+    text = text.replace(_PARAGRAPH_PLACEHOLDER, "\n\n")
+    # 6. Normalize horizontal whitespace without merging across paragraph breaks
     text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" *\n\n *", "\n\n", text)
 
     text = text.strip()
 

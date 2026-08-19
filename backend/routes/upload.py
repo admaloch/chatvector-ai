@@ -59,13 +59,6 @@ async def upload(request: Request, file: UploadFile = File(...), auth: AuthConte
         register_tenant_document(tenant_id, doc_id)
         await db.update_document_status(doc_id=doc_id, status="queued", tenant_id=tenant_id)
 
-        session_id = request.headers.get("x-session-id")
-        if session_id:
-            session = await get_or_create_session(
-                session_id=session_id.strip(), tenant_id=tenant_id
-            )
-            await register_session_document(session.id, doc_id, tenant_id)
-
         job = QueueJob(
             doc_id=doc_id,
             file_name=safe_filename,
@@ -92,6 +85,13 @@ async def upload(request: Request, file: UploadFile = File(...), auth: AuthConte
                     document_id=doc_id,
                     headers={"Retry-After": "30"},
                 )
+
+        session_id = request.headers.get("x-session-id")
+        if session_id:
+            session = await get_or_create_session(
+                session_id=session_id.strip(), tenant_id=tenant_id
+            )
+            await register_session_document(session.id, doc_id, tenant_id)
 
         logger.info(
             f"Accepted upload {safe_filename!r} → document {doc_id} "

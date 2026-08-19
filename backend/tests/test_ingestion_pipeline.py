@@ -760,3 +760,127 @@ async def test_process_document_background_unknown_exception_falls_back_to_gener
     assert error["message"] == "An error occurred during document processing."
     assert "unexpected internal error" not in error["message"]
     assert mock_update.await_args_list[-1].kwargs["status"] == "failed"
+
+
+# ---------------------------------------------------------------------------
+# Cleaning + chunking integration (paragraph preservation, page provenance)
+# ---------------------------------------------------------------------------
+
+
+class _FakeLangChainDoc:
+    def __init__(self, text: str, start_index: int):
+        self.page_content = text
+        self.metadata = {"start_index": start_index}
+
+
+def _chunk_records_for_text(
+    cleaned_text: str,
+    chunk_text: str,
+    page_boundaries: list[PageBoundary],
+) -> list[ChunkRecord]:
+    start = cleaned_text.index(chunk_text)
+    docs = [_FakeLangChainDoc(chunk_text, start)]
+    return _build_chunk_records(docs, [[0.1]], page_boundaries)
+
+
+def test_clean_text_and_paragraph_chunking_preserves_heading_and_paragraphs():
+    raw = "# Heading\n\nFirst paragraph.\n\nSecond paragraph."
+    from services.text_cleaning_service import clean_text
+
+    cleaned = clean_text(raw)
+    strategy = ParagraphChunkingStrategy(
+        splitter_cls=RecursiveCharacterTextSplitter,
+        chunk_size=200,
+        chunk_overlap=8,
+    )
+    docs = strategy.chunk_text(cleaned, metadata={"source": "integration-test"})
+
+    assert len(docs) == 2
+    assert docs[0].page_content.strip() == "First paragraph."
+    assert docs[0].metadata["heading"] == "Heading"
+    assert docs[1].page_content.strip() == "Second paragraph."
+    assert docs[1].metadata["heading"] == "Heading"
+
+
+def test_clean_text_and_paragraph_chunking_preserves_plain_paragraphs():
+    raw = "Paragraph one.\n\nParagraph two."
+    from services.text_cleaning_service import clean_text
+
+    cleaned = clean_text(raw)
+    strategy = ParagraphChunkingStrategy(
+        splitter_cls=RecursiveCharacterTextSplitter,
+        chunk_size=200,
+        chunk_overlap=8,
+    )
+    docs = strategy.chunk_text(cleaned)
+
+    assert len(docs) == 2
+    assert docs[0].page_content.strip() == "Paragraph one."
+    assert docs[1].page_content.strip() == "Paragraph two."
+
+
+def test_prepare_extracted_document_resolves_conclusion_on_page_two_after_shrinkage():
+    from services.extraction_service import prepare_extracted_document_for_chunking
+
+    page1 = "Intro\n\n\n\n\n\n\n\n"
+    page2 = "Conclusion on page two.\n"
+    raw = page1 + page2
+    raw_boundaries = [
+        PageBoundary(page_number=1, start_offset=0, end_offset=len(page1)),
+        PageBoundary(page_number=2, start_offset=len(page1), end_offset=len(raw)),
+    ]
+
+    cleaned, boundaries = prepare_extracted_document_for_chunking(raw, raw_boundaries)
+    chunk_text = "Conclusion on page two."
+    records = _chunk_records_for_text(cleaned, chunk_text, boundaries)
+
+    assert records[0].page_number == 2
+    assert records[0].character_offset_start == cleaned.index(chunk_text)
+
+
+def test_prepare_extracted_document_keeps_expanded_page_one_content_on_page_one():
+    from services.extraction_service import prepare_extracted_document_for_chunking
+
+    page1 = "ﬁ" * 20 + "\n"
+    page2 = "Z\n"
+    raw = page1 + page2
+    raw_boundaries = [
+        PageBoundary(page_number=1, start_offset=0, end_offset=len(page1)),
+        PageBoundary(page_number=2, start_offset=len(page1), end_offset=len(raw)),
+    ]
+
+    cleaned, boundaries = prepare_extracted_document_for_chunking(raw, raw_boundaries)
+    # Offset 30 is still within the expanded ligature run on page 1.
+    assert cleaned[30:32] == "fi"
+    assert _resolve_page_number(30, boundaries) == 1
+
+
+def test_prepare_extracted_document_boundary_offset_resolves_to_later_page():
+    from services.extraction_service import prepare_extracted_document_for_chunking
+
+    page1 = "Page one text.\n"
+    page2 = "Page two text.\n"
+    raw = page1 + page2
+    raw_boundaries = [
+        PageBoundary(page_number=1, start_offset=0, end_offset=len(page1)),
+        PageBoundary(page_number=2, start_offset=len(page1), end_offset=len(raw)),
+    ]
+
+    cleaned, boundaries = prepare_extracted_document_for_chunking(raw, raw_boundaries)
+    page_two_start = boundaries[1].start_offset
+
+    assert _resolve_page_number(page_two_start, boundaries) == 2
+    assert _resolve_page_number(page_two_start - 1, boundaries) == 1
+
+
+def test_prepare_extracted_document_txt_leaves_page_boundaries_empty():
+    from services.extraction_service import prepare_extracted_document_for_chunking
+
+    cleaned, boundaries = prepare_extracted_document_for_chunking(
+        "Paragraph one.\n\nParagraph two.",
+        [],
+    )
+
+    assert boundaries == []
+    assert cleaned == "Paragraph one.\n\nParagraph two."
+    assert _resolve_page_number(0, boundaries) is None
