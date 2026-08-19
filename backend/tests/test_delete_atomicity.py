@@ -51,6 +51,7 @@ async def test_delete_document_atomicity_integration():
         for i in range(3)
     ]
     await db.store_chunks_with_embeddings(doc_id, chunk_records, tenant_id=TEST_TENANT)
+    await db.update_document_status(doc_id, "completed", tenant_id=TEST_TENANT)
 
     matches = await db.find_similar_chunks(
         doc_id, filler, match_count=10, tenant_id=TEST_TENANT

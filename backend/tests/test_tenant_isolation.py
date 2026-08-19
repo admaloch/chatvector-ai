@@ -414,6 +414,8 @@ async def test_vector_retrieval_respects_tenant_isolation(svc):
 
         await svc.store_chunks_with_embeddings(doc_a, [chunk_a], tenant_id=tid_a)
         await svc.store_chunks_with_embeddings(doc_b, [chunk_b], tenant_id=tid_b)
+        await svc.update_document_status(doc_a, "completed", tenant_id=tid_a)
+        await svc.update_document_status(doc_b, "completed", tenant_id=tid_b)
 
         # Tenant A querying doc_a with their own tenant_id returns results
         results_a = await svc.find_similar_chunks(
@@ -479,6 +481,8 @@ async def test_keyword_retrieval_respects_tenant_isolation(svc):
             ],
             tenant_id=tid_b,
         )
+        await svc.update_document_status(doc_a, "completed", tenant_id=tid_a)
+        await svc.update_document_status(doc_b, "completed", tenant_id=tid_b)
 
         with patch.object(config, "HYBRID_RETRIEVAL_ENABLED", True):
             own_results = await svc.find_similar_chunks(
@@ -551,6 +555,8 @@ async def test_hybrid_rrf_retrieval_respects_tenant_isolation(svc):
             ],
             tenant_id=tid_b,
         )
+        await svc.update_document_status(doc_a, "completed", tenant_id=tid_a)
+        await svc.update_document_status(doc_b, "completed", tenant_id=tid_b)
 
         with patch.object(config, "HYBRID_RETRIEVAL_ENABLED", True):
             cross_doc_results = await svc.find_similar_chunks(
@@ -648,6 +654,9 @@ async def test_tenant_scope_retrieval_returns_only_own_tenant_chunks(svc):
             ],
             tenant_id=tid_b,
         )
+        await svc.update_document_status(doc_a1, "completed", tenant_id=tid_a)
+        await svc.update_document_status(doc_a2, "completed", tenant_id=tid_a)
+        await svc.update_document_status(doc_b, "completed", tenant_id=tid_b)
 
         tenant_doc_ids = await svc.list_tenant_documents(tid_a)
         scoped_doc_ids = resolve_scoped_doc_ids(

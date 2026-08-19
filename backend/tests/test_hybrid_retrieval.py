@@ -215,6 +215,7 @@ async def test_hybrid_keyword_finds_exact_term_integration():
         ],
         tenant_id=tenant_id,
     )
+    await db.update_document_status(doc_id, "completed", tenant_id=tenant_id)
 
     with patch.object(config, "HYBRID_RETRIEVAL_ENABLED", True):
         matches = await db.find_similar_chunks(

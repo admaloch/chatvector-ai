@@ -199,10 +199,13 @@ Chunking is configurable via `CHUNKING_STRATEGY` env var.
 | `paragraph` | Splits on blank lines and heading boundaries; respects `CHUNK_SIZE` as a ceiling |
 | `semantic` | Sentence-aware grouping using NLTK tokenizer with regex fallback |
 
-All strategies populate chunk metadata: `page_number`, `character_offset_start`,
-`character_offset_end`, `chunk_index`, and detected `heading` where available.
-Character offsets and PDF page boundaries refer to the same cleaned document
-text produced after extraction normalization.
+All strategies produce in-memory chunk metadata during ingestion: `page_number`,
+`character_offset_start`, `character_offset_end`, and `chunk_index`. Paragraph
+and semantic strategies may also detect a `heading` while splitting, but that
+value is chunking-internal only — it is not persisted on `document_chunks` and
+is not part of the API or SDK citation contract (`file_name`, `page_number`,
+`chunk_index`, scores). Character offsets and PDF page boundaries refer to the
+same cleaned document text produced after extraction normalization.
 
 Implemented via a strategy pattern in `backend/services/ingestion_pipeline.py` —
 new strategies can be added without touching pipeline orchestration logic.

@@ -527,6 +527,7 @@ class SQLAlchemyService(DatabaseService):
             select(DocumentChunk, Document.file_name, similarity_expr)
             .join(Document, DocumentChunk.document_id == Document.id)
             .where(DocumentChunk.document_id == doc_id)
+            .where(Document.status == "completed")
         )
         if tenant_id is not None:
             stmt = stmt.where(Document.tenant_id == tenant_id)
@@ -560,6 +561,7 @@ class SQLAlchemyService(DatabaseService):
                 select(DocumentChunk, Document.file_name, rank)
                 .join(Document, DocumentChunk.document_id == Document.id)
                 .where(DocumentChunk.document_id == doc_id)
+                .where(Document.status == "completed")
                 .where(content_tsv.op("@@")(ts_query))
             )
             if tenant_id is not None:
