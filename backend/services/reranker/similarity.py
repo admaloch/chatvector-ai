@@ -58,11 +58,17 @@ class SimilarityRerankerProvider(RerankerProvider):
                 reranked_order=[],
             )
 
+        raw_retrieval_scores = [_retrieval_score(chunk) for chunk in request.candidates]
+        max_retrieval = max(raw_retrieval_scores) if raw_retrieval_scores else 0.0
+
         scored: list[tuple[float, ChunkMatch]] = []
-        for chunk in request.candidates:
+        for chunk, raw_retrieval in zip(request.candidates, raw_retrieval_scores):
             lexical = _lexical_overlap_score(request.query, chunk.chunk_text)
+            normalized_retrieval = (
+                raw_retrieval / max_retrieval if max_retrieval > 0.0 else 0.0
+            )
             combined = (
-                self._retrieval_weight * _retrieval_score(chunk)
+                self._retrieval_weight * normalized_retrieval
                 + self._lexical_weight * lexical
             )
             scored.append((combined, chunk))

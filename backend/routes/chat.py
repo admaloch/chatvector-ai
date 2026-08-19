@@ -34,27 +34,45 @@ class ChatSourceResponse(BaseModel):
     chunk_index: Optional[int] = None
     score: Optional[float] = Field(
         default=None,
-        description="Numeric relevance value from the final ranking stage.",
+        description=(
+            "Final ranking score for this citation. Interpret using score_type; "
+            "raw values are not comparable across vector, hybrid_rrf, and reranked."
+        ),
     )
     score_type: Optional[str] = Field(
         default=None,
-        description="Label describing what score means (vector, hybrid_rrf, reranked).",
+        description=(
+            "What score represents: vector (cosine similarity), hybrid_rrf "
+            "(reciprocal rank fusion), or reranked (retrieval + lexical overlap)."
+        ),
     )
     vector_score: Optional[float] = Field(
         default=None,
-        description="Cosine similarity from pgvector when available.",
+        description=(
+            "Cosine similarity from pgvector (1 - distance) when vector search "
+            "returned this chunk. Not interchangeable with score or other components."
+        ),
     )
     full_text_score: Optional[float] = Field(
         default=None,
-        description="PostgreSQL ts_rank from full-text search when available.",
+        description=(
+            "PostgreSQL ts_rank from keyword search when hybrid retrieval matched "
+            "this chunk. Uses FTS scale, not vector or RRF scale."
+        ),
     )
     rrf_score: Optional[float] = Field(
         default=None,
-        description="Reciprocal Rank Fusion score when hybrid retrieval ran.",
+        description=(
+            "Reciprocal Rank Fusion score when hybrid retrieval ran. Small rank-based "
+            "values; compare only to other rrf_score fields, not to score or vector_score."
+        ),
     )
     reranker_score: Optional[float] = Field(
         default=None,
-        description="Combined retrieval + lexical score from the reranker.",
+        description=(
+            "Combined normalized retrieval + lexical overlap score when reranking ran. "
+            "Becomes the top-level score when score_type is reranked."
+        ),
     )
     rerank_order: Optional[int] = Field(
         default=None,

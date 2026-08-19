@@ -30,7 +30,6 @@ from services.retrieval_service import (
     SCORE_TYPE_HYBRID_RRF,
     SCORE_TYPE_VECTOR,
     merge_chunk_matches_with_scores,
-    reciprocal_rank_fusion,
     reciprocal_rank_fusion_scores,
 )
 
@@ -632,13 +631,6 @@ class SQLAlchemyService(DatabaseService):
                                 match,
                             )
 
-                        fused_ids = reciprocal_rank_fusion(
-                            [
-                                [m.id for m in vector_matches],
-                                [m.id for m in keyword_matches],
-                            ],
-                            limit=match_count,
-                        )
                         rrf_scores = reciprocal_rank_fusion_scores(
                             [
                                 [m.id for m in vector_matches],
@@ -646,6 +638,7 @@ class SQLAlchemyService(DatabaseService):
                             ],
                             limit=match_count,
                         )
+                        fused_ids = list(rrf_scores.keys())
                         matches = merge_chunk_matches_with_scores(
                             fused_ids,
                             matches_by_id,

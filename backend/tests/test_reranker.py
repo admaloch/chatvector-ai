@@ -12,14 +12,26 @@ from services.reranker.noop import NoopRerankerProvider
 from services.reranker.similarity import SimilarityRerankerProvider
 
 
-def _chunk(chunk_id: str, text: str, *, similarity: float | None = None) -> ChunkMatch:
+def _chunk(
+    chunk_id: str,
+    text: str,
+    *,
+    similarity: float | None = None,
+    vector_score: float | None = None,
+) -> ChunkMatch:
     return ChunkMatch(
         id=chunk_id,
         chunk_text=text,
         document_id="doc-1",
         chunk_index=0,
         similarity=similarity,
+        vector_score=vector_score,
     )
+
+
+# RRF k=60 reference values used in hybrid reranker tests.
+_RRF_BOTH_LISTS_RANK1 = 2 / 61
+_RRF_SINGLE_LIST_RANK2 = 1 / 62
 
 
 @pytest.fixture(autouse=True)
@@ -102,3 +114,89 @@ def test_unknown_reranker_provider_raises():
         _reset_reranker_provider()
         with pytest.raises(ValueError, match="Unknown RERANKER_PROVIDER"):
             get_reranker_provider()
+
+
+@pytest.mark.asyncio
+async def test_similarity_reranker_normalizes_hybrid_rrf_scale():
+    """RRF-scale similarity should not let lexical overlap dominate retrieval weight."""
+    chunks = [
+        _chunk(
+            "both",
+            "unrelated document content",
+            similarity=_RRF_BOTH_LISTS_RANK1,
+            vector_score=0.91,
+        ),
+        _chunk(
+            "vector-only",
+            "alpha content here",
+            similarity=_RRF_SINGLE_LIST_RANK2,
+            vector_score=0.70,
+        ),
+        _chunk(
+            "fts-only",
+            "alpha beta exact match",
+            similarity=_RRF_SINGLE_LIST_RANK2,
+            vector_score=None,
+        ),
+    ]
+    provider = SimilarityRerankerProvider()
+    result = await provider.rerank(
+        RerankRequest(query="alpha beta", candidates=chunks, top_k=3)
+    )
+
+    assert result.reranked_order == ["both", "fts-only", "vector-only"]
+
+
+@pytest.mark.asyncio
+async def test_similarity_reranker_fts_only_candidate_not_crushed_by_vector_score():
+    """FTS-only rows without vector_score stay on the same retrieval scale."""
+    chunks = [
+        _chunk(
+            "vector-hit",
+            "unrelated",
+            similarity=0.90,
+            vector_score=0.90,
+        ),
+        _chunk(
+            "fts-hit",
+            "alpha beta keyword match",
+            similarity=_RRF_SINGLE_LIST_RANK2,
+            vector_score=None,
+        ),
+    ]
+    provider = SimilarityRerankerProvider()
+    result = await provider.rerank(
+        RerankRequest(query="alpha beta", candidates=chunks, top_k=2)
+    )
+
+    assert result.reranked_order[0] == "vector-hit"
+    assert "fts-hit" in result.reranked_order
+
+
+@pytest.mark.asyncio
+async def test_similarity_reranker_vector_only_preserves_stronger_cosine():
+    chunks = [
+        _chunk("strong", "unrelated content about cats", similarity=0.91),
+        _chunk("weak", "unrelated content about dogs", similarity=0.55),
+    ]
+    provider = SimilarityRerankerProvider()
+    result = await provider.rerank(
+        RerankRequest(query="beta query", candidates=chunks, top_k=2)
+    )
+
+    assert result.reranked_order == ["strong", "weak"]
+
+
+@pytest.mark.asyncio
+async def test_similarity_reranker_handles_missing_similarity_without_division_error():
+    chunks = [
+        _chunk("missing", "alpha beta match", similarity=None),
+        _chunk("present", "unrelated", similarity=0.0),
+    ]
+    provider = SimilarityRerankerProvider()
+    result = await provider.rerank(
+        RerankRequest(query="alpha beta", candidates=chunks, top_k=2)
+    )
+
+    assert result.reranked_order == ["missing", "present"]
+    assert len(result.candidates) == 2

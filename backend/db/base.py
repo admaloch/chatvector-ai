@@ -24,7 +24,12 @@ class ChunkRecord:
 
 @dataclass
 class ChunkMatch:
-    """Normalized chunk object returned by similarity search."""
+    """Normalized chunk object returned by similarity search.
+
+    ``similarity`` holds the primary ranking score from the latest retrieval
+    stage (cosine similarity, hybrid RRF, or reranked combined score), not
+    necessarily cosine similarity alone.
+    """
 
     id: str
     chunk_text: str
