@@ -93,7 +93,9 @@ async def _queue_metrics() -> tuple[int | None, int | None]:
         return None, None
 
 
-async def _database_connected_and_document_count() -> tuple[bool, int | None]:
+async def _database_connected_and_document_count(
+    tenant_id: str,
+) -> tuple[bool, int | None]:
     service = db.get_db_service()
     from db.sqlalchemy_service import SQLAlchemyService
 
@@ -103,7 +105,11 @@ async def _database_connected_and_document_count() -> tuple[bool, int | None]:
         try:
             async with service.async_session() as session:
                 await session.execute(text("SELECT 1"))
-                count = await session.scalar(select(func.count()).select_from(DocumentModel))
+                count = await session.scalar(
+                    select(func.count())
+                    .select_from(DocumentModel)
+                    .where(DocumentModel.tenant_id == tenant_id)
+                )
             return True, int(count or 0)
         except (SQLAlchemyError, OSError) as exc:
             logger.warning("Database health check failed: %s", exc)
@@ -457,11 +463,20 @@ async def health() -> dict[str, str]:
 
 @router.get("/status")
 @limiter.limit(config.RATE_LIMIT_STATUS)
-async def status(request: Request, auth: AuthContext = Depends(require_auth)):  # auth reserved for Phase 3 tenant scoping
+async def status(request: Request, auth: AuthContext = Depends(require_auth)):
+    """Authenticated system status.
+
+    ``metrics.documents_indexed`` counts documents for the authenticated tenant only.
+    ``metrics.document_queue`` is an API-instance / shared-worker queue depth metric,
+    not tenant-scoped.
+    """
+    from core.auth import require_current_tenant
+
+    tenant_id = require_current_tenant(auth)
     start = getattr(request.app.state, "start_time", time.time())
     
     tasks = [
-        _database_connected_and_document_count(),
+        _database_connected_and_document_count(tenant_id),
         _run_health_check_with_cache("embedding", _embedding_health_check),
         _run_health_check_with_cache("llm", _llm_health_check)
     ]

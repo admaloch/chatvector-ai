@@ -11,12 +11,41 @@ logger = logging.getLogger(__name__)
 async def create_session(
     session_id: Optional[str] = None, tenant_id: Optional[str] = None
 ) -> Session:
-    new_id = session_id or str(uuid.uuid4())
-    existing = await db.get_session_record(new_id, tenant_id=None)
+    """Create a session for explicit POST /sessions.
+
+    Session IDs are globally unique at the database layer (``sessions.id`` is
+    the primary key). Two tenants cannot both own the same caller-chosen ID
+    without a future ``(tenant_id, id)`` schema redesign. When the requested
+    ID is already owned by another tenant, a new UUID is minted for the caller
+    and returned with 201 rather than probing or mutating the other row.
+    """
+    if not session_id:
+        new_id = str(uuid.uuid4())
+        session = await db.create_session_record(new_id, tenant_id)
+        logger.info("Created new session: %s (tenant=%s)", new_id, tenant_id)
+        return session
+
+    existing = await db.get_session_record(session_id, tenant_id)
     if existing is not None:
-        raise ValueError(f"Session with id {new_id} already exists")
-    session = await db.create_session_record(new_id, tenant_id)
-    logger.info(f"Created new session: {new_id} (tenant={tenant_id})")
+        raise ValueError(f"Session with id {session_id} already exists")
+
+    created = await db.get_or_create_session_record(session_id, tenant_id)
+    if created is not None:
+        logger.info(
+            "Created new session: %s (tenant=%s)",
+            session_id,
+            tenant_id,
+        )
+        return created
+
+    fallback_id = str(uuid.uuid4())
+    session = await db.create_session_record(fallback_id, tenant_id)
+    logger.info(
+        "Created new session: %s (tenant=%s, requested_id=%s held by another tenant)",
+        fallback_id,
+        tenant_id,
+        session_id,
+    )
     return session
 
 

@@ -242,34 +242,42 @@ class SQLAlchemyService(DatabaseService):
     ) -> list[str]:
         tenant_id = require_tenant_id(tenant_id, method="store_chunks_with_embeddings")
         async with self.async_session() as session:
-            if not await self._document_owned_by_tenant(session, doc_id, tenant_id):
-                raise ValueError(
-                    f"store_chunks_with_embeddings: document {doc_id} not found for tenant {tenant_id}"
-                )
-
-            chunk_rows = []
-            chunk_ids = []
-
-            for record in chunk_records:
-                chunk_id = str(uuid.uuid4())
-                chunk_ids.append(chunk_id)
-                chunk_rows.append(
-                    DocumentChunk(
-                        id=chunk_id,
-                        document_id=doc_id,
-                        chunk_text=record.chunk_text,
-                        embedding=record.embedding,
-                        chunk_index=record.chunk_index,
-                        page_number=record.page_number,
-                        character_offset_start=record.character_offset_start,
-                        character_offset_end=record.character_offset_end,
+            async with session.begin():
+                if not await self._document_owned_by_tenant(session, doc_id, tenant_id):
+                    raise ValueError(
+                        f"store_chunks_with_embeddings: document {doc_id} not found for tenant {tenant_id}"
                     )
+
+                await session.execute(
+                    delete(DocumentChunk).where(DocumentChunk.document_id == doc_id)
                 )
 
-            session.add_all(chunk_rows)
-            await session.commit()
+                chunk_rows = []
+                chunk_ids = []
 
-            logger.info(f"[PostgreSQL] Inserted {len(chunk_ids)} chunks for document {doc_id}")
+                for record in chunk_records:
+                    chunk_id = str(uuid.uuid4())
+                    chunk_ids.append(chunk_id)
+                    chunk_rows.append(
+                        DocumentChunk(
+                            id=chunk_id,
+                            document_id=doc_id,
+                            chunk_text=record.chunk_text,
+                            embedding=record.embedding,
+                            chunk_index=record.chunk_index,
+                            page_number=record.page_number,
+                            character_offset_start=record.character_offset_start,
+                            character_offset_end=record.character_offset_end,
+                        )
+                    )
+
+                session.add_all(chunk_rows)
+
+            logger.info(
+                "[PostgreSQL] Stored %s chunks for document %s (replace semantics)",
+                len(chunk_ids),
+                doc_id,
+            )
             return chunk_ids
 
     async def get_document(self, doc_id: str, tenant_id: str) -> dict | None:

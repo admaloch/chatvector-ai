@@ -420,12 +420,14 @@ exception handler returns `{"detail": {"code": "internal_error", "message": "...
 
 ## Health Checks
 
-`GET /status` reports health for all system components:
+`GET /status` reports health for all system components. Requires authentication.
+`metrics.documents_indexed` counts documents for the authenticated tenant only.
+`metrics.document_queue` is an API-instance / shared-worker queue depth metric, not tenant-scoped.
 
 | Component | Check | Cached |
 | --- | --- | --- |
 | API | Always online if responding | No |
-| Database | Live `SELECT 1` + document count | No |
+| Database | Live `SELECT 1` + tenant-scoped document count | No |
 | Embeddings | Test embedding call | Yes (TTL: `HEALTH_CHECK_CACHE_TTL_SECONDS`, default 60s) |
 | LLM | Test generation call | Yes (same TTL) |
 

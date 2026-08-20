@@ -24,6 +24,22 @@ def _401(code: str, message: str) -> HTTPException:
     )
 
 
+def _503(code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail={"code": code, "message": message},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def _parse_bearer_token(auth_header: str) -> str | None:
+    """Return the bearer token, or None if the scheme is not Bearer (any ASCII case)."""
+    parts = auth_header.split(None, 1)
+    if len(parts) != 2 or parts[0].casefold() != "bearer":
+        return None
+    return parts[1]
+
+
 async def require_auth(request: Request) -> AuthContext:
     """FastAPI dependency that resolves the caller's tenant from a Bearer API key.
 
@@ -52,20 +68,25 @@ async def require_auth(request: Request) -> AuthContext:
     if not auth_header:
         raise _401("missing_credentials", "Authorization header is required.")
 
-    if not auth_header.startswith("Bearer "):
+    raw_key = _parse_bearer_token(auth_header)
+    if raw_key is None:
         raise _401(
             "malformed_credentials",
             "Authorization header must use the Bearer scheme.",
         )
-
-    raw_key = auth_header[len("Bearer "):]
     if not raw_key:
         raise _401("malformed_credentials", "Bearer token must not be empty.")
 
     # ── Validate the key ────────────────────────────────────────────────────
-    from services.api_key_service import validate_api_key
+    from services.api_key_service import AuthStoreUnavailableError, validate_api_key
 
-    result = await validate_api_key(raw_key)
+    try:
+        result = await validate_api_key(raw_key)
+    except AuthStoreUnavailableError:
+        raise _503(
+            "auth_store_unavailable",
+            "Authentication service is temporarily unavailable.",
+        )
     if result is None:
         raise _401("invalid_api_key", "API key is invalid.")
     if result == "revoked":

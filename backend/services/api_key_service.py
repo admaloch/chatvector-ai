@@ -36,6 +36,10 @@ from core.models import ApiKey, Tenant
 class DevelopmentTenantConfigError(ValueError):
     """Raised when DEV_TENANT_ID is invalid for development bootstrap."""
 
+
+class AuthStoreUnavailableError(Exception):
+    """Raised when API key lookup cannot reach the auth datastore."""
+
 logger = logging.getLogger(__name__)
 
 _KEY_PREFIX_BYTES = 4   # 8 hex chars
@@ -189,9 +193,10 @@ async def validate_api_key(raw_key: str) -> ValidateApiKeyResult | None:
       - (tenant_id, api_key_id) on success
       - "revoked" when the hash matches but status != active
       - "expired" when the hash matches, status is active, but expires_at is past
-      - None on any other failure (malformed, unknown prefix, hash mismatch)
+      - None on any other credential failure (malformed, unknown prefix, hash mismatch)
 
-    Does NOT raise — the caller decides how to handle failures.
+    Raises:
+      AuthStoreUnavailableError when the database lookup fails.
     """
     prefix = _parse_prefix(raw_key)
     if prefix is None:
@@ -206,14 +211,23 @@ async def validate_api_key(raw_key: str) -> ValidateApiKeyResult | None:
                 select(ApiKey).where(ApiKey.prefix == prefix)
             )
             api_key = result.scalar_one_or_none()
-    except Exception:
+    except Exception as exc:
         logger.exception("DB error during API key lookup for prefix=%s", prefix)
-        return None
+        raise AuthStoreUnavailableError("API key lookup failed") from exc
 
     if api_key is None:
         return None
 
-    if not hmac.compare_digest(api_key.key_hash, presented_hash):
+    try:
+        hash_matches = hmac.compare_digest(api_key.key_hash, presented_hash)
+    except TypeError:
+        logger.warning(
+            "Malformed key_hash for prefix=%s during API key validation",
+            prefix,
+        )
+        return None
+
+    if not hash_matches:
         return None
 
     if api_key.status != "active":

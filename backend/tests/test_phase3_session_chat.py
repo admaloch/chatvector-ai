@@ -317,6 +317,76 @@ async def test_add_session_document_concurrent_idempotent(svc):
 
 
 # ---------------------------------------------------------------------------
+# Explicit POST /sessions cross-tenant probing (Audit 30.1)
+# ---------------------------------------------------------------------------
+
+
+async def test_explicit_create_session_cross_tenant_id_mints_new_id(svc):
+    from sqlalchemy import text
+
+    from services.session_service import create_session
+
+    session_id = f"sess-b-{uuid.uuid4().hex[:8]}"
+    tenant_b = f"tenant-b-{uuid.uuid4().hex[:8]}"
+    tenant_a = f"tenant-a-{uuid.uuid4().hex[:8]}"
+
+    await svc.create_session_record(session_id, tenant_b)
+    async with svc.async_session() as session:
+        before_active = (
+            await session.execute(
+                text("SELECT last_active FROM sessions WHERE id = :sid"),
+                {"sid": session_id},
+            )
+        ).scalar_one()
+
+    with patch("db.get_db_service", return_value=svc):
+        created = await create_session(session_id, tenant_a)
+
+    assert created.id != session_id
+    assert created.tenant_id == tenant_a
+
+    async with svc.async_session() as session:
+        after_active = (
+            await session.execute(
+                text("SELECT last_active FROM sessions WHERE id = :sid"),
+                {"sid": session_id},
+            )
+        ).scalar_one()
+    assert after_active == before_active
+
+    await svc.delete_session_record(created.id, tenant_a)
+    await svc.delete_session_record(session_id, tenant_b)
+
+
+async def test_explicit_create_session_same_tenant_duplicate_raises(svc):
+    from services.session_service import create_session
+
+    session_id = f"sess-dup-{uuid.uuid4().hex[:8]}"
+    tenant_id = f"tenant-{uuid.uuid4().hex[:8]}"
+    await svc.create_session_record(session_id, tenant_id)
+
+    with patch("db.get_db_service", return_value=svc):
+        with pytest.raises(ValueError, match="already exists"):
+            await create_session(session_id, tenant_id)
+
+    await svc.delete_session_record(session_id, tenant_id)
+
+
+async def test_explicit_create_session_unused_id_uses_requested_id(svc):
+    from services.session_service import create_session
+
+    session_id = f"sess-new-{uuid.uuid4().hex[:8]}"
+    tenant_id = f"tenant-{uuid.uuid4().hex[:8]}"
+
+    with patch("db.get_db_service", return_value=svc):
+        created = await create_session(session_id, tenant_id)
+
+    assert created.id == session_id
+    assert created.tenant_id == tenant_id
+    await svc.delete_session_record(session_id, tenant_id)
+
+
+# ---------------------------------------------------------------------------
 # Session listing (25.4)
 # ---------------------------------------------------------------------------
 

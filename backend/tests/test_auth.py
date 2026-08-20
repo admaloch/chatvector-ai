@@ -182,6 +182,8 @@ async def test_require_auth_production_expired_key_returns_401(monkeypatch):
     assert exc.value.detail["code"] == "expired_api_key"
 
 
+@pytest.mark.asyncio
+async def test_require_auth_production_valid_key_returns_auth_context(monkeypatch):
     """A valid API key returns a populated AuthContext in production mode."""
     monkeypatch.setattr("core.config.config.APP_ENV", "production")
     raw_key = _make_raw_key()
@@ -197,6 +199,108 @@ async def test_require_auth_production_expired_key_returns_401(monkeypatch):
 
     assert result.tenant_id == fake_tenant_id
     assert result.api_key_id == fake_key_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "scheme_header",
+    [
+        "Bearer {key}",
+        "bearer {key}",
+        "BEARER {key}",
+        "BeArEr {key}",
+    ],
+)
+async def test_require_auth_production_accepts_case_insensitive_bearer_scheme(
+    monkeypatch, scheme_header: str
+):
+    monkeypatch.setattr("core.config.config.APP_ENV", "production")
+    raw_key = _make_raw_key()
+    request = _make_request_with_header(scheme_header.format(key=raw_key))
+
+    with patch(
+        "services.api_key_service.validate_api_key",
+        new=AsyncMock(return_value=("tenant-abc", "key-uuid-123")),
+    ):
+        result = await require_auth(request)
+
+    assert result.tenant_id == "tenant-abc"
+
+
+@pytest.mark.asyncio
+async def test_require_auth_production_non_bearer_scheme_returns_401(monkeypatch):
+    monkeypatch.setattr("core.config.config.APP_ENV", "production")
+    request = _make_request_with_header(f"Token {_make_raw_key()}")
+
+    with pytest.raises(HTTPException) as exc:
+        await require_auth(request)
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail["code"] == "malformed_credentials"
+
+
+@pytest.mark.asyncio
+async def test_require_auth_production_auth_store_unavailable_returns_503(monkeypatch):
+    from services.api_key_service import AuthStoreUnavailableError
+
+    monkeypatch.setattr("core.config.config.APP_ENV", "production")
+    request = _make_request_with_header(f"Bearer {_make_raw_key()}")
+
+    with patch(
+        "services.api_key_service.validate_api_key",
+        new=AsyncMock(side_effect=AuthStoreUnavailableError("lookup failed")),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await require_auth(request)
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail["code"] == "auth_store_unavailable"
+    assert exc.value.headers.get("WWW-Authenticate") == "Bearer"
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_db_failure_raises_auth_store_unavailable():
+    from services.api_key_service import AuthStoreUnavailableError, validate_api_key
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(side_effect=OSError("connection refused"))
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    mock_factory = MagicMock(return_value=mock_session)
+
+    with patch("services.api_key_service._get_session_factory", return_value=mock_factory):
+        with pytest.raises(AuthStoreUnavailableError):
+            await validate_api_key("cv_live_aabbccdd.somesecret")
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_malformed_hash_returns_none():
+    from services.api_key_service import validate_api_key
+
+    raw_key = "cv_live_aabbccdd.correctsecret"
+
+    fake_row = MagicMock()
+    fake_row.key_hash = None
+    fake_row.status = "active"
+    fake_row.tenant_id = "tenant-x"
+    fake_row.id = "key-id-1"
+    fake_row.expires_at = None
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = fake_row
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=mock_result)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    mock_factory = MagicMock(return_value=mock_session)
+
+    with patch("services.api_key_service._get_session_factory", return_value=mock_factory):
+        result = await validate_api_key(raw_key)
+
+    assert result is None
 
 
 # ---------------------------------------------------------------------------
