@@ -616,14 +616,14 @@ class SQLAlchemyService(DatabaseService):
         session_id: Optional[str] = None,
         query_text: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        hybrid_enabled: Optional[bool] = None,
     ) -> list[ChunkMatch]:
         del session_id  # reserved for future session-scoped retrieval
         start = time.perf_counter()
-        use_hybrid = (
-            config.HYBRID_RETRIEVAL_ENABLED
-            and query_text
-            and query_text.strip()
+        hybrid_flag = (
+            config.HYBRID_RETRIEVAL_ENABLED if hybrid_enabled is None else hybrid_enabled
         )
+        use_hybrid = bool(hybrid_flag) and bool(query_text and query_text.strip())
         candidate_limit = match_count * 2
 
         try:
@@ -695,6 +695,7 @@ class SQLAlchemyService(DatabaseService):
         tenant_id: str,
         session_id: Optional[str] = None,
         query_text: Optional[str] = None,
+        hybrid_enabled: Optional[bool] = None,
     ) -> list[ChunkMatch]:
         tenant_id = require_tenant_id(tenant_id, method="find_similar_chunks")
         return await self._search_similar_chunks(
@@ -704,6 +705,7 @@ class SQLAlchemyService(DatabaseService):
             session_id=session_id,
             query_text=query_text,
             tenant_id=tenant_id,
+            hybrid_enabled=hybrid_enabled,
         )
 
     async def list_tenant_documents(self, tenant_id: str) -> list[str]:

@@ -69,6 +69,78 @@ async def test_find_similar_chunks_vector_only_when_hybrid_disabled():
 
 
 @pytest.mark.asyncio
+async def test_hybrid_enabled_override_runs_when_global_disabled():
+    pytest.importorskip("pgvector")
+    from db.base import SCORE_TYPE_HYBRID_RRF
+    from db.sqlalchemy_service import SQLAlchemyService
+
+    service = SQLAlchemyService()
+    service._retrieval_semaphore = __import__("asyncio").Semaphore(10)
+
+    vector_match = ChunkMatch(id="vec-1", chunk_text="alpha")
+    keyword_match = ChunkMatch(id="key-1", chunk_text="beta keyword")
+    service._find_vector_chunks = AsyncMock(return_value=[vector_match])
+    service._find_keyword_chunks = AsyncMock(return_value=[keyword_match])
+
+    class _FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    service.async_session = lambda: _FakeSession()
+
+    with patch.object(config, "HYBRID_RETRIEVAL_ENABLED", False):
+        results = await service.find_similar_chunks(
+            "doc-1",
+            [0.1, 0.2],
+            5,
+            tenant_id="dev",
+            query_text="beta keyword",
+            hybrid_enabled=True,
+        )
+
+    service._find_keyword_chunks.assert_called_once()
+    assert any(match.score_type == SCORE_TYPE_HYBRID_RRF for match in results)
+    assert config.HYBRID_RETRIEVAL_ENABLED is False
+
+
+@pytest.mark.asyncio
+async def test_hybrid_enabled_false_override_skips_keyword_when_global_enabled():
+    pytest.importorskip("pgvector")
+    from db.sqlalchemy_service import SQLAlchemyService
+
+    service = SQLAlchemyService()
+    service._retrieval_semaphore = __import__("asyncio").Semaphore(10)
+    vector_match = ChunkMatch(id="vec-1", chunk_text="vector chunk")
+    service._find_vector_chunks = AsyncMock(return_value=[vector_match])
+    service._find_keyword_chunks = AsyncMock(return_value=[])
+
+    class _FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    service.async_session = lambda: _FakeSession()
+
+    with patch.object(config, "HYBRID_RETRIEVAL_ENABLED", True):
+        results = await service.find_similar_chunks(
+            "doc-1",
+            [0.1, 0.2],
+            5,
+            tenant_id="dev",
+            query_text="exact keyword",
+            hybrid_enabled=False,
+        )
+
+    assert results == [vector_match]
+    service._find_keyword_chunks.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_find_similar_chunks_hybrid_invokes_both_paths():
     pytest.importorskip("pgvector")
     from db.sqlalchemy_service import SQLAlchemyService

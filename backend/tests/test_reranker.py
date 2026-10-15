@@ -90,9 +90,9 @@ async def test_rerank_enabled_uses_provider_and_logs_order_change():
     ):
         _reset_reranker_provider()
         result = await rerank_chunks_if_enabled("beta query", chunks, top_k=2)
+        assert isinstance(get_reranker_provider(), SimilarityRerankerProvider)
 
     assert [c.id for c in result] == ["high", "low"]
-    assert isinstance(get_reranker_provider(), SimilarityRerankerProvider)
 
 
 @pytest.mark.asyncio
@@ -200,3 +200,37 @@ async def test_similarity_reranker_handles_missing_similarity_without_division_e
 
     assert result.reranked_order == ["missing", "present"]
     assert len(result.candidates) == 2
+
+
+@pytest.mark.asyncio
+async def test_request_rerank_override_does_not_stick_noop_provider():
+    """A disabled process must not cache Noop in front of a request that enables reranking."""
+    chunks = [
+        _chunk("low", "unrelated text about cats", similarity=0.5),
+        _chunk("high", "beta query terms appear here", similarity=0.5),
+    ]
+    with patch.object(config, "ENABLE_RERANKING", False), patch.object(
+        config, "RERANKER_PROVIDER", "similarity"
+    ):
+        _reset_reranker_provider()
+        disabled = await rerank_chunks_if_enabled(
+            "beta query", chunks, top_k=2, reranking_enabled=False
+        )
+        enabled = await rerank_chunks_if_enabled(
+            "beta query",
+            chunks,
+            top_k=2,
+            reranking_enabled=True,
+            reranker_provider="similarity",
+        )
+        disabled_again = await rerank_chunks_if_enabled(
+            "beta query", chunks, top_k=2, reranking_enabled=False
+        )
+        process_provider = get_reranker_provider()
+
+    assert [chunk.id for chunk in disabled] == ["low", "high"]
+    assert [chunk.id for chunk in enabled] == ["high", "low"]
+    assert [chunk.rerank_order for chunk in enabled] == [1, 2]
+    assert [chunk.id for chunk in disabled_again] == ["low", "high"]
+    assert isinstance(process_provider, NoopRerankerProvider)
+    assert config.ENABLE_RERANKING is False

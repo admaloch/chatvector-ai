@@ -85,8 +85,13 @@ class DatabaseService(ABC):
         tenant_id: str,
         session_id: Optional[str] = None,
         query_text: Optional[str] = None,
+        hybrid_enabled: Optional[bool] = None,
     ) -> list[ChunkMatch]:
-        """Run tenant-scoped vector/hybrid search for chunks."""
+        """Run tenant-scoped vector/hybrid search for chunks.
+
+        ``hybrid_enabled`` overrides the process hybrid flag for this call.
+        ``None`` keeps ``HYBRID_RETRIEVAL_ENABLED``.
+        """
         pass
 
     @abstractmethod

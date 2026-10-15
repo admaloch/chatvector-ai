@@ -165,6 +165,7 @@ async def find_similar_chunks(
     tenant_id: str,
     session_id: str | None = None,
     query_text: str | None = None,
+    hybrid_enabled: bool | None = None,
 ) -> list[ChunkMatch]:
     tenant_id = require_tenant_id(tenant_id, method="find_similar_chunks")
     service = get_db_service()
@@ -177,6 +178,7 @@ async def find_similar_chunks(
             tenant_id=tenant_id,
             session_id=session_id,
             query_text=query_text,
+            hybrid_enabled=hybrid_enabled,
         )
 
     return await retry_async(

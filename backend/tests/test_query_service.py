@@ -16,6 +16,7 @@ from services.query_service import (
     stepback_query,
     transform_query,
 )
+from services.retrieval_config import RetrievalProcessDefaults, resolve_retrieval_config
 
 
 def test_transform_query_returns_original_when_disabled(monkeypatch):
@@ -503,3 +504,82 @@ def test_retrieval_debug_omits_strategy_when_transformation_disabled(monkeypatch
         "original_query": "plain question",
         "transformed_queries": ["plain question"],
     }
+
+
+def _qt_config(**request_fields):
+    return resolve_retrieval_config(
+        request_fields,
+        RetrievalProcessDefaults(
+            query_transformation_enabled=False,
+            query_transformation_strategy="rewrite",
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_request_strategy_rewrites_when_global_transformation_disabled(monkeypatch):
+    monkeypatch.setattr(config, "QUERY_TRANSFORMATION_ENABLED", False)
+    monkeypatch.setattr(config, "QUERY_TRANSFORMATION_STRATEGY", "rewrite")
+
+    async def fake_llm(system_instruction: str, user_text: str) -> str | None:
+        return "rewritten question"
+
+    monkeypatch.setattr(query_service_mod, "_llm_transform", fake_llm)
+    effective = _qt_config(query_transformation_strategy="rewrite")
+
+    result = await transform_query("original question", effective_config=effective)
+
+    assert result.queries == ["rewritten question"]
+    assert result.queries != ["original question"]
+    assert config.QUERY_TRANSFORMATION_ENABLED is False
+
+
+@pytest.mark.asyncio
+async def test_explicit_disable_skips_rewrite_when_strategy_is_set(monkeypatch):
+    async def fake_llm(system_instruction: str, user_text: str) -> str | None:
+        raise AssertionError("rewrite must not run")
+
+    monkeypatch.setattr(query_service_mod, "_llm_transform", fake_llm)
+    effective = resolve_retrieval_config(
+        {
+            "query_transformation_enabled": False,
+            "query_transformation_strategy": "rewrite",
+        },
+        RetrievalProcessDefaults(
+            query_transformation_enabled=True,
+            query_transformation_strategy="expand",
+        ),
+    )
+
+    result = await transform_query("original question", effective_config=effective)
+
+    assert result.queries == ["original question"]
+    assert result.transformation_strategy is None
+
+
+@pytest.mark.asyncio
+async def test_enabled_with_strategy_none_resolves_history_without_rewrite(monkeypatch):
+    monkeypatch.setattr(config, "QUERY_TRANSFORMATION_ENABLED", False)
+
+    async def fake_resolve(question: str, history: list[dict]) -> str:
+        return "standalone question"
+
+    async def fake_rewrite(question: str) -> str:
+        raise AssertionError("strategy must not run")
+
+    monkeypatch.setattr(query_service_mod, "_resolve_to_standalone", fake_resolve)
+    monkeypatch.setattr(query_service_mod, "rewrite_query", fake_rewrite)
+    effective = _qt_config(
+        query_transformation_enabled=True,
+        query_transformation_strategy="none",
+    )
+
+    result = await transform_query(
+        "What about it?",
+        history=[{"role": "user", "content": "Prior topic."}],
+        effective_config=effective,
+    )
+
+    assert result.queries == ["standalone question"]
+    assert result.history_resolved_query == "standalone question"
+    assert result.transformation_strategy is None

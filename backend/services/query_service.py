@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from core.config import config
 from services.providers import get_llm_provider
+from services.retrieval_config import EffectiveRetrievalConfig
 
 logger = logging.getLogger(__name__)
 
@@ -185,9 +186,27 @@ async def _resolve_to_standalone(question: str, history: list[dict]) -> str:
 
 
 async def transform_query(
-    question: str, history: list[dict] | None = None
+    question: str,
+    history: list[dict] | None = None,
+    *,
+    effective_config: EffectiveRetrievalConfig | None = None,
 ) -> QueryTransformResult:
-    if not config.QUERY_TRANSFORMATION_ENABLED:
+    """Transform a question for retrieval.
+
+    When ``effective_config`` is provided, enablement and strategy come from
+    that request-scoped config and the process flags are not consulted.
+    Omitted config keeps the process-wide ``QUERY_TRANSFORMATION_*`` behavior.
+    """
+    if effective_config is None:
+        enabled = config.QUERY_TRANSFORMATION_ENABLED
+        strategy = config.QUERY_TRANSFORMATION_STRATEGY
+        apply_strategy = bool(enabled)
+    else:
+        enabled = effective_config.query_transformation_enabled
+        strategy = effective_config.query_transformation_strategy
+        apply_strategy = effective_config.apply_query_strategy
+
+    if not enabled:
         return QueryTransformResult(
             queries=[question],
             original_query=question,
@@ -195,6 +214,7 @@ async def transform_query(
 
     # When recent session history is available, resolve any follow-up references
     # into a standalone question before applying the retrieval strategy.
+    # Strategy ``none`` still runs this resolution path and skips rewrite/expand/step-back.
     effective_question = question
     history_resolved_query: str | None = None
     if history:
@@ -202,7 +222,13 @@ async def transform_query(
         if effective_question != question:
             history_resolved_query = effective_question
 
-    strategy = config.QUERY_TRANSFORMATION_STRATEGY
+    if not apply_strategy or strategy == "none":
+        return QueryTransformResult(
+            queries=[effective_question],
+            original_query=question,
+            history_resolved_query=history_resolved_query,
+        )
+
     if strategy == "rewrite":
         queries = [await rewrite_query(effective_question)]
     elif strategy == "expand":
