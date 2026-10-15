@@ -1,38 +1,31 @@
-"""Local per-arm retrieval configuration shim, used only by the eval tool.
+"""Eval-arm records mapped onto request-scoped retrieval config.
 
-This stands in for the not-yet-implemented "Per-Request Retrieval
-Configuration" feature (an ``EffectiveRetrievalConfig`` /
-``retrieve_for_documents`` boundary tracked separately). It must never be
-imported from a production ``/chat`` code path. If that feature lands with
-its own equivalents, this module should be reconciled with (or replaced
-by) it rather than kept as a permanent parallel implementation.
-
-``core.config.config`` and ``context_service.MAX_CONTEXT_CHARS`` are read
-as plain process globals by ``rerank_chunks_if_enabled`` and
-``SQLAlchemyService`` — not through any per-call parameter — so true
-concurrent (``asyncio.gather``) arms would leak overrides across tasks.
-Arms are therefore run sequentially, with every touched global saved
-before an arm starts and restored in a ``finally`` block, which is exactly
-the "env-switched sequential runs" fallback this feature explicitly
-allows.
+Retrieval itself runs through ``chat_service.retrieve_for_documents``. This
+module does not mutate process config or the reranker cache.
 """
 
 from __future__ import annotations
 
-import asyncio
-from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 
 from core.config import config
-from db import find_similar_chunks
-from db.base import ChunkMatch
 from services import context_service
-from services.reranker import _reset_reranker_provider, rerank_chunks_if_enabled
+from services.retrieval_config import (
+    EffectiveRetrievalConfig as RequestRetrievalConfig,
+    RetrievalProcessDefaults,
+    resolve_retrieval_config,
+)
 
 
 @dataclass
 class EffectiveRetrievalConfig:
-    """One eval "arm": the retrieval knobs under comparison."""
+    """One eval arm: retrieval knobs under comparison.
+
+    Execution uses :func:`to_request_config`, which is the immutable
+    request-scoped config. ``max_context_chars`` is an eval context-assembly
+    override, not a chat request field. The process value is still recorded
+    on ``ResolvedEnvironmentSnapshot``.
+    """
 
     label: str
     hybrid_retrieval_enabled: bool
@@ -41,6 +34,28 @@ class EffectiveRetrievalConfig:
     match_count: int = 10
     max_context_chars: int = 32000
     allow_embedding_cache: bool = False
+    query_transformation_enabled: bool | None = False
+    query_transformation_strategy: str | None = "none"
+    skip_history_transform: bool = True
+
+    def to_request_config(self) -> RequestRetrievalConfig:
+        """Map this arm onto the request-scoped retrieval config.
+
+        Query transformation defaults off so an eval run stays deterministic
+        unless the arm sets it. ``None`` omits the field and inherits process env.
+        """
+        fields: dict = {
+            "match_count": self.match_count,
+            "hybrid_enabled": self.hybrid_retrieval_enabled,
+            "reranking_enabled": self.enable_reranking,
+            "reranker_provider": self.reranker_provider,
+            "skip_history_transform": self.skip_history_transform,
+        }
+        if self.query_transformation_enabled is not None:
+            fields["query_transformation_enabled"] = self.query_transformation_enabled
+        if self.query_transformation_strategy is not None:
+            fields["query_transformation_strategy"] = self.query_transformation_strategy
+        return resolve_retrieval_config(fields, RetrievalProcessDefaults.from_process())
 
 
 @dataclass
@@ -54,6 +69,8 @@ class ResolvedEnvironmentSnapshot:
     max_context_chars: int
     embedding_provider: str
     embedding_model: str | None
+    query_transformation_enabled: bool
+    query_transformation_strategy: str
 
     @classmethod
     def capture(cls) -> "ResolvedEnvironmentSnapshot":
@@ -65,85 +82,9 @@ class ResolvedEnvironmentSnapshot:
             max_context_chars=context_service.MAX_CONTEXT_CHARS,
             embedding_provider=config.EMBEDDING_PROVIDER,
             embedding_model=config.EMBEDDING_MODEL,
+            query_transformation_enabled=config.QUERY_TRANSFORMATION_ENABLED,
+            query_transformation_strategy=config.QUERY_TRANSFORMATION_STRATEGY,
         )
 
     def as_dict(self) -> dict:
         return asdict(self)
-
-
-@contextmanager
-def apply_effective_config(effective: EffectiveRetrievalConfig):
-    """Temporarily override global retrieval config for one arm's duration.
-
-    Every touched attribute is restored in a ``finally`` block, so a raised
-    exception mid-arm cannot leak overrides into the next arm or into any
-    other code running in this process.
-    """
-    originals = {
-        "HYBRID_RETRIEVAL_ENABLED": config.HYBRID_RETRIEVAL_ENABLED,
-        "ENABLE_RERANKING": config.ENABLE_RERANKING,
-        "RERANKER_PROVIDER": config.RERANKER_PROVIDER,
-        "ENABLE_EMBEDDING_CACHE": config.ENABLE_EMBEDDING_CACHE,
-    }
-    original_max_context_chars = context_service.MAX_CONTEXT_CHARS
-
-    try:
-        config.HYBRID_RETRIEVAL_ENABLED = effective.hybrid_retrieval_enabled
-        config.ENABLE_RERANKING = effective.enable_reranking
-        config.RERANKER_PROVIDER = effective.reranker_provider
-        config.ENABLE_EMBEDDING_CACHE = effective.allow_embedding_cache
-        context_service.MAX_CONTEXT_CHARS = effective.max_context_chars
-        # get_reranker_provider() caches a singleton keyed on config at first
-        # call; without resetting it here, flipping ENABLE_RERANKING /
-        # RERANKER_PROVIDER across arms would silently keep serving the
-        # first arm's provider.
-        _reset_reranker_provider()
-        yield
-    finally:
-        for attr, value in originals.items():
-            setattr(config, attr, value)
-        context_service.MAX_CONTEXT_CHARS = original_max_context_chars
-        _reset_reranker_provider()
-
-
-async def retrieve_for_documents(
-    doc_ids: list[str],
-    query_embedding: list[float],
-    effective: EffectiveRetrievalConfig,
-    *,
-    tenant_id: str,
-    query_text: str | None = None,
-) -> list[ChunkMatch]:
-    """Eval tool's retrieve boundary.
-
-    Runs the real retrieval pipeline (``find_similar_chunks`` +
-    ``rerank_chunks_if_enabled``) for one arm, mirroring
-    ``chat_service._retrieve_chunks_for_documents`` /
-    ``_finalize_retrieved_chunks`` without going through the ``/chat`` HTTP
-    surface and without ever calling answer generation.
-
-    Must be called inside an active ``apply_effective_config(effective)``
-    block — this function does not apply the override itself, since the
-    caller also needs the override active for the query embedding call and
-    for the assembled context preview.
-    """
-    per_document_chunks = await asyncio.gather(
-        *[
-            find_similar_chunks(
-                doc_id=doc_id,
-                query_embedding=query_embedding,
-                match_count=effective.match_count,
-                tenant_id=tenant_id,
-                query_text=query_text,
-            )
-            for doc_id in doc_ids
-        ]
-    )
-
-    merged: list[ChunkMatch] = []
-    for chunks in per_document_chunks:
-        merged.extend(chunks)
-
-    return await rerank_chunks_if_enabled(
-        query_text or "", merged, top_k=effective.match_count
-    )

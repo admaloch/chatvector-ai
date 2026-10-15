@@ -9,7 +9,10 @@ MAX_CONTEXT_CHARS: int = int(os.getenv("MAX_CONTEXT_CHARS", "32000"))
 
 
 def build_context_from_chunks(
-    chunks: list, session_context: Optional[SessionContext] = None
+    chunks: list,
+    session_context: Optional[SessionContext] = None,
+    *,
+    max_chars: int | None = None,
 ) -> str:
     """
     Combine chunk texts into a single context string for the LLM.
@@ -19,7 +22,9 @@ def build_context_from_chunks(
 
     Chunks are dropped (whole, from the end) if the total would exceed
     MAX_CONTEXT_CHARS, preserving formatting of all included chunks.
+    ``max_chars`` overrides that process cap for one assembly call.
     """
+    limit = MAX_CONTEXT_CHARS if max_chars is None else max_chars
     parts: list[str] = []
     total_chars = 0
     separator = "\n\n"
@@ -53,7 +58,7 @@ def build_context_from_chunks(
         part = f"{label}\n{chunk.chunk_text or ''}"
 
         addition = (sep_len + len(part)) if parts else len(part)
-        if total_chars + addition > MAX_CONTEXT_CHARS:
+        if total_chars + addition > limit:
             if not parts:
                 # Single chunk exceeds cap; include it rather than returning empty context.
                 parts.append(part)
@@ -67,7 +72,7 @@ def build_context_from_chunks(
                 "MAX_CONTEXT_CHARS=%d (used %d chars)",
                 dropped,
                 len(chunks),
-                MAX_CONTEXT_CHARS,
+                limit,
                 used,
             )
             break

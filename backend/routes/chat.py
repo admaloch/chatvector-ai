@@ -18,6 +18,7 @@ from services.chat_service import (
     merge_batch_results,
     prepare_batch_chat_items,
 )
+from services.retrieval_config import merge_retrieval_field_layers
 from services.session_service import get_or_create_session, register_session_document
 from services.tenant_registry import register_tenant_document
 
@@ -25,7 +26,55 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 RetrievalScopeParam = Literal["session", "tenant"]
+QueryTransformationStrategyParam = Literal["rewrite", "expand", "stepback", "none"]
+RerankerProviderParam = Literal["similarity"]
 DebugRetrievalQuery = Annotated[bool, Query()]
+
+_RETRIEVAL_FIELD_NAMES = (
+    "match_count",
+    "scope",
+    "hybrid_enabled",
+    "reranking_enabled",
+    "reranker_provider",
+    "query_transformation_enabled",
+    "query_transformation_strategy",
+    "skip_history_transform",
+)
+
+
+class RetrievalOverrides(BaseModel):
+    """Optional per-request retrieval overrides.
+
+    Top-level request fields win over this object. Omitted fields keep the
+    process env default. ``metadata_filter`` is reserved for Metadata-First
+    Document Ingestion and Retrieval Filters and is not accepted in v1.
+    """
+
+    match_count: Optional[int] = Field(default=None, ge=1, le=20)
+    scope: Optional[RetrievalScopeParam] = None
+    hybrid_enabled: Optional[bool] = None
+    reranking_enabled: Optional[bool] = None
+    reranker_provider: Optional[RerankerProviderParam] = None
+    query_transformation_enabled: Optional[bool] = None
+    query_transformation_strategy: Optional[QueryTransformationStrategyParam] = None
+    skip_history_transform: Optional[bool] = None
+
+
+def retrieval_fields_from_model(model: BaseModel) -> dict:
+    """Collect explicitly set retrieval overrides, including a nested object."""
+    fields: dict = {}
+    for name in _RETRIEVAL_FIELD_NAMES:
+        if name in model.model_fields_set and getattr(model, name) is not None:
+            fields[name] = getattr(model, name)
+    retrieval_model = getattr(model, "retrieval", None)
+    if retrieval_model is not None and "retrieval" in model.model_fields_set:
+        nested = {}
+        for name in _RETRIEVAL_FIELD_NAMES:
+            if name in retrieval_model.model_fields_set and getattr(retrieval_model, name) is not None:
+                nested[name] = getattr(retrieval_model, name)
+        if nested:
+            fields["retrieval"] = nested
+    return fields
 
 
 class ChatSourceResponse(BaseModel):
@@ -102,6 +151,13 @@ class ChatBatchItem(BaseModel):
     match_count: int = Field(default=5, ge=1, le=20)
     session_id: Optional[str] = None
     scope: RetrievalScopeParam = "session"
+    hybrid_enabled: Optional[bool] = None
+    reranking_enabled: Optional[bool] = None
+    reranker_provider: Optional[RerankerProviderParam] = None
+    query_transformation_enabled: Optional[bool] = None
+    query_transformation_strategy: Optional[QueryTransformationStrategyParam] = None
+    skip_history_transform: Optional[bool] = None
+    retrieval: Optional[RetrievalOverrides] = None
 
 
 class ChatBatchRequest(BaseModel):
@@ -109,6 +165,13 @@ class ChatBatchRequest(BaseModel):
     session_id: Optional[str] = None
     scope: RetrievalScopeParam = "session"
     debug_retrieval: bool = False
+    hybrid_enabled: Optional[bool] = None
+    reranking_enabled: Optional[bool] = None
+    reranker_provider: Optional[RerankerProviderParam] = None
+    query_transformation_enabled: Optional[bool] = None
+    query_transformation_strategy: Optional[QueryTransformationStrategyParam] = None
+    skip_history_transform: Optional[bool] = None
+    retrieval: Optional[RetrievalOverrides] = None
 
 
 class ChatResponse(BaseModel):
@@ -132,6 +195,13 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     scope: RetrievalScopeParam = "session"
     debug_retrieval: bool = False
+    hybrid_enabled: Optional[bool] = None
+    reranking_enabled: Optional[bool] = None
+    reranker_provider: Optional[RerankerProviderParam] = None
+    query_transformation_enabled: Optional[bool] = None
+    query_transformation_strategy: Optional[QueryTransformationStrategyParam] = None
+    skip_history_transform: Optional[bool] = None
+    retrieval: Optional[RetrievalOverrides] = None
 
 
 def _resolve_debug_retrieval(*, query_param: bool, request_field: bool) -> bool:
@@ -170,6 +240,7 @@ async def chat(
             query_param=debug_retrieval,
             request_field=payload.debug_retrieval,
         ),
+        retrieval_fields=retrieval_fields_from_model(payload),
     )
 
 
@@ -232,6 +303,7 @@ async def chat_stream(
                 query_param=debug_retrieval,
                 request_field=payload.debug_retrieval,
             ),
+            retrieval_fields=retrieval_fields_from_model(payload),
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -254,11 +326,16 @@ async def chat_batch(
     tenant_id = require_current_tenant(auth)
 
     try:
+        batch_fields = retrieval_fields_from_model(payload)
         raw_queries = []
         for q in payload.queries:
             q_dict = q.model_dump(mode="json")
             if "scope" not in q.model_fields_set:
                 q_dict.pop("scope", None)
+            q_dict["retrieval_fields"] = merge_retrieval_field_layers(
+                retrieval_fields_from_model(q),
+                batch_fields,
+            )
             raw_queries.append(q_dict)
 
         service_items, slot_results = await prepare_batch_chat_items(

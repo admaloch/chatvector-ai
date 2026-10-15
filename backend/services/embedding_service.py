@@ -34,7 +34,10 @@ async def _embed_via_provider(provider, texts: list[str]) -> list[list[float]]:
 
 
 async def get_embeddings(
-    texts: list[str], *, tenant_id: str | None = None
+    texts: list[str],
+    *,
+    tenant_id: str | None = None,
+    use_cache: bool | None = None,
 ) -> list[list[float]]:
     """
     Generate embeddings for multiple texts.
@@ -47,8 +50,9 @@ async def get_embeddings(
     calls occur.
     """
     provider = get_embedding_provider()
+    cache_enabled = config.ENABLE_EMBEDDING_CACHE if use_cache is None else use_cache
 
-    if not config.ENABLE_EMBEDDING_CACHE:
+    if not cache_enabled:
         return await _embed_via_provider(provider, texts)
 
     from services.embedding_cache import get_cached_embedding, set_cached_embedding

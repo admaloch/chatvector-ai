@@ -676,8 +676,17 @@ same process still share that cap — e.g. with value `4`, at most four transfor
 operations run concurrently across all in-flight batch work in that process.
 It does not apply to shared embedding, retrieval, or non-batch chat paths.
 
-**Single-document batch items** are compare-style: session history is not injected and
-successful turns are not persisted, even when `session_id` is set.
+**Single-document batch items** are compare-style. Three history uses stay separate:
+
+- **Generation history injection** — session history is not added to the LLM context.
+- **Chat turn persistence** — a successful turn is not stored, even when `session_id` is set.
+- **Transform / standalone resolution** — session history is not passed into
+  `transform_query` unless the item sets `skip_history_transform` to false.
+
+`/chat` and `/chat/stream` still use session history for transform and generation.
+Per-Request History Configuration and Stronger Session Defaults owns broader
+history defaults. History-Aware Follow-Up Query Transformation Traces covers
+the transform trace itself. This split is only the compare-style batch rule.
 
 ### Audit checklist
 
@@ -1392,7 +1401,10 @@ question was transformed before embedding and search:
 - `original_query` — the raw user question
 - `history_resolved_query` — standalone rewrite after session history resolution (when it differs)
 - `transformed_queries` — final query list embedded and searched
-- `transformation_strategy` — active strategy (`rewrite`, `expand`, or `stepback`) when transformation is enabled
+- `transformation_strategy` — active strategy (`rewrite`, `expand`, or `stepback`) when a strategy ran
+- `effective_retrieval_query` — primary retrieval string (first transformed query), used for keyword search and reranking
+- `effective_config` — resolved retrieval settings with `value` and `source` (`request` or `env`) for each field, plus the process `max_context_chars` annex
+- `timing_ms` — transform, embed, search, rerank, context, and total milliseconds
 
 Pass the flag as a JSON body field or query parameter:
 

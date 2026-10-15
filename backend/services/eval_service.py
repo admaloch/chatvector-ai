@@ -1,8 +1,8 @@
 """Eval orchestration: dataset loading, per-arm retrieval, metrics, compare, export.
 
 Never imports or calls answer generation (``generate_answer`` /
-``generate_answer_stream``) — this module's retrieve boundary stops at
-assembled context, exactly like ``eval_config.retrieve_for_documents``.
+``generate_answer_stream``). Retrieval goes through
+``chat_service.retrieve_for_documents`` and stops at assembled context.
 """
 
 from __future__ import annotations
@@ -15,15 +15,9 @@ from pathlib import Path
 
 from db.base import ChunkMatch
 from services import eval_metrics
-from services.context_service import build_context_from_chunks
-from services.eval_config import (
-    EffectiveRetrievalConfig,
-    ResolvedEnvironmentSnapshot,
-    apply_effective_config,
-    retrieve_for_documents,
-)
+from services.chat_service import retrieve_for_documents
+from services.eval_config import EffectiveRetrievalConfig, ResolvedEnvironmentSnapshot
 from services.eval_fixtures import EvalDataset, dataset_hash
-from services.embedding_service import get_embedding
 
 EVAL_TOOL_VERSION = "0.1.0"
 DEFAULT_K_VALUES: tuple[int, ...] = (5, 10)
@@ -75,7 +69,10 @@ class EvalRunResult:
             "arms": [
                 {
                     "config_snapshot": {
-                        "effective_config": vars(arm.config),
+                        "effective_config": {
+                            **vars(arm.config),
+                            "resolved": arm.config.to_request_config().to_debug_dict(),
+                        },
                         "resolved_environment": arm.resolved_env.as_dict(),
                     },
                     "aggregate_metrics": arm.aggregate_metrics,
@@ -114,17 +111,19 @@ async def _run_arm(
 ) -> ArmResult:
     query_results: list[QueryResult] = []
 
+    request_config = effective.to_request_config()
     for q in dataset.queries:
-        with apply_effective_config(effective):
-            embedding = await get_embedding(q.query)
-            candidates = await retrieve_for_documents(
-                q.doc_ids,
-                embedding,
-                effective,
-                tenant_id=tenant_id,
-                query_text=q.query,
-            )
-            context_preview = build_context_from_chunks(candidates)
+        retrieval = await retrieve_for_documents(
+            q.query,
+            q.doc_ids,
+            tenant_id,
+            request_config,
+            skip_history_transform=effective.skip_history_transform,
+            use_embedding_cache=effective.allow_embedding_cache,
+            max_context_chars=effective.max_context_chars,
+        )
+        candidates = retrieval.chunks
+        context_preview = retrieval.context
 
         ranked_keys = [
             eval_metrics.chunk_match_key(c.document_id, c.chunk_index)
@@ -162,11 +161,11 @@ async def run_eval(
     k_values: tuple[int, ...] = DEFAULT_K_VALUES,
     export_path: str | Path | None = None,
 ) -> EvalRunResult:
-    """Run one or more config arms against ``dataset`` sequentially.
+    """Run one or more config arms against ``dataset``.
 
-    Sequential execution (rather than ``asyncio.gather`` across arms) is
-    required by the global-config override shim in ``eval_config`` — see
-    that module's docstring.
+    Arms run sequentially so a comparison does not stampede the database.
+    Each arm carries its own request-scoped config and does not mutate
+    process globals.
     """
     resolved_env = ResolvedEnvironmentSnapshot.capture()
 

@@ -2,6 +2,7 @@ import logging
 import asyncio
 import json
 import time
+from dataclasses import dataclass, replace
 from typing import Optional, AsyncGenerator, cast
 
 from core.auth import AuthContext, require_current_tenant
@@ -10,6 +11,11 @@ from core.session import SessionContext
 from db import find_similar_chunks
 from services.context_service import build_context_from_chunks
 from services.query_service import QueryTransformResult, transform_query
+from services.retrieval_config import (
+    EffectiveRetrievalConfig,
+    resolve_retrieval_config,
+    transformation_is_request_scoped,
+)
 from services.retrieval_service import (
     filter_doc_ids_for_tenant,
     parse_retrieval_scope,
@@ -190,19 +196,23 @@ async def _retrieve_chunks_for_documents(
     *,
     session_id: Optional[str] = None,
     query_text: Optional[str] = None,
+    hybrid_enabled: Optional[bool] = None,
 ) -> list:
     retrieval_semaphore = _get_retrieval_semaphore()
 
     async def _search_one_document(doc_id: str) -> list:
         async with retrieval_semaphore:
-            return await find_similar_chunks(
-                doc_id=doc_id,
-                query_embedding=query_embedding,
-                match_count=match_count,
-                session_id=session_id,
-                query_text=query_text,
-                tenant_id=tenant_id,
-            )
+            search_kwargs = {
+                "doc_id": doc_id,
+                "query_embedding": query_embedding,
+                "match_count": match_count,
+                "session_id": session_id,
+                "query_text": query_text,
+                "tenant_id": tenant_id,
+            }
+            if hybrid_enabled is not None:
+                search_kwargs["hybrid_enabled"] = hybrid_enabled
+            return await find_similar_chunks(**search_kwargs)
 
     per_document_chunks = await asyncio.gather(
         *[_search_one_document(doc_id) for doc_id in doc_ids]
@@ -215,9 +225,196 @@ async def _retrieve_chunks_for_documents(
     return merged_chunks
 
 
-async def _finalize_retrieved_chunks(question: str, chunks: list, match_count: int) -> list:
+async def _finalize_retrieved_chunks(
+    question: str,
+    chunks: list,
+    match_count: int,
+    *,
+    reranking_enabled: bool | None = None,
+    reranker_provider: str | None = None,
+) -> list:
     """Apply optional reranking before context assembly."""
-    return await rerank_chunks_if_enabled(question, chunks, top_k=match_count)
+    return await rerank_chunks_if_enabled(
+        question,
+        chunks,
+        top_k=match_count,
+        reranking_enabled=reranking_enabled,
+        reranker_provider=reranker_provider,
+    )
+
+
+@dataclass
+class RetrievalResult:
+    """Candidates and query text from one retrieval, without answer generation."""
+
+    chunks: list
+    queries: list[str]
+    primary_query: str
+    context: str
+    timing_ms: dict[str, int]
+    transform_result: QueryTransformResult
+    effective_config: EffectiveRetrievalConfig
+
+    def to_debug_dict(self) -> dict:
+        payload = self.transform_result.to_retrieval_debug()
+        payload["effective_config"] = self.effective_config.to_debug_dict()
+        payload["effective_retrieval_query"] = self.primary_query
+        payload["timing_ms"] = dict(self.timing_ms)
+        return payload
+
+
+def _resolve_effective_retrieval(
+    *,
+    match_count: int,
+    scope: str | None,
+    retrieval_fields: dict | None,
+) -> EffectiveRetrievalConfig:
+    if retrieval_fields is None:
+        fields: dict = {"match_count": match_count}
+        if scope is not None:
+            fields["scope"] = scope
+    else:
+        fields = retrieval_fields
+    return resolve_retrieval_config(fields)
+
+
+def _apply_compare_history_policy(
+    effective: EffectiveRetrievalConfig,
+    *,
+    compare_style: bool,
+) -> EffectiveRetrievalConfig:
+    """Single-document batch items skip history during transform unless overridden."""
+    if compare_style and effective.sources.get("skip_history_transform") != "request":
+        return replace(effective, skip_history_transform=True)
+    return effective
+
+
+def _rerank_overrides(effective: EffectiveRetrievalConfig) -> dict:
+    overrides: dict = {}
+    if effective.sources.get("reranking_enabled") == "request":
+        overrides["reranking_enabled"] = effective.reranking_enabled
+    if effective.sources.get("reranker_provider") == "request":
+        overrides["reranker_provider"] = effective.reranker_provider
+        overrides.setdefault("reranking_enabled", effective.reranking_enabled)
+    return overrides
+
+
+async def retrieve_for_documents(
+    query: str,
+    document_ids: list[str],
+    tenant_id: str,
+    effective_retrieval_config: EffectiveRetrievalConfig,
+    *,
+    session_id: str | None = None,
+    history_for_transform: list[dict] | None = None,
+    skip_history_transform: bool | None = None,
+    session_context: SessionContext | None = None,
+    use_embedding_cache: bool | None = None,
+    max_context_chars: int | None = None,
+    transform_result: QueryTransformResult | None = None,
+    query_embeddings: list[list[float]] | None = None,
+) -> RetrievalResult:
+    """Run retrieval for one query. Does not call answer generation.
+
+    Vector search uses every transformed query. Keyword search and reranking
+    use the primary retrieval query: the first entry in that list.
+    """
+    started = time.perf_counter()
+    skip_history = (
+        effective_retrieval_config.skip_history_transform
+        if skip_history_transform is None
+        else skip_history_transform
+    )
+    history_arg = None if skip_history else history_for_transform
+
+    transform_started = time.perf_counter()
+    if transform_result is None:
+        transform_kwargs = {}
+        if transformation_is_request_scoped(effective_retrieval_config):
+            transform_kwargs["effective_config"] = effective_retrieval_config
+        transform_result = await transform_query(
+            query, history=history_arg, **transform_kwargs
+        )
+    transform_ms = int((time.perf_counter() - transform_started) * 1000)
+
+    queries = list(transform_result.queries) or [query]
+    primary_query = queries[0]
+
+    embed_started = time.perf_counter()
+    if query_embeddings is None:
+        embed_kwargs: dict = {"tenant_id": tenant_id}
+        if use_embedding_cache is not None:
+            embed_kwargs["use_cache"] = use_embedding_cache
+        query_embeddings = await get_embeddings(queries, **embed_kwargs)
+    embed_ms = int((time.perf_counter() - embed_started) * 1000)
+    if len(query_embeddings) != len(queries):
+        mismatch = RuntimeError(
+            f"Embedding mismatch: got {len(query_embeddings)} embeddings for {len(queries)} queries"
+        )
+        mismatch.code = "embedding_mismatch"  # type: ignore[attr-defined]
+        raise mismatch
+
+    hybrid_enabled = (
+        effective_retrieval_config.hybrid_enabled
+        if effective_retrieval_config.sources.get("hybrid_enabled") == "request"
+        else None
+    )
+    search_started = time.perf_counter()
+    all_chunks: list = []
+    seen_chunk_keys: set = set()
+    for query_embedding in query_embeddings:
+        chunks = await _retrieve_chunks_for_documents(
+            doc_ids=document_ids,
+            query_embedding=query_embedding,
+            match_count=effective_retrieval_config.match_count,
+            tenant_id=tenant_id,
+            session_id=session_id,
+            query_text=primary_query,
+            hybrid_enabled=hybrid_enabled,
+        )
+        for chunk in chunks:
+            key = (getattr(chunk, "document_id", None), getattr(chunk, "chunk_index", None))
+            if key not in seen_chunk_keys:
+                seen_chunk_keys.add(key)
+                all_chunks.append(chunk)
+    search_ms = int((time.perf_counter() - search_started) * 1000)
+
+    rerank_started = time.perf_counter()
+    matching_chunks = await _finalize_retrieved_chunks(
+        primary_query,
+        all_chunks,
+        effective_retrieval_config.match_count,
+        **_rerank_overrides(effective_retrieval_config),
+    )
+    rerank_ms = int((time.perf_counter() - rerank_started) * 1000)
+
+    context_started = time.perf_counter()
+    context_kwargs = {}
+    if max_context_chars is not None:
+        context_kwargs["max_chars"] = max_context_chars
+    context = build_context_from_chunks(
+        matching_chunks,
+        session_context=session_context,
+        **context_kwargs,
+    )
+    context_ms = int((time.perf_counter() - context_started) * 1000)
+
+    return RetrievalResult(
+        chunks=matching_chunks,
+        queries=queries,
+        primary_query=primary_query,
+        context=context,
+        timing_ms={
+            "transform": transform_ms,
+            "embed": embed_ms,
+            "search": search_ms,
+            "rerank": rerank_ms,
+            "context": context_ms,
+            "total": int((time.perf_counter() - started) * 1000),
+        },
+        transform_result=transform_result,
+        effective_config=effective_retrieval_config,
+    )
 
 
 _COMPONENT_SCORE_FIELDS = (
@@ -283,15 +480,16 @@ def validate_and_normalize_batch_queries(queries: list[dict]) -> list[dict]:
         if match_count < 1:
             raise ValueError(f"Query #{index} has invalid match_count={match_count}")
 
-        normalized_queries.append(
-            {
-                "question": question,
-                "doc_ids": doc_ids,
-                "match_count": match_count,
-                "session_id": query.get("session_id"),
-                "scope": query.get("scope"),
-            }
-        )
+        normalized = {
+            "question": question,
+            "doc_ids": doc_ids,
+            "match_count": match_count,
+            "session_id": query.get("session_id"),
+            "scope": query.get("scope"),
+        }
+        if "retrieval_fields" in query:
+            normalized["retrieval_fields"] = query.get("retrieval_fields") or {}
+        normalized_queries.append(normalized)
 
     return normalized_queries
 
@@ -393,14 +591,6 @@ def _build_stream_complete_payload(
     return payload
 
 
-def _maybe_retrieval_debug(
-    transform_result: QueryTransformResult, *, debug_retrieval: bool
-) -> dict | None:
-    if not debug_retrieval:
-        return None
-    return transform_result.to_retrieval_debug()
-
-
 def _build_stream_error_payload(*, code: str, message: str) -> dict:
     return {
         "type": "error",
@@ -419,15 +609,21 @@ async def answer_question_for_document(
     session_context: Optional[SessionContext] = None,
     scope: Optional[str] = None,
     debug_retrieval: bool = False,
+    retrieval_fields: dict | None = None,
 ) -> dict:
     """
     Orchestrate the chat flow for a single question/document pair.
     """
     logger.info(f"Starting chat for document {doc_id} (session={session_id}, scope={scope or 'session'})")
     tenant_id = require_current_tenant(auth)
+    effective = _resolve_effective_retrieval(
+        match_count=match_count,
+        scope=scope,
+        retrieval_fields=retrieval_fields,
+    )
 
     doc_ids = await _resolve_retrieval_doc_ids(
-        scope=scope,
+        scope=effective.scope,
         requested_doc_ids=[doc_id],
         session_id=session_id,
         tenant_id=tenant_id,
@@ -464,36 +660,23 @@ async def answer_question_for_document(
     transformation_history = (
         history[-config.QUERY_TRANSFORMATION_HISTORY_WINDOW :] if history else None
     )
-    transform_result = await transform_query(question, history=transformation_history)
-    transformed_queries = transform_result.queries
-    retrieval_debug = _maybe_retrieval_debug(
-        transform_result, debug_retrieval=debug_retrieval
-    )
-    query_embeddings = await get_embeddings(transformed_queries, tenant_id=tenant_id)
-    all_chunks: list = []
-    seen_chunk_keys: set = set()
-    for query_embedding in query_embeddings:
-        chunks = await _retrieve_chunks_for_documents(
-            doc_ids=doc_ids,
-            query_embedding=query_embedding,
-            match_count=match_count,
-            tenant_id=tenant_id,
-            session_id=session_id,
-            query_text=question,
-        )
-        for chunk in chunks:
-            key = (chunk.document_id, chunk.chunk_index)
-            if key not in seen_chunk_keys:
-                seen_chunk_keys.add(key)
-                all_chunks.append(chunk)
-    matching_chunks = await _finalize_retrieved_chunks(question, all_chunks, match_count)
-
     if history:
         if not session_context:
             session_context = SessionContext()
         session_context.chat_history = history
 
-    context = build_context_from_chunks(matching_chunks, session_context=session_context)
+    retrieval = await retrieve_for_documents(
+        question,
+        doc_ids,
+        tenant_id,
+        effective,
+        session_id=session_id,
+        history_for_transform=transformation_history,
+        session_context=session_context,
+    )
+    matching_chunks = retrieval.chunks
+    context = retrieval.context
+    retrieval_debug = retrieval.to_debug_dict() if debug_retrieval else None
     answer, latency_ms, model_name = await generate_answer(question, context)
     base: dict = {
         "question": question,
@@ -550,6 +733,7 @@ async def answer_question_stream_for_document(
     session_context: Optional[SessionContext] = None,
     scope: Optional[str] = None,
     debug_retrieval: bool = False,
+    retrieval_fields: dict | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Orchestrate the chat flow for a single question/document pair, yielding
@@ -557,10 +741,15 @@ async def answer_question_stream_for_document(
     """
     logger.info(f"Starting chat stream for document {doc_id} (scope={scope or 'session'})")
     tenant_id = require_current_tenant(auth)
+    effective = _resolve_effective_retrieval(
+        match_count=match_count,
+        scope=scope,
+        retrieval_fields=retrieval_fields,
+    )
 
     try:
         doc_ids = await _resolve_retrieval_doc_ids(
-            scope=scope,
+            scope=effective.scope,
             requested_doc_ids=[doc_id],
             session_id=session_id,
             tenant_id=tenant_id,
@@ -590,37 +779,24 @@ async def answer_question_stream_for_document(
         transformation_history = (
             history[-config.QUERY_TRANSFORMATION_HISTORY_WINDOW :] if history else None
         )
-        transform_result = await transform_query(question, history=transformation_history)
-        transformed_queries = transform_result.queries
-        retrieval_debug = _maybe_retrieval_debug(
-            transform_result, debug_retrieval=debug_retrieval
-        )
-        query_embeddings = await get_embeddings(transformed_queries, tenant_id=tenant_id)
-        all_chunks: list = []
-        seen_chunk_keys: set = set()
-        for query_embedding in query_embeddings:
-            chunks = await _retrieve_chunks_for_documents(
-                doc_ids=doc_ids,
-                query_embedding=query_embedding,
-                match_count=match_count,
-                tenant_id=tenant_id,
-                session_id=session_id,
-                query_text=question,
-            )
-            for chunk in chunks:
-                key = (chunk.document_id, chunk.chunk_index)
-                if key not in seen_chunk_keys:
-                    seen_chunk_keys.add(key)
-                    all_chunks.append(chunk)
-        matching_chunks = await _finalize_retrieved_chunks(question, all_chunks, match_count)
-        sources = _build_sources(matching_chunks)
-
         if history:
             if not session_context:
                 session_context = SessionContext()
             session_context.chat_history = history
 
-        context = build_context_from_chunks(matching_chunks, session_context=session_context)
+        retrieval = await retrieve_for_documents(
+            question,
+            doc_ids,
+            tenant_id,
+            effective,
+            session_id=session_id,
+            history_for_transform=transformation_history,
+            session_context=session_context,
+        )
+        matching_chunks = retrieval.chunks
+        sources = _build_sources(matching_chunks)
+        context = retrieval.context
+        retrieval_debug = retrieval.to_debug_dict() if debug_retrieval else None
 
         full_answer_chunks: list[str] = []
         t0 = time.perf_counter()
@@ -720,11 +896,32 @@ async def answer_questions_for_documents_batch(
         if query.get("scope") is None:
             query["scope"] = scope
 
+    effective_configs: list[EffectiveRetrievalConfig] = []
+    for query in normalized_queries:
+        effective = _resolve_effective_retrieval(
+            match_count=query["match_count"],
+            scope=query.get("scope"),
+            retrieval_fields=query["retrieval_fields"] if "retrieval_fields" in query else None,
+        )
+        effective_configs.append(
+            _apply_compare_history_policy(
+                effective,
+                compare_style=_is_compare_style_batch_query(query["doc_ids"]),
+            )
+        )
+
     batch_llm_semaphore = _get_batch_llm_semaphore()
 
-    async def _batch_transform(question: str, history: list[dict] | None):
+    async def _batch_transform(
+        question: str,
+        history: list[dict] | None,
+        effective_config: EffectiveRetrievalConfig | None = None,
+    ):
         async with batch_llm_semaphore:
-            return await transform_query(question, history=history)
+            transform_kwargs = {}
+            if effective_config is not None:
+                transform_kwargs["effective_config"] = effective_config
+            return await transform_query(question, history=history, **transform_kwargs)
 
     async def _batch_generate(question: str, context: str):
         async with batch_llm_semaphore:
@@ -762,10 +959,17 @@ async def answer_questions_for_documents_batch(
             _batch_transform(
                 q["question"],
                 history=(
-                    h[-config.QUERY_TRANSFORMATION_HISTORY_WINDOW :] if h else None
+                    None
+                    if effective.skip_history_transform
+                    else (h[-config.QUERY_TRANSFORMATION_HISTORY_WINDOW :] if h else None)
+                ),
+                effective_config=(
+                    effective if transformation_is_request_scoped(effective) else None
                 ),
             )
-            for q, h in zip(normalized_queries, per_query_histories)
+            for q, h, effective in zip(
+                normalized_queries, per_query_histories, effective_configs
+            )
         ]
     )
     transformed_query_lists = [result.queries for result in transform_results]
@@ -822,12 +1026,12 @@ async def answer_questions_for_documents_batch(
         query_embeddings: list[list[float]],
         preloaded_history: list[dict],
         transform_result: QueryTransformResult,
+        effective: EffectiveRetrievalConfig,
     ) -> dict:
         try:
             session_id = query.get("session_id")
-            query_scope = query.get("scope")
             doc_ids = await _resolve_retrieval_doc_ids(
-                scope=query_scope,
+                scope=effective.scope,
                 requested_doc_ids=query["doc_ids"],
                 session_id=session_id,
                 tenant_id=tenant_id,
@@ -847,26 +1051,6 @@ async def answer_questions_for_documents_batch(
                     "session_id": session_id,
                 }
 
-            all_chunks: list = []
-            seen_chunk_keys: set = set()
-            for query_embedding in query_embeddings:
-                chunks = await _retrieve_chunks_for_documents(
-                    doc_ids=doc_ids,
-                    query_embedding=query_embedding,
-                    match_count=query["match_count"],
-                    tenant_id=tenant_id,
-                    session_id=session_id,
-                    query_text=query["question"],
-                )
-                for chunk in chunks:
-                    key = (chunk.document_id, chunk.chunk_index)
-                    if key not in seen_chunk_keys:
-                        seen_chunk_keys.add(key)
-                        all_chunks.append(chunk)
-            matching_chunks = await _finalize_retrieved_chunks(
-                query["question"], all_chunks, query["match_count"]
-            )
-
             is_compare_style = _is_compare_style_batch_query(query["doc_ids"])
             query_session_context = session_context
             if preloaded_history and not is_compare_style:
@@ -874,13 +1058,22 @@ async def answer_questions_for_documents_batch(
                 query_session_context = deepcopy(session_context) if session_context else SessionContext()
                 query_session_context.chat_history = preloaded_history
 
-            context = build_context_from_chunks(matching_chunks, session_context=query_session_context)
+            retrieval = await retrieve_for_documents(
+                query["question"],
+                doc_ids,
+                tenant_id,
+                effective,
+                session_id=session_id,
+                session_context=query_session_context,
+                transform_result=transform_result,
+                query_embeddings=query_embeddings,
+            )
+            matching_chunks = retrieval.chunks
+            context = retrieval.context
             answer, latency_ms, model_name = await _batch_generate(query["question"], context)
 
             sources = _build_sources(matching_chunks)
-            retrieval_debug = _maybe_retrieval_debug(
-                transform_result, debug_retrieval=debug_retrieval
-            )
+            retrieval_debug = retrieval.to_debug_dict() if debug_retrieval else None
             llm_err = _structured_error_from_llm_answer(answer)
             if llm_err is not None:
                 error_payload = {
@@ -947,12 +1140,13 @@ async def answer_questions_for_documents_batch(
 
     return await asyncio.gather(
         *[
-            _process_query(query, embeddings, history, transform_result)
-            for query, embeddings, history, transform_result in zip(
+            _process_query(query, embeddings, history, transform_result, effective)
+            for query, embeddings, history, transform_result, effective in zip(
                 normalized_queries,
                 per_query_embeddings,
                 per_query_histories,
                 transform_results,
+                effective_configs,
             )
         ]
     )

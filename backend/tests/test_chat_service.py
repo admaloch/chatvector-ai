@@ -114,7 +114,7 @@ async def test_answer_question_for_document_orchestrates_flow():
         {"file_name": "doc.pdf", "page_number": 1, "chunk_index": 0, "score": 0.85, "score_type": "vector"},
         {"file_name": "doc.pdf", "page_number": 2, "chunk_index": 1, "score": 0.85, "score_type": "vector"},
     ]
-    mock_embeddings.assert_awaited_once_with(["What is this about?"])
+    mock_embeddings.assert_awaited_once_with(["What is this about?"], tenant_id="dev")
     mock_find.assert_awaited_once_with(
         doc_id="doc-123",
         query_embedding=[0.1, 0.2],
@@ -224,7 +224,7 @@ async def test_answer_questions_for_documents_batch_processes_queries():
     assert result[1]["doc_ids"] == ["doc-c"]
     assert result[1]["chunks"] == 1
 
-    mock_embeddings.assert_awaited_once_with(["Q1", "Q2"])
+    mock_embeddings.assert_awaited_once_with(["Q1", "Q2"], tenant_id="dev")
     assert mock_find.await_count == 3
     assert mock_context.call_count == 2
     assert mock_answer.await_count == 2
@@ -1030,8 +1030,8 @@ async def test_batch_history_bounded_to_window():
     ):
         await answer_questions_for_documents_batch(
             [
-                {"question": "Q1", "doc_ids": ["doc-a"], "session_id": "sess-1"},
-                {"question": "Q2", "doc_ids": ["doc-b"], "session_id": "sess-2"},
+                {"question": "Q1", "doc_ids": ["doc-a", "doc-b"], "session_id": "sess-1"},
+                {"question": "Q2", "doc_ids": ["doc-c", "doc-d"], "session_id": "sess-2"},
             ],
             auth=TEST_AUTH,
         )
@@ -1257,7 +1257,12 @@ async def test_chat_response_includes_retrieval_debug_when_opted_in():
             debug_retrieval=True,
         )
 
-    assert result["retrieval_debug"] == transform_result.to_retrieval_debug()
+    debug = result["retrieval_debug"]
+    for key, value in transform_result.to_retrieval_debug().items():
+        assert debug[key] == value
+    assert debug["effective_retrieval_query"] == transform_result.queries[0]
+    assert "effective_config" in debug
+    assert "timing_ms" in debug
 
 
 @pytest.mark.asyncio
@@ -1291,7 +1296,12 @@ async def test_chat_soft_error_includes_retrieval_debug_when_opted_in():
         )
 
     assert result["status"] == "error"
-    assert result["retrieval_debug"] == transform_result.to_retrieval_debug()
+    debug = result["retrieval_debug"]
+    for key, value in transform_result.to_retrieval_debug().items():
+        assert debug[key] == value
+    assert debug["effective_retrieval_query"] == transform_result.queries[0]
+    assert "effective_config" in debug
+    assert "timing_ms" in debug
 
 
 @pytest.mark.asyncio
@@ -1376,7 +1386,11 @@ async def test_stream_complete_includes_retrieval_debug_when_opted_in():
             events.append(event)
 
     _, complete_data = _parse_sse_event(events[-2])
-    assert complete_data["retrieval_debug"] == transform_result.to_retrieval_debug()
+    debug = complete_data["retrieval_debug"]
+    for key, value in transform_result.to_retrieval_debug().items():
+        assert debug[key] == value
+    assert debug["effective_retrieval_query"] == transform_result.queries[0]
+    assert "effective_config" in debug
 
 
 @pytest.mark.asyncio
@@ -1429,7 +1443,11 @@ async def test_batch_result_includes_retrieval_debug_when_opted_in():
             debug_retrieval=True,
         )
 
-    assert results[0]["retrieval_debug"] == transform_result.to_retrieval_debug()
+    debug = results[0]["retrieval_debug"]
+    for key, value in transform_result.to_retrieval_debug().items():
+        assert debug[key] == value
+    assert debug["effective_retrieval_query"] == transform_result.queries[0]
+    assert "effective_config" in debug
 
 
 @pytest.mark.asyncio
@@ -1462,7 +1480,11 @@ async def test_batch_soft_error_includes_retrieval_debug_when_opted_in():
         )
 
     assert results[0]["status"] == "error"
-    assert results[0]["retrieval_debug"] == transform_result.to_retrieval_debug()
+    debug = results[0]["retrieval_debug"]
+    for key, value in transform_result.to_retrieval_debug().items():
+        assert debug[key] == value
+    assert debug["effective_retrieval_query"] == transform_result.queries[0]
+    assert "effective_config" in debug
 
 
 @pytest.mark.asyncio
