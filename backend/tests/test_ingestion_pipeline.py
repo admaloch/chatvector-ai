@@ -627,7 +627,7 @@ async def test_process_document_background_updates_chunk_progress_during_embeddi
     pipeline = IngestionPipeline(splitter_cls=_ManyChunkSplitter)
     embed_batch_sizes: list[int] = []
 
-    async def fake_get_embeddings(texts: list[str]) -> list[list[float]]:
+    async def fake_get_embeddings(texts: list[str], **kwargs) -> list[list[float]]:
         embed_batch_sizes.append(len(texts))
         return [[0.1, 0.2] for _ in texts]
 

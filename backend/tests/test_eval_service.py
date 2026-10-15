@@ -9,9 +9,10 @@ import pytest
 from core.config import config
 from db.base import ChunkMatch
 from services import eval_metrics
+from cli import cmd_eval
 from services.eval_config import EffectiveRetrievalConfig
-from services.eval_fixtures import load_dataset
-from services.eval_service import diff_arms, run_eval
+from services.eval_fixtures import EvalDataset, load_dataset
+from services.eval_service import EvalRunResult, diff_arms, run_eval
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "eval"
 
@@ -222,3 +223,68 @@ async def test_config_overrides_restored_after_run():
 
     assert config.HYBRID_RETRIEVAL_ENABLED == original_hybrid
     assert config.ENABLE_RERANKING == original_rerank
+
+
+def _empty_eval_result() -> EvalRunResult:
+    return EvalRunResult(
+        run_id="run",
+        timestamp="t",
+        tool_version="v",
+        dataset_name="d",
+        dataset_hash="h",
+        arms=[],
+    )
+
+
+async def _load_eval_arm(tmp_path, raw: dict):
+    arm_file = tmp_path / "arm.json"
+    arm_file.write_text(json.dumps(raw))
+    captured: dict = {}
+
+    async def fake_run(dataset, arms, **kwargs):
+        del dataset, kwargs
+        captured["arms"] = arms
+        return _empty_eval_result()
+
+    with (
+        patch("services.eval_fixtures.load_dataset", return_value=EvalDataset(name="d", queries=[])),
+        patch("services.eval_service.run_eval", new=fake_run),
+    ):
+        await cmd_eval(str(tmp_path / "dataset.json"), "dev", [5], [str(arm_file)], 5, None, False)
+    return captured["arms"][0]
+
+
+@pytest.mark.asyncio
+async def test_eval_arm_new_keys_do_not_require_legacy_names(tmp_path):
+    arm = await _load_eval_arm(
+        tmp_path,
+        {"label": "new-keys", "hybrid_enabled": True, "reranking_enabled": False},
+    )
+    assert arm.label == "new-keys"
+    assert arm.hybrid_retrieval_enabled is True
+    assert arm.enable_reranking is False
+
+
+@pytest.mark.asyncio
+async def test_eval_arm_legacy_keys_still_load(tmp_path):
+    arm = await _load_eval_arm(
+        tmp_path,
+        {"hybrid_retrieval_enabled": False, "enable_reranking": True},
+    )
+    assert arm.hybrid_retrieval_enabled is False
+    assert arm.enable_reranking is True
+
+
+@pytest.mark.asyncio
+async def test_eval_arm_new_keys_win_when_both_names_are_present(tmp_path):
+    arm = await _load_eval_arm(
+        tmp_path,
+        {
+            "hybrid_enabled": True,
+            "hybrid_retrieval_enabled": False,
+            "reranking_enabled": False,
+            "enable_reranking": True,
+        },
+    )
+    assert arm.hybrid_retrieval_enabled is True
+    assert arm.enable_reranking is False

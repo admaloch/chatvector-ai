@@ -227,10 +227,16 @@ async def cmd_eval(
             arms.append(
                 EffectiveRetrievalConfig(
                     label=raw.get("label", Path(raw_path).stem),
-                hybrid_retrieval_enabled=raw.get(
-                    "hybrid_enabled", raw["hybrid_retrieval_enabled"]
-                ),
-                enable_reranking=raw.get("reranking_enabled", raw["enable_reranking"]),
+                    hybrid_retrieval_enabled=(
+                        raw["hybrid_enabled"]
+                        if "hybrid_enabled" in raw
+                        else raw["hybrid_retrieval_enabled"]
+                    ),
+                    enable_reranking=(
+                        raw["reranking_enabled"]
+                        if "reranking_enabled" in raw
+                        else raw["enable_reranking"]
+                    ),
                     reranker_provider=raw.get("reranker_provider", "similarity"),
                     match_count=raw.get("match_count", match_count),
                     max_context_chars=raw.get(

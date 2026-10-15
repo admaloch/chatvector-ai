@@ -7,8 +7,12 @@ import pytest
 
 from core.auth import AuthContext
 from core.config import config
+from core.session import Session
 from db.base import SCORE_TYPE_HYBRID_RRF, SCORE_TYPE_VECTOR, ChunkMatch
+from request_utils import make_test_request
+from routes.chat import ChatRequest, chat
 from services.chat_service import (
+    _build_sources,
     answer_question_for_document,
     answer_question_stream_for_document,
     answer_questions_for_documents_batch,
@@ -16,6 +20,8 @@ from services.chat_service import (
 )
 from services.query_service import QueryTransformResult
 from services.retrieval_config import RetrievalProcessDefaults, resolve_retrieval_config
+
+_DOC_ID = "00000000-0000-0000-0000-000000000001"
 
 TEST_AUTH = AuthContext(tenant_id="dev")
 PHASE3_ORDER = ("chunk-a", "chunk-b", "chunk-c")
@@ -70,31 +76,45 @@ def _chat_patches(find_similar):
 
 @pytest.mark.asyncio
 async def test_omitted_retrieval_config_matches_phase3_chunk_order(pinned_phase3_env, passthrough_docs):
-    chunks = _baseline_chunks()
-    find_similar = AsyncMock(return_value=chunks)
+    """POST /chat with no retrieval config keeps the fixture chunk-id order.
+
+    PHASE3_ORDER is the vector-search baseline for this question and document.
+    The response is checked against that constant, not against a second call.
+    """
+    retrieved_ids: list[str] = []
+
+    def recording_sources(chunks):
+        retrieved_ids.extend(chunk.id for chunk in chunks)
+        return _build_sources(chunks)
+
+    find_similar = AsyncMock(return_value=_baseline_chunks())
     embed_patch, find_patch, answer_patch = _chat_patches(find_similar)
-
-    with embed_patch, find_patch, answer_patch:
-        omitted = await answer_question_for_document(
-            question="fixed question",
-            doc_id="doc-1",
+    with (
+        embed_patch,
+        find_patch,
+        answer_patch,
+        patch("services.chat_service._build_sources", new=recording_sources),
+        patch("routes.chat.db.get_document", new=AsyncMock(return_value={"id": _DOC_ID, "status": "completed"})),
+        patch("routes.chat.get_or_create_session", new=AsyncMock(return_value=Session(id="sess-phase3", tenant_id="dev"))),
+        patch("routes.chat.register_session_document", new=AsyncMock()),
+        patch("routes.chat.register_tenant_document"),
+        patch("db.get_session_history", new=AsyncMock(return_value=[])),
+        patch("db.store_chat_turn", new=AsyncMock()),
+    ):
+        response = await chat(
+            make_test_request("POST", "/chat"),
+            ChatRequest(question="fixed question", doc_id=_DOC_ID),
             auth=TEST_AUTH,
-            retrieval_fields={},
-        )
-        direct = await answer_question_for_document(
-            question="fixed question",
-            doc_id="doc-1",
-            auth=TEST_AUTH,
         )
 
-    omitted_ids = [source["chunk_index"] for source in omitted["sources"]]
-    direct_ids = [source["chunk_index"] for source in direct["sources"]]
-    assert omitted_ids == [0, 1, 2]
-    assert direct_ids == omitted_ids
-    assert omitted["sources"][0]["score_type"] == SCORE_TYPE_VECTOR
-    assert "hybrid_enabled" not in find_similar.await_args.kwargs
+    assert retrieved_ids == list(PHASE3_ORDER)
+    assert [source["chunk_index"] for source in response["sources"]] == [0, 1, 2]
+    assert all(source["score_type"] == SCORE_TYPE_VECTOR for source in response["sources"])
+    assert find_similar.await_args_list
+    assert all("hybrid_enabled" not in call.kwargs for call in find_similar.await_args_list)
     assert config.HYBRID_RETRIEVAL_ENABLED is False
     assert config.ENABLE_RERANKING is False
+    assert config.QUERY_TRANSFORMATION_ENABLED is False
 
 
 @pytest.mark.asyncio
@@ -163,16 +183,66 @@ async def test_reranking_request_changes_rerank_order(pinned_phase3_env, passthr
 
 @pytest.mark.asyncio
 async def test_hybrid_keyword_search_uses_effective_retrieval_query(pinned_phase3_env, passthrough_docs):
-    seen_queries: list[str] = []
+    """Rewrite changes which keyword chunk is selected.
 
-    async def fake_find(**kwargs):
-        seen_queries.append(kwargs.get("query_text"))
-        return _baseline_chunks()
+    The raw question matches raw-only. The rewritten query matches effective-only.
+    Hybrid search must return the rewritten match.
+    """
+    pytest.importorskip("pgvector")
+    from db.sqlalchemy_service import SQLAlchemyService
+
+    raw_question = "raw question about widgets"
+    effective_query = "effective keyword query"
+    raw_only = _chunk("raw-only", "widgets manual", index=0)
+    effective_only = _chunk("effective-only", "resolved standalone terms", index=1)
+    vector_only = _chunk("vector-only", "shared vector hit", index=2)
+    keyword_queries: list[str] = []
+
+    async def fake_keyword(session, doc_id, query_text, limit, tenant_id=None):
+        del session, doc_id, limit, tenant_id
+        keyword_queries.append(query_text)
+        if query_text == effective_query:
+            return [effective_only]
+        if query_text == raw_question:
+            return [raw_only]
+        return []
+
+    async def fake_vector(session, doc_id, query_embedding, limit, tenant_id=None):
+        del session, doc_id, query_embedding, limit, tenant_id
+        return [vector_only]
+
+    class _FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    service = SQLAlchemyService()
+    service._retrieval_semaphore = asyncio.Semaphore(10)
+    service._find_keyword_chunks = fake_keyword
+    service._find_vector_chunks = fake_vector
+    service.async_session = lambda: _FakeSession()
+
+    raw_hits = await service._find_keyword_chunks(None, "doc-1", raw_question, 5, tenant_id="dev")
+    assert [match.id for match in raw_hits] == ["raw-only"]
+    keyword_queries.clear()
+
+    async def find_similar(doc_id, query_embedding, match_count, *, tenant_id, session_id=None, query_text=None, hybrid_enabled=None):
+        return await service.find_similar_chunks(
+            doc_id,
+            query_embedding,
+            match_count,
+            tenant_id=tenant_id,
+            session_id=session_id,
+            query_text=query_text,
+            hybrid_enabled=hybrid_enabled,
+        )
 
     async def fake_rewrite(question: str) -> str:
-        return "effective keyword query"
+        del question
+        return effective_query
 
-    find_similar = AsyncMock(side_effect=fake_find)
     embed_patch, find_patch, answer_patch = _chat_patches(find_similar)
     with (
         embed_patch,
@@ -180,8 +250,8 @@ async def test_hybrid_keyword_search_uses_effective_retrieval_query(pinned_phase
         answer_patch,
         patch("services.query_service.rewrite_query", new=fake_rewrite),
     ):
-        await answer_question_for_document(
-            question="raw question about widgets",
+        result = await answer_question_for_document(
+            question=raw_question,
             doc_id="doc-1",
             auth=TEST_AUTH,
             retrieval_fields={
@@ -190,9 +260,11 @@ async def test_hybrid_keyword_search_uses_effective_retrieval_query(pinned_phase
             },
         )
 
-    assert seen_queries == ["effective keyword query"]
-    assert "raw question about widgets" not in seen_queries
-    assert find_similar.await_args.kwargs["hybrid_enabled"] is True
+    selected = {source["chunk_index"] for source in result["sources"]}
+    assert keyword_queries == [effective_query]
+    assert 1 in selected
+    assert 0 not in selected
+    assert config.HYBRID_RETRIEVAL_ENABLED is False
 
 
 @pytest.mark.asyncio
