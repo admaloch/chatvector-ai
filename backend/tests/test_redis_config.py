@@ -46,9 +46,9 @@ async def test_redis_enqueue_does_not_block_event_loop():
     service = RedisIngestionQueue.__new__(RedisIngestionQueue)
     service._rq_queue = MagicMock()
 
-    def slow_sync_enqueue(_self, job: QueueJob) -> int:
+    def slow_sync_enqueue(_self, job: QueueJob) -> tuple[int, str]:
         time.sleep(0.25)
-        return 1
+        return 1, f"file:///tmp/{job.doc_id}"
 
     order: list[str] = []
 

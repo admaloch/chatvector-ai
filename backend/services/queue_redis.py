@@ -518,7 +518,7 @@ class RedisIngestionQueue(BaseIngestionQueue):
     # Public API
     # ------------------------------------------------------------------
 
-    def _sync_enqueue(self, job: QueueJob) -> int:
+    def _sync_enqueue(self, job: QueueJob) -> tuple[int, str]:
         """Blocking RQ enqueue + artifact write (runs off the event loop)."""
         current_size = len(self._rq_queue)
         if current_size >= config.QUEUE_MAX_SIZE:
