@@ -681,4 +681,5 @@ The current architecture supports these extensions without major refactors:
 - ~~Authentication & multi-tenancy~~ (done — Bearer API-key auth, tenant isolation, per-tenant rate limits)
 - ~~Python SDK parity~~ (done — sessions, streaming, retrieval scopes)
 - **Specialized pipelines** — legal, academic, code document handling
+- **Knowledge graph / GraphRAG overlay (experimental)** — default off (`ENABLE_GRAPH_RETRIEVAL=false`); see [backend/rfcs/graph-retrieval.md](backend/rfcs/graph-retrieval.md)
 - **Read replicas** — supported by existing DB abstraction layer
