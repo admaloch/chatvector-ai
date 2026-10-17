@@ -41,6 +41,12 @@ logger = logging.getLogger(__name__)
 # Full-text config matches migration 004 (to_tsvector / plainto_tsquery).
 _FTS_LANGUAGE = "english"
 
+# Staged replacement (migration 014). These live in documents.status_detail and
+# never affect the ``status == "completed"`` retrieval gate.
+REPLACEMENT_IN_PROGRESS = "replacement_in_progress"
+REPLACEMENT_FAILED = "replacement_failed"
+_REPLACEABLE_STATUSES = ("completed", "failed")
+
 
 def _is_missing_content_tsv_error(exc: BaseException) -> bool:
     """True when hybrid migration 004 has not been applied."""
@@ -70,6 +76,7 @@ def _document_status_payload(document: Document) -> dict:
     return {
         "document_id": str(document.id),
         "status": document.status,
+        "status_detail": document.status_detail,
         "chunks": document.chunks,
         "error": document.error,
         "metadata": document.doc_metadata or {},
@@ -401,6 +408,134 @@ class SQLAlchemyService(DatabaseService):
                 return None
             return _document_status_payload(document)
 
+    async def begin_document_replacement(self, doc_id: str, tenant_id: str) -> str:
+        tenant_id = require_tenant_id(tenant_id, method="begin_document_replacement")
+        async with self.async_session() as session:
+            async with session.begin():
+                # Row lock serialises concurrent replace requests: exactly one
+                # caller observes "started", the rest see "in_progress".
+                result = await session.execute(
+                    select(Document)
+                    .where(
+                        Document.id == doc_id,
+                        Document.tenant_id == tenant_id,
+                    )
+                    .with_for_update()
+                )
+                document = result.scalar_one_or_none()
+                if document is None:
+                    return "not_found"
+                if document.status_detail == REPLACEMENT_IN_PROGRESS:
+                    return "in_progress"
+                if document.status not in _REPLACEABLE_STATUSES:
+                    return "not_eligible"
+
+                document.status_detail = REPLACEMENT_IN_PROGRESS
+                if document.status == "completed":
+                    # Drop any stale replacement_failed error; a failed document
+                    # keeps the error that explains why it has no content.
+                    document.error = None
+                document.updated_at = datetime.utcnow()
+            logger.info(f"[PostgreSQL] Began replacement for document {doc_id}")
+            return "started"
+
+    async def set_document_status_detail(
+        self,
+        doc_id: str,
+        status_detail: Optional[str],
+        tenant_id: str,
+        *,
+        error: dict | None = None,
+    ) -> None:
+        tenant_id = require_tenant_id(tenant_id, method="set_document_status_detail")
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(Document).where(
+                    Document.id == doc_id,
+                    Document.tenant_id == tenant_id,
+                )
+            )
+            document = result.scalar_one_or_none()
+            if not document:
+                logger.warning(
+                    "[PostgreSQL] set_document_status_detail: document %s not found for tenant %s",
+                    doc_id,
+                    tenant_id,
+                )
+                return
+
+            document.status_detail = status_detail
+            document.error = error
+            document.updated_at = datetime.utcnow()
+            await session.commit()
+            logger.debug(f"[PostgreSQL] Set status_detail for {doc_id} -> {status_detail}")
+
+    async def replace_document_content(
+        self,
+        doc_id: str,
+        chunk_records: list[ChunkRecord],
+        tenant_id: str,
+        *,
+        file_name: str,
+        metadata: dict | None = None,
+    ) -> list[str]:
+        tenant_id = require_tenant_id(tenant_id, method="replace_document_content")
+        async with self.async_session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    select(Document)
+                    .where(
+                        Document.id == doc_id,
+                        Document.tenant_id == tenant_id,
+                    )
+                    .with_for_update()
+                )
+                document = result.scalar_one_or_none()
+                if document is None:
+                    raise ValueError(
+                        f"replace_document_content: document {doc_id} not found for tenant {tenant_id}"
+                    )
+
+                await session.execute(
+                    delete(DocumentChunk).where(DocumentChunk.document_id == doc_id)
+                )
+
+                chunk_ids: list[str] = []
+                for record in chunk_records:
+                    chunk_id = str(uuid.uuid4())
+                    chunk_ids.append(chunk_id)
+                    session.add(
+                        DocumentChunk(
+                            id=chunk_id,
+                            document_id=doc_id,
+                            chunk_text=record.chunk_text,
+                            embedding=record.embedding,
+                            chunk_index=record.chunk_index,
+                            page_number=record.page_number,
+                            character_offset_start=record.character_offset_start,
+                            character_offset_end=record.character_offset_end,
+                        )
+                    )
+
+                document.file_name = file_name
+                if metadata is not None:
+                    document.doc_metadata = metadata
+                document.status = "completed"
+                document.status_detail = None
+                document.error = None
+                document.chunks = {
+                    "total": len(chunk_records),
+                    "processed": len(chunk_records),
+                }
+                document.updated_at = datetime.utcnow()
+
+            logger.info(
+                "[PostgreSQL] Replaced content for document %s (%s chunks)",
+                doc_id,
+                len(chunk_ids),
+            )
+            return chunk_ids
+
     async def delete_document_chunks(self, doc_id: str, tenant_id: str) -> None:
         tenant_id = require_tenant_id(tenant_id, method="delete_document_chunks")
         async with self.async_session() as session:
@@ -477,7 +612,34 @@ class SQLAlchemyService(DatabaseService):
                 await session.commit()
 
             logger.info(f"[PostgreSQL] Marked {len(doc_ids)} stale document(s) as failed on startup")
-            return doc_ids
+
+            # An in-flight replacement cannot survive a restart. Leave `status` and
+            # the active chunks alone so the prior content stays retrievable, and
+            # clear the in-progress marker so the document can be replaced again.
+            replacement_rows = await session.execute(
+                select(Document.id).where(
+                    Document.status_detail == REPLACEMENT_IN_PROGRESS
+                )
+            )
+            replacement_ids = {str(row[0]) for row in replacement_rows}
+            if replacement_ids:
+                await session.execute(
+                    sql_update(Document)
+                    .where(Document.id.in_(replacement_ids))
+                    .values(
+                        status_detail=REPLACEMENT_FAILED,
+                        error={
+                            "stage": "server_restart",
+                            "message": "Server restarted while document replacement was being processed.",
+                        },
+                        updated_at=datetime.utcnow(),
+                    )
+                )
+                await session.commit()
+                logger.info(
+                    f"[PostgreSQL] Reset {len(replacement_ids)} stale replacement(s) on startup"
+                )
+            return doc_ids | replacement_ids
 
     def _chunk_match_from_row(
         self,
@@ -763,8 +925,9 @@ class SQLAlchemyService(DatabaseService):
                 .where(Document.tenant_id == tenant_id)
                 .order_by(Document.created_at.desc())
             )
-            return [
-                {
+            summaries = []
+            for document in result.scalars().all():
+                summary = {
                     "document_id": str(document.id),
                     "file_name": document.file_name,
                     "status": document.status,
@@ -772,8 +935,10 @@ class SQLAlchemyService(DatabaseService):
                     "created_at": str(document.created_at) if document.created_at else None,
                     "updated_at": str(document.updated_at) if document.updated_at else None,
                 }
-                for document in result.scalars().all()
-            ]
+                if document.status_detail is not None:
+                    summary["status_detail"] = document.status_detail
+                summaries.append(summary)
+            return summaries
 
     async def ping_and_count_tenant_documents(
         self, tenant_id: str

@@ -242,6 +242,80 @@ async def get_document_status(doc_id: str, tenant_id: str) -> dict | None:
     )
 
 
+async def begin_document_replacement(doc_id: str, tenant_id: str) -> str:
+    tenant_id = require_tenant_id(tenant_id, method="begin_document_replacement")
+    service = get_db_service()
+
+    async def _begin():
+        return await service.begin_document_replacement(doc_id, tenant_id=tenant_id)
+
+    return await retry_async(
+        _begin,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=0.5,
+        backoff=2.0,
+        timeout=get_default_db_timeout_sec(),
+        retry_on_timeout=False,
+        func_name=f"{service.__class__.__name__}.begin_document_replacement",
+    )
+
+
+async def set_document_status_detail(
+    doc_id: str,
+    status_detail: str | None,
+    tenant_id: str,
+    *,
+    error: dict | None = None,
+) -> None:
+    tenant_id = require_tenant_id(tenant_id, method="set_document_status_detail")
+    service = get_db_service()
+
+    async def _set():
+        await service.set_document_status_detail(
+            doc_id, status_detail, tenant_id=tenant_id, error=error
+        )
+
+    await retry_async(
+        _set,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=0.5,
+        backoff=2.0,
+        timeout=get_default_db_timeout_sec(),
+        func_name=f"{service.__class__.__name__}.set_document_status_detail",
+    )
+
+
+async def replace_document_content(
+    doc_id: str,
+    chunk_records: list[ChunkRecord],
+    tenant_id: str,
+    *,
+    file_name: str,
+    metadata: dict | None = None,
+) -> list[str]:
+    tenant_id = require_tenant_id(tenant_id, method="replace_document_content")
+    service = get_db_service()
+
+    async def _replace():
+        return await service.replace_document_content(
+            doc_id,
+            chunk_records,
+            tenant_id=tenant_id,
+            file_name=file_name,
+            metadata=metadata,
+        )
+
+    return await retry_async(
+        _replace,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=DEFAULT_BASE_DELAY,
+        backoff=DEFAULT_BACKOFF,
+        timeout=get_default_db_timeout_sec(),
+        retry_on_timeout=False,
+        func_name=f"{service.__class__.__name__}.replace_document_content",
+    )
+
+
 async def delete_document_chunks(doc_id: str, tenant_id: str) -> None:
     tenant_id = require_tenant_id(tenant_id, method="delete_document_chunks")
     service = get_db_service()
@@ -498,6 +572,9 @@ __all__ = [
     "filter_document_ids_by_metadata",
     "update_document_status",
     "get_document_status",
+    "begin_document_replacement",
+    "set_document_status_detail",
+    "replace_document_content",
     "delete_document_chunks",
     "delete_document",
     "list_applied_migrations",
