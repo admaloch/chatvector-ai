@@ -98,7 +98,7 @@ curl -H "Authorization: Bearer cv_live_..." http://localhost:8000/status
 
 === "Frontend demo"
 
-    Open http://localhost:3000, upload a PDF or text file, wait for ingestion to finish, then ask a question in the chat panel.
+    Open http://localhost:3000, upload a PDF, plain-text, or Markdown (`.md`) file, wait for ingestion to finish, then ask a question in the chat panel.
 
 ## Sessions and retrieval scopes
 

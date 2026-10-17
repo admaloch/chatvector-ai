@@ -426,6 +426,10 @@ rejected at startup when `allow_credentials=True`.
   components, control characters, and caps length
 - PDF validated against `%PDF-` magic bytes
 - TXT validated as UTF-8 or cp1254 before processing
+- Markdown (`.md`, `text/markdown` / `text/x-markdown`) requires a matching
+  extension and UTF-8 or cp1254 encoding; embedded HTML is reduced to visible
+  text (no script execution); link targets are not fetched (`[label](url)` →
+  `label` in extracted text)
 
 **Input validation** — Pydantic field bounds on all chat endpoints:
 `max_length=2000` on questions, `le=20` on `match_count`, `max_length=20`

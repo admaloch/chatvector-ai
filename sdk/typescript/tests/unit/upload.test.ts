@@ -101,11 +101,16 @@ describe("uploadDocument", () => {
       data: new Uint8Array([65]),
       fileName: "NOTES.TXT",
     });
+    const markdown = await createUploadFormData({
+      data: new Uint8Array([35]),
+      fileName: "Guide.MD",
+    });
     const unknown = await createUploadFormData({
       data: new Uint8Array([1]),
       fileName: "data.unknown",
     });
     expect((text.get("file") as File).type).toBe("text/plain");
+    expect((markdown.get("file") as File).type).toBe("text/markdown");
     expect((unknown.get("file") as File).type).toBe(
       "application/octet-stream",
     );
