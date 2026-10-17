@@ -1,8 +1,10 @@
 import asyncio
 import io
 import logging
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 
 from fastapi import UploadFile
 from pypdf import PdfReader
@@ -10,6 +12,13 @@ from pypdf import PdfReader
 from services.text_cleaning_service import clean_text
 
 logger = logging.getLogger(__name__)
+
+# Accepted Markdown MIME types (normalized, no parameters).
+MARKDOWN_CONTENT_TYPES = frozenset({"text/markdown", "text/x-markdown"})
+MARKDOWN_FILENAME_SUFFIXES = (".md", ".markdown")
+
+# Inline/reference Markdown links become visible link text only; URLs are not fetched.
+_MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\([^)]*\)")
 
 # Separator between cleaned PDF pages in the assembled chunking string.
 _PAGE_SEPARATOR = " "
@@ -125,6 +134,87 @@ class PdfExtractor(DocumentExtractor):
             raise DocumentExtractionError("Failed to parse PDF content.") from e
 
 
+class _HTMLTextExtractor(HTMLParser):
+    """Collect visible text from HTML fragments; script/style bodies are omitted."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in ("script", "style"):
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in ("script", "style") and self._skip_depth:
+            self._skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth == 0:
+            self._parts.append(data)
+
+    def get_text(self) -> str:
+        return "".join(self._parts)
+
+
+def _strip_embedded_html(text: str) -> str:
+    """
+    Remove HTML markup from Markdown payloads without executing scripts.
+
+    Tag contents are kept as plain text; ``script``/``style`` bodies are dropped.
+    """
+    if "<" not in text:
+        return text
+    parser = _HTMLTextExtractor()
+    try:
+        parser.feed(text)
+        parser.close()
+    except Exception:
+        return re.sub(r"<[^>]+>", "", text)
+    return parser.get_text()
+
+
+def _normalize_markdown_links(text: str) -> str:
+    return _MARKDOWN_LINK_PATTERN.sub(r"\1", text)
+
+
+def is_markdown_content_type(content_type: str | None) -> bool:
+    return _normalize_content_type(content_type) in MARKDOWN_CONTENT_TYPES
+
+
+def is_markdown_filename(filename: str) -> bool:
+    lower = (filename or "").lower()
+    return any(lower.endswith(suffix) for suffix in MARKDOWN_FILENAME_SUFFIXES)
+
+
+class MarkdownExtractor(DocumentExtractor):
+    """
+    Markdown extraction preserving headings, lists, and code fences as text.
+
+    Embedded HTML is reduced to visible text (no script execution). Link targets
+    are not fetched; ``[label](url)`` becomes ``label`` in extracted text.
+    """
+
+    def extract(self, contents: bytes, *, filename: str = "") -> ExtractedDocument:
+        try:
+            file_text = contents.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                file_text = contents.decode("cp1254")
+            except UnicodeDecodeError as e:
+                logger.error(f"Failed to decode Markdown file {filename}: {e}")
+                raise DocumentExtractionError("Failed to decode Markdown content.") from e
+
+        if "\x00" in file_text:
+            logger.error(f"Markdown file {filename} contains null bytes")
+            raise DocumentExtractionError("Failed to parse Markdown content.")
+
+        file_text = _normalize_markdown_links(_strip_embedded_html(file_text))
+        logger.info(f"Extracted {len(file_text)} characters from Markdown file")
+        return ExtractedDocument(text=file_text)
+
+
 class PlainTextExtractor(DocumentExtractor):
     """Plain-text extraction (utf-8, cp1254 fallback) with no page boundaries."""
 
@@ -146,6 +236,8 @@ class PlainTextExtractor(DocumentExtractor):
 _EXTRACTOR_REGISTRY: dict[str, type[DocumentExtractor]] = {
     "application/pdf": PdfExtractor,
     "text/plain": PlainTextExtractor,
+    "text/markdown": MarkdownExtractor,
+    "text/x-markdown": MarkdownExtractor,
 }
 
 
@@ -194,7 +286,7 @@ def _extract_text_with_metadata_sync(
 
 async def extract_text_from_file(file: UploadFile, contents: bytes | None = None) -> str:
     """
-    Extract text from a PDF or TXT UploadFile.
+    Extract text from a PDF, TXT, or Markdown UploadFile.
     Raises ValueError for unsupported file types or unreadable payloads.
     """
     text, _ = await extract_text_with_metadata(file, contents)
@@ -206,7 +298,7 @@ async def extract_text_with_metadata(
     contents: bytes | None = None,
 ) -> tuple[str, list[PageBoundary]]:
     """
-    Extract text and per-page boundary information from a PDF or TXT UploadFile.
+    Extract text and per-page boundary information from a PDF, TXT, or Markdown UploadFile.
 
     Returns:
         (full_text, page_boundaries) where page_boundaries is populated for PDFs

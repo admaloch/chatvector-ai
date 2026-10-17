@@ -77,8 +77,11 @@ from db.base import ChunkRecord
 from db.tenant_scope import require_tenant_id
 from services.embedding_service import get_embeddings
 from services.extraction_service import (
+    MARKDOWN_CONTENT_TYPES,
     PageBoundary,
     extract_text_with_metadata,
+    is_markdown_content_type,
+    is_markdown_filename,
     prepare_extracted_document_for_chunking,
 )
 
@@ -87,7 +90,8 @@ logger = logging.getLogger(__name__)
 # Embed this many chunks per API call so status polling can report progress.
 _EMBEDDING_PROGRESS_BATCH_SIZE = 10
 
-ALLOWED_UPLOAD_TYPES = {"application/pdf", "text/plain"}
+ALLOWED_UPLOAD_TYPES = {"application/pdf", "text/plain", *MARKDOWN_CONTENT_TYPES}
+_SUPPORTED_UPLOAD_MESSAGE = "Only PDF, TXT, and Markdown (.md) files are supported."
 HEADING_PATTERN = re.compile(r"^\s{0,3}#{1,6}\s+(?P<heading>.+?)\s*$")
 FALLBACK_SENTENCE_PATTERN = re.compile(r".+?(?:[.!?](?=\s+|$)|$)", re.DOTALL)
 
@@ -765,7 +769,25 @@ class IngestionPipeline:
                 status_code=400,
                 code="invalid_file_type",
                 stage=stage,
-                message="Only PDF and TXT files are supported.",
+                message=_SUPPORTED_UPLOAD_MESSAGE,
+            )
+
+        filename = file.filename or ""
+        markdown_mime = is_markdown_content_type(file.content_type)
+        markdown_ext = is_markdown_filename(filename)
+        if markdown_mime and not markdown_ext:
+            raise UploadPipelineError(
+                status_code=400,
+                code="invalid_file_content",
+                stage=stage,
+                message="File extension does not match the declared Markdown type.",
+            )
+        if markdown_ext and not markdown_mime:
+            raise UploadPipelineError(
+                status_code=400,
+                code="invalid_file_content",
+                stage=stage,
+                message="File content type does not match the Markdown extension.",
             )
 
         if not file_bytes:
@@ -794,7 +816,7 @@ class IngestionPipeline:
                 message="File content does not match the declared PDF type.",
             )
 
-        if file.content_type == "text/plain":
+        if file.content_type == "text/plain" or markdown_mime:
             try:
                 try:
                     file_bytes.decode("utf-8")
