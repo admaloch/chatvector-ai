@@ -26,7 +26,13 @@ from sqlalchemy.orm import sessionmaker
 from core.models import Document, DocumentChunk, SessionRecord, SessionDocument
 from core.config import config
 from core.session import Session
-from db.base import ChunkMatch, ChunkRecord, DatabaseService
+from db.base import (
+    REPLACEMENT_FAILED,
+    REPLACEMENT_IN_PROGRESS,
+    ChunkMatch,
+    ChunkRecord,
+    DatabaseService,
+)
 from db.migration_ledger import MigrationLedgerSchemaError
 from db.tenant_scope import require_tenant_id
 from services.retrieval_service import (
@@ -41,10 +47,7 @@ logger = logging.getLogger(__name__)
 # Full-text config matches migration 004 (to_tsvector / plainto_tsquery).
 _FTS_LANGUAGE = "english"
 
-# Staged replacement (migration 014). These live in documents.status_detail and
-# never affect the ``status == "completed"`` retrieval gate.
-REPLACEMENT_IN_PROGRESS = "replacement_in_progress"
-REPLACEMENT_FAILED = "replacement_failed"
+# Only completed/failed documents may be replaced (staged replacement, migration 014).
 _REPLACEABLE_STATUSES = ("completed", "failed")
 
 

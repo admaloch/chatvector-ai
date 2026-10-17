@@ -75,7 +75,7 @@ except ImportError:  # pragma: no cover - lightweight fallback for constrained e
 
 import db
 from core.config import config
-from db.base import ChunkRecord
+from db.base import REPLACEMENT_FAILED, ChunkRecord
 from db.tenant_scope import require_tenant_id
 from services.embedding_service import get_embeddings
 from services.docx_extraction import (
@@ -916,17 +916,19 @@ class IngestionPipeline:
         tenant_id: str,
         langchain_docs: list[LangChainDocument],
         rate_limiter=None,
+        report_progress: bool = True,
     ) -> list[list[float]]:
         total = len(langchain_docs)
         texts = [doc.page_content for doc in langchain_docs]
         embeddings: list[list[float]] = []
 
-        await self._update_status(
-            doc_id=doc_id,
-            status="embedding",
-            chunks={"total": total, "processed": 0},
-            tenant_id=tenant_id,
-        )
+        if report_progress:
+            await self._update_status(
+                doc_id=doc_id,
+                status="embedding",
+                chunks={"total": total, "processed": 0},
+                tenant_id=tenant_id,
+            )
 
         for start in range(0, total, _EMBEDDING_PROGRESS_BATCH_SIZE):
             batch_texts = texts[start : start + _EMBEDDING_PROGRESS_BATCH_SIZE]
@@ -935,12 +937,13 @@ class IngestionPipeline:
             batch_embeddings = await get_embeddings(batch_texts, tenant_id=tenant_id)
             embeddings.extend(batch_embeddings)
             processed = start + len(batch_texts)
-            await self._update_status(
-                doc_id=doc_id,
-                status="embedding",
-                chunks={"total": total, "processed": processed},
-                tenant_id=tenant_id,
-            )
+            if report_progress:
+                await self._update_status(
+                    doc_id=doc_id,
+                    status="embedding",
+                    chunks={"total": total, "processed": processed},
+                    tenant_id=tenant_id,
+                )
 
         return embeddings
 
@@ -968,9 +971,24 @@ class IngestionPipeline:
         stage: str,
         exc: Exception,
         tenant_id: str,
+        replace: bool = False,
     ) -> None:
         tenant_id = require_tenant_id(tenant_id, method="delete_document_chunks")
         error = _classify_ingestion_error(exc, stage)
+
+        if replace:
+            # The active chunks and `status` are the last known-good content:
+            # record the failure in status_detail and leave both untouched.
+            try:
+                await db.set_document_status_detail(
+                    doc_id, REPLACEMENT_FAILED, tenant_id=tenant_id, error=error
+                )
+            except Exception as status_error:
+                logger.error(
+                    f"Failed to record replacement failure for document {doc_id}: {status_error}"
+                )
+            return
+
         try:
             await self._update_status(
                 doc_id=doc_id,
@@ -1114,6 +1132,8 @@ class IngestionPipeline:
         file_bytes: bytes,
         tenant_id: str,
         rate_limiter=None,
+        replace: bool = False,
+        metadata: dict | None = None,
     ) -> None:
         tenant_id = require_tenant_id(tenant_id, method="update_document_status")
         """
@@ -1122,13 +1142,20 @@ class IngestionPipeline:
 
         Called exclusively by background workers; raises on unrecoverable error
         so the worker can apply retry / DLQ logic.
+
+        With ``replace=True`` the document already holds completed content that
+        must stay retrievable: the new chunks and embeddings are staged in
+        memory, ``status`` is never changed mid-flight, and the active chunk
+        set is swapped in one transaction (``db.replace_document_content``) only
+        after every stage succeeds. Failures leave the active content untouched.
         """
         safe_filename = _sanitize_filename(file_name)
         file_meta = _FileMetadata(content_type=content_type, filename=safe_filename)
         stage = "extracting"
 
         try:
-            await self._update_status(doc_id=doc_id, status="extracting", tenant_id=tenant_id)
+            if not replace:
+                await self._update_status(doc_id=doc_id, status="extracting", tenant_id=tenant_id)
             file_text, page_boundaries = await extract_text_with_metadata(file_meta, file_bytes)  # type: ignore[arg-type]
             file_text, page_boundaries = prepare_extracted_document_for_chunking(
                 file_text, page_boundaries
@@ -1144,7 +1171,8 @@ class IngestionPipeline:
                 )
 
             stage = "chunking"
-            await self._update_status(doc_id=doc_id, status="chunking", tenant_id=tenant_id)
+            if not replace:
+                await self._update_status(doc_id=doc_id, status="chunking", tenant_id=tenant_id)
             langchain_docs = await asyncio.to_thread(
                 self._chunk_document_text,
                 file_text,
@@ -1167,6 +1195,7 @@ class IngestionPipeline:
                 tenant_id=tenant_id,
                 langchain_docs=langchain_docs,
                 rate_limiter=rate_limiter,
+                report_progress=not replace,
             )
 
             if len(embeddings) != len(langchain_docs):
@@ -1179,16 +1208,27 @@ class IngestionPipeline:
                 )
 
             stage = "storing"
-            await self._update_status(doc_id=doc_id, status="storing", tenant_id=tenant_id)
             chunk_records = _build_chunk_records(langchain_docs, embeddings, page_boundaries)
-            chunk_ids = await db.store_chunks_with_embeddings(doc_id, chunk_records, tenant_id=tenant_id)
+            if replace:
+                # Logical cutover: one transaction swaps the active chunk set,
+                # file_name/metadata, and clears status_detail.
+                chunk_ids = await db.replace_document_content(
+                    doc_id,
+                    chunk_records,
+                    tenant_id=tenant_id,
+                    file_name=safe_filename,
+                    metadata=metadata,
+                )
+            else:
+                await self._update_status(doc_id=doc_id, status="storing", tenant_id=tenant_id)
+                chunk_ids = await db.store_chunks_with_embeddings(doc_id, chunk_records, tenant_id=tenant_id)
 
-            await self._update_status(
-                doc_id=doc_id,
-                status="completed",
-                chunks={"total": len(langchain_docs), "processed": len(chunk_ids)},
-                tenant_id=tenant_id,
-            )
+                await self._update_status(
+                    doc_id=doc_id,
+                    status="completed",
+                    chunks={"total": len(langchain_docs), "processed": len(chunk_ids)},
+                    tenant_id=tenant_id,
+                )
 
             logger.info(
                 f"Background processing complete: {len(chunk_ids)} chunks "
@@ -1196,7 +1236,9 @@ class IngestionPipeline:
             )
 
         except UploadPipelineError as e:
-            await self._handle_error(doc_id=doc_id, stage=e.stage, exc=e, tenant_id=tenant_id)
+            await self._handle_error(
+                doc_id=doc_id, stage=e.stage, exc=e, tenant_id=tenant_id, replace=replace
+            )
             logger.warning(
                 f"Background pipeline failed at stage={e.stage} "
                 f"for document {doc_id}: {e.message}"
@@ -1204,7 +1246,9 @@ class IngestionPipeline:
             raise
 
         except Exception as e:
-            await self._handle_error(doc_id=doc_id, stage=stage, exc=e, tenant_id=tenant_id)
+            await self._handle_error(
+                doc_id=doc_id, stage=stage, exc=e, tenant_id=tenant_id, replace=replace
+            )
             logger.error(
                 f"Background pipeline unexpected error at stage={stage} "
                 f"for document {doc_id}: {e}"

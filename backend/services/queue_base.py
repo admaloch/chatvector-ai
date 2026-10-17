@@ -34,6 +34,10 @@ class QueueJob:
     enqueued_at: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
+    # Staged replacement of an already-completed document (POST /upload with
+    # replace_document_id). ``metadata`` is applied at cutover only when not None.
+    replace: bool = False
+    metadata: Optional[dict] = None
 
 
 @dataclass

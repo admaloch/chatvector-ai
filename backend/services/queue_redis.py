@@ -41,6 +41,7 @@ from rq import SimpleWorker
 from rq.job import Job as RQJob
 
 from core.config import config, redis_connection_kwargs
+from db.base import REPLACEMENT_FAILED, REPLACEMENT_IN_PROGRESS
 from utils.url_display import safe_url_display
 from services.queue_base import (
     BaseIngestionQueue,
@@ -95,6 +96,8 @@ def _execute_job(
     temp_file_path: str,
     attempt: int,
     tenant_id: Optional[str] = None,
+    replace: bool = False,
+    metadata: Optional[dict] = None,
 ) -> None:
     """
     Synchronous entry point invoked by RQ workers.
@@ -102,7 +105,8 @@ def _execute_job(
     """
     import asyncio
     asyncio.run(_async_execute_job(
-        doc_id, file_name, content_type, temp_file_path, attempt, tenant_id
+        doc_id, file_name, content_type, temp_file_path, attempt, tenant_id,
+        replace, metadata,
     ))
 
 
@@ -113,6 +117,8 @@ async def _async_execute_job(
     temp_file_path: str,
     attempt: int,
     tenant_id: Optional[str] = None,
+    replace: bool = False,
+    metadata: Optional[dict] = None,
 ) -> None:
     """Async bridge that replicates the retry / DLQ logic from AsyncioIngestionQueue."""
     import db as db_module
@@ -127,12 +133,20 @@ async def _async_execute_job(
             logger.error("Temp file missing for doc %s", doc_id)
             error_payload = _job_payload_missing_error()
             try:
-                await db_module.update_document_status(
-                    doc_id=doc_id,
-                    status="failed",
-                    error=error_payload,
-                    tenant_id=tenant_id,
-                )
+                if replace:
+                    await db_module.set_document_status_detail(
+                        doc_id,
+                        REPLACEMENT_FAILED,
+                        tenant_id=tenant_id,
+                        error=error_payload,
+                    )
+                else:
+                    await db_module.update_document_status(
+                        doc_id=doc_id,
+                        status="failed",
+                        error=error_payload,
+                        tenant_id=tenant_id,
+                    )
             except Exception:
                 logger.exception("Failed to mark document %s as failed", doc_id)
             _push_dlq_entry(DLQEntry(
@@ -150,17 +164,26 @@ async def _async_execute_job(
         except OSError as exc:
             error_msg = f"Cannot read upload payload for doc {doc_id}: {exc}"
             logger.error(error_msg)
+            unreadable_error = {
+                "code": "job_payload_unreadable",
+                "stage": "queued",
+                "message": JOB_PAYLOAD_MISSING_USER_MESSAGE,
+            }
             try:
-                await db_module.update_document_status(
-                    doc_id=doc_id,
-                    status="failed",
-                    error={
-                        "code": "job_payload_unreadable",
-                        "stage": "queued",
-                        "message": JOB_PAYLOAD_MISSING_USER_MESSAGE,
-                    },
-                    tenant_id=tenant_id,
-                )
+                if replace:
+                    await db_module.set_document_status_detail(
+                        doc_id,
+                        REPLACEMENT_FAILED,
+                        tenant_id=tenant_id,
+                        error=unreadable_error,
+                    )
+                else:
+                    await db_module.update_document_status(
+                        doc_id=doc_id,
+                        status="failed",
+                        error=unreadable_error,
+                        tenant_id=tenant_id,
+                    )
             except Exception:
                 logger.exception("Failed to mark document %s as failed", doc_id)
             _push_dlq_entry(DLQEntry(
@@ -184,6 +207,8 @@ async def _async_execute_job(
                 file_bytes=file_bytes,
                 tenant_id=tenant_id,
                 rate_limiter=rate_limiter,
+                replace=replace,
+                metadata=metadata,
             )
             _cleanup_temp_file(temp_path)
         except Exception as exc:
@@ -230,9 +255,15 @@ async def _async_execute_job(
                     doc_id, next_attempt, delay, exc,
                 )
                 try:
-                    await db_module.update_document_status(
-                        doc_id=doc_id, status="retrying", tenant_id=tenant_id,
-                    )
+                    if replace:
+                        # Keep `status` (and the retrievable chunks) untouched.
+                        await db_module.set_document_status_detail(
+                            doc_id, REPLACEMENT_IN_PROGRESS, tenant_id=tenant_id,
+                        )
+                    else:
+                        await db_module.update_document_status(
+                            doc_id=doc_id, status="retrying", tenant_id=tenant_id,
+                        )
                 except Exception as status_err:
                     logger.error(
                         "Failed to set retrying status for %s: %s",
@@ -250,15 +281,26 @@ async def _async_execute_job(
                         error_msg,
                     )
                     try:
-                        await db_module.update_document_status(
-                            doc_id=doc_id,
-                            status="failed",
-                            tenant_id=tenant_id,
-                            error={
-                                "stage": "queued",
-                                "message": error_msg,
-                            },
-                        )
+                        if replace:
+                            await db_module.set_document_status_detail(
+                                doc_id,
+                                REPLACEMENT_FAILED,
+                                tenant_id=tenant_id,
+                                error={
+                                    "stage": "queued",
+                                    "message": error_msg,
+                                },
+                            )
+                        else:
+                            await db_module.update_document_status(
+                                doc_id=doc_id,
+                                status="failed",
+                                tenant_id=tenant_id,
+                                error={
+                                    "stage": "queued",
+                                    "message": error_msg,
+                                },
+                            )
                     except Exception as status_err:
                         logger.error(
                             "Failed to set failed status for %s: %s",
@@ -276,6 +318,7 @@ async def _async_execute_job(
                 rq_queue.enqueue(
                     _execute_job,
                     doc_id, file_name, content_type, temp_file_path, next_attempt, tenant_id,
+                    replace, metadata,
                     job_id=f"chatvector:{doc_id}:{next_attempt}",
                     job_timeout=600,
                 )
@@ -476,6 +519,8 @@ class RedisIngestionQueue(BaseIngestionQueue):
             str(temp_file_path),
             job.attempt,
             job.tenant_id,
+            job.replace,
+            job.metadata,
             job_id=f"chatvector:{job.doc_id}:{job.attempt}",
             job_timeout=600,
         )

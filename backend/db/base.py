@@ -6,6 +6,11 @@ SCORE_TYPE_VECTOR = "vector"
 SCORE_TYPE_HYBRID_RRF = "hybrid_rrf"
 SCORE_TYPE_RERANKED = "reranked"
 
+# documents.status_detail values for staged replacement (migration 014). They are
+# retrieval-neutral: only ``documents.status == "completed"`` gates retrieval.
+REPLACEMENT_IN_PROGRESS = "replacement_in_progress"
+REPLACEMENT_FAILED = "replacement_failed"
+
 # Abstract base class that defines WHAT database operations we need.
 # All DB service implementations must satisfy this interface.
 

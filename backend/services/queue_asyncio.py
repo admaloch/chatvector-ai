@@ -20,6 +20,7 @@ from typing import Optional
 
 import db
 from core.config import config
+from db.base import REPLACEMENT_FAILED, REPLACEMENT_IN_PROGRESS
 from services.queue_base import (
     BaseIngestionQueue,
     DLQEntry,
@@ -229,6 +230,8 @@ class AsyncioIngestionQueue(BaseIngestionQueue):
                 file_bytes=job.file_bytes,
                 tenant_id=job.tenant_id,
                 rate_limiter=self._rate_limiter,
+                replace=job.replace,
+                metadata=job.metadata,
             )
         except Exception as exc:
             if isinstance(exc, UploadPipelineError) and 400 <= exc.status_code < 500:
@@ -273,11 +276,19 @@ class AsyncioIngestionQueue(BaseIngestionQueue):
                     f"— requeueing after {delay:.2f}s: {exc}"
                 )
                 try:
-                    await db.update_document_status(
-                        doc_id=job.doc_id,
-                        status="retrying",
-                        tenant_id=job.tenant_id,
-                    )
+                    if job.replace:
+                        # Keep `status` (and the retrievable chunks) untouched.
+                        await db.set_document_status_detail(
+                            job.doc_id,
+                            REPLACEMENT_IN_PROGRESS,
+                            tenant_id=job.tenant_id,
+                        )
+                    else:
+                        await db.update_document_status(
+                            doc_id=job.doc_id,
+                            status="retrying",
+                            tenant_id=job.tenant_id,
+                        )
                 except Exception as status_err:
                     logger.error(
                         f"Failed to set retrying status for {job.doc_id}: {status_err}"
@@ -295,15 +306,26 @@ class AsyncioIngestionQueue(BaseIngestionQueue):
                         error_msg,
                     )
                     try:
-                        await db.update_document_status(
-                            doc_id=job.doc_id,
-                            status="failed",
-                            tenant_id=job.tenant_id,
-                            error={
-                                "stage": "queued",
-                                "message": error_msg,
-                            },
-                        )
+                        if job.replace:
+                            await db.set_document_status_detail(
+                                job.doc_id,
+                                REPLACEMENT_FAILED,
+                                tenant_id=job.tenant_id,
+                                error={
+                                    "stage": "queued",
+                                    "message": error_msg,
+                                },
+                            )
+                        else:
+                            await db.update_document_status(
+                                doc_id=job.doc_id,
+                                status="failed",
+                                tenant_id=job.tenant_id,
+                                error={
+                                    "stage": "queued",
+                                    "message": error_msg,
+                                },
+                            )
                     except Exception as status_err:
                         logger.error(
                             f"Failed to set failed status for {job.doc_id}: {status_err}"
