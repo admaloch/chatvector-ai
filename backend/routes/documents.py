@@ -12,6 +12,7 @@ from middleware.rate_limit import limiter
 
 import db
 from core.config import STALE_INGESTION_STATUSES
+from db.base import REPLACEMENT_IN_PROGRESS
 from services.queue_service import ingestion_queue
 from services.tenant_registry import invalidate_tenant_cache
 
@@ -51,10 +52,16 @@ async def get_document_status(request: Request, document_id: UUID, auth: AuthCon
         "updated_at": status_payload.get("updated_at"),
     }
 
+    if status_payload.get("status_detail") is not None:
+        response["status_detail"] = status_payload["status_detail"]
+
     if status_payload.get("error") is not None:
         response["error"] = status_payload["error"]
 
-    if status_payload.get("status") == "queued":
+    if (
+        status_payload.get("status") == "queued"
+        or status_payload.get("status_detail") == REPLACEMENT_IN_PROGRESS
+    ):
         queue_pos = ingestion_queue.queue_position(str(document_id))
         if queue_pos is not None:
             response["queue_position"] = queue_pos
@@ -97,10 +104,16 @@ async def get_document_status_stream(request: Request, document_id: UUID, auth: 
                 "updated_at": status_payload.get("updated_at"),
             }
 
+            if status_payload.get("status_detail") is not None:
+                response["status_detail"] = status_payload["status_detail"]
+
             if status_payload.get("error") is not None:
                 response["error"] = status_payload["error"]
 
-            if status_payload.get("status") == "queued":
+            if (
+                status_payload.get("status") == "queued"
+                or status_payload.get("status_detail") == REPLACEMENT_IN_PROGRESS
+            ):
                 queue_pos = ingestion_queue.queue_position(str(document_id))
                 if queue_pos is not None:
                     response["queue_position"] = queue_pos
@@ -108,7 +121,10 @@ async def get_document_status_stream(request: Request, document_id: UUID, auth: 
             yield f"event: status\ndata: {json.dumps(response)}\n\n"
 
             status = status_payload.get("status")
-            if status in ("completed", "failed"):
+            # A replacement keeps `status` completed/failed while it runs, so the
+            # stream stays open until the replacement resolves.
+            replacing = status_payload.get("status_detail") == REPLACEMENT_IN_PROGRESS
+            if status in ("completed", "failed") and not replacing:
                 break
 
             await asyncio.sleep(1)
@@ -147,6 +163,16 @@ async def delete_document(request: Request, document_id: UUID, auth: AuthContext
             detail={
                 "code": "document_processing",
                 "message": f"Document cannot be deleted while in '{status}' state.",
+                "document_id": str(document_id),
+            },
+        )
+
+    if status_payload.get("status_detail") == REPLACEMENT_IN_PROGRESS:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "document_replacing",
+                "message": "Document cannot be deleted while a replacement is in progress.",
                 "document_id": str(document_id),
             },
         )

@@ -1,4 +1,5 @@
 import logging
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -8,6 +9,7 @@ from core.config import config
 from middleware.rate_limit import limiter
 
 import db
+from db.base import REPLACEMENT_FAILED
 from services.document_metadata import parse_document_metadata
 from services.ingestion_pipeline import IngestionPipeline, UploadPipelineError, _sanitize_filename
 from services.queue_service import QueueFull, QueueJob, ingestion_queue
@@ -37,12 +39,28 @@ def _http_error(
     return HTTPException(status_code=status_code, detail=detail, headers=headers)
 
 
+def _parse_replace_document_id(raw: str | None) -> str | None:
+    """Validate the optional ``replace_document_id`` form field (canonical UUID)."""
+    if raw is None:
+        return None
+    try:
+        return str(uuid.UUID(raw.strip()))
+    except ValueError:
+        raise UploadPipelineError(
+            status_code=422,
+            code="invalid_replace_document_id",
+            stage="validation",
+            message="replace_document_id must be a valid UUID.",
+        ) from None
+
+
 @router.post("/upload", status_code=202)
 @limiter.limit(config.RATE_LIMIT_UPLOAD)
 async def upload(
     request: Request,
     file: UploadFile = File(...),
     metadata: Annotated[str | None, Form()] = None,
+    replace_document_id: Annotated[str | None, Form()] = None,
     auth: AuthContext = Depends(require_auth),
 ):
     """
@@ -51,10 +69,17 @@ async def upload(
     The optional ``metadata`` form field is a JSON object of string, number, or
     boolean values stored on the document; invalid metadata is rejected with 422.
 
+    The optional ``replace_document_id`` form field (a UUID) re-ingests content for
+    an existing tenant-owned document that is ``completed`` or ``failed``. The
+    document keeps its ID and its prior completed content stays retrievable
+    until the new content is fully processed and swapped in; a failed replacement
+    leaves the prior content untouched. A replacement already running returns 409.
+
     Returns immediately (< 500 ms) with the document ID and queue position so
     the client can poll /documents/{document_id}/status for progress.
     """
     doc_id: str | None = None
+    replacing = False
     tenant_id = require_current_tenant(auth)
 
     try:
@@ -64,13 +89,48 @@ async def upload(
         # Validate synchronously before touching the DB
         ingestion_pipeline.validate_file(file, file_bytes)
         document_metadata = parse_document_metadata(metadata)
+        replace_id = _parse_replace_document_id(replace_document_id)
 
-        # Persist the document record so the status endpoint works immediately
-        doc_id = await db.create_document(
-            safe_filename, tenant_id=tenant_id, metadata=document_metadata
-        )
-        register_tenant_document(tenant_id, doc_id)
-        await db.update_document_status(doc_id=doc_id, status="queued", tenant_id=tenant_id)
+        if replace_id is None:
+            # Persist the document record so the status endpoint works immediately
+            doc_id = await db.create_document(
+                safe_filename, tenant_id=tenant_id, metadata=document_metadata
+            )
+            register_tenant_document(tenant_id, doc_id)
+            await db.update_document_status(doc_id=doc_id, status="queued", tenant_id=tenant_id)
+        else:
+            # Claim the document atomically. `status` and the active chunks are
+            # not touched: prior completed content stays retrievable.
+            outcome = await db.begin_document_replacement(replace_id, tenant_id=tenant_id)
+            if outcome == "not_found":
+                raise _http_error(
+                    status_code=404,
+                    code="document_not_found",
+                    stage="validation",
+                    message="Document not found.",
+                    document_id=replace_id,
+                )
+            if outcome == "in_progress":
+                raise _http_error(
+                    status_code=409,
+                    code="replacement_in_progress",
+                    stage="validation",
+                    message="A replacement for this document is already in progress.",
+                    document_id=replace_id,
+                )
+            if outcome == "not_eligible":
+                raise _http_error(
+                    status_code=409,
+                    code="document_processing",
+                    stage="validation",
+                    message=(
+                        "Document can only be replaced when it is in 'completed' "
+                        "or 'failed' state."
+                    ),
+                    document_id=replace_id,
+                )
+            doc_id = replace_id
+            replacing = True
 
         job = QueueJob(
             doc_id=doc_id,
@@ -78,18 +138,34 @@ async def upload(
             content_type=file.content_type,
             file_bytes=file_bytes,
             tenant_id=tenant_id,
+            replace=replacing,
+            # Replacement keeps the existing metadata unless the client sent some.
+            metadata=document_metadata if replacing and metadata is not None else None,
         )
 
         try:
             queue_position = await ingestion_queue.enqueue(job)
         except QueueFull:
-            # Roll back the document record so the DB stays clean
-            await db.update_document_status(
-                doc_id=doc_id,
-                status="failed",
-                error={"stage": "queued", "message": "Queue is at capacity. Please retry later."},
-                tenant_id=tenant_id,
-            )
+            queue_full_error = {
+                "stage": "queued",
+                "message": "Queue is at capacity. Please retry later.",
+            }
+            if replacing:
+                # The prior content is still active; only record the failed attempt.
+                await db.set_document_status_detail(
+                    doc_id,
+                    REPLACEMENT_FAILED,
+                    tenant_id=tenant_id,
+                    error=queue_full_error,
+                )
+            else:
+                # Roll back the document record so the DB stays clean
+                await db.update_document_status(
+                    doc_id=doc_id,
+                    status="failed",
+                    error=queue_full_error,
+                    tenant_id=tenant_id,
+                )
             raise _http_error(
                     status_code=503,
                     code="queue_full",
@@ -110,6 +186,19 @@ async def upload(
             f"Accepted upload {safe_filename!r} → document {doc_id} "
             f"at queue position {queue_position}"
         )
+
+        if replacing:
+            # `status` stays whatever it was (completed keeps serving retrieval);
+            # `status_detail` tells the client a replacement is underway.
+            current = await db.get_document_status(doc_id, tenant_id=tenant_id) or {}
+            return {
+                "message": "Accepted",
+                "document_id": doc_id,
+                "status": current.get("status", "completed"),
+                "status_detail": "replacement_in_progress",
+                "queue_position": queue_position,
+                "status_endpoint": f"/documents/{doc_id}/status",
+            }
 
         return {
             "message": "Accepted",
@@ -137,7 +226,20 @@ async def upload(
         )
 
     except Exception as e:
-        if doc_id:
+        if doc_id and replacing:
+            # Never mark a replaced document `failed`: its prior content must
+            # stay retrievable. Record the failed attempt in status_detail.
+            await db.set_document_status_detail(
+                doc_id,
+                REPLACEMENT_FAILED,
+                tenant_id=tenant_id,
+                error={
+                    "stage": "queued",
+                    "code": "upload_failed",
+                    "message": "An unexpected error occurred during upload.",
+                },
+            )
+        elif doc_id:
             await db.update_document_status(
                 doc_id=doc_id,
                 status="failed",
