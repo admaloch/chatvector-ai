@@ -40,6 +40,12 @@ Create keys with `python -m backend.cli create-tenant-key`. See [Getting Started
 | `GET` | `/status` | Service health and configuration summary |
 | `GET` | `/queue/stats` | Ingestion queue statistics |
 
+## Document metadata
+
+`POST /upload` accepts an optional multipart form field `metadata`: a JSON object of flat key/value pairs, for example `{"department": "legal", "year": 2026, "final": true}`. Values must be strings, numbers, or booleans. Nested objects, arrays, `null` values, non-object JSON (including a top-level array), and invalid JSON are rejected with `422`. Omitting `metadata` stores `{}`.
+
+`GET /documents` and `GET /documents/{document_id}/status` return the stored object as `metadata`. Size is bounded by `DOCUMENT_METADATA_MAX_KEYS` (default 20) and `DOCUMENT_METADATA_MAX_BYTES` (default 4096). Metadata is not yet used to filter retrieval.
+
 ## Retrieval overrides
 
 `POST /chat`, `POST /chat/stream`, and `POST /chat/batch` accept optional retrieval overrides. Set them as top-level fields or inside a `retrieval` object. For each field, an explicit top-level value wins over the `retrieval` object, which wins over the process environment. Omitting them leaves Phase 3 behavior: the effective config is the process default.
