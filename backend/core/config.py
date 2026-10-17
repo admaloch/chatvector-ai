@@ -175,6 +175,11 @@ class Settings:
     HYBRID_RETRIEVAL_ENABLED: bool = os.getenv(
         "HYBRID_RETRIEVAL_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
+    # Experimental GraphRAG overlay. Default off — must not change chat
+    # behavior or add required runtime deps.
+    ENABLE_GRAPH_RETRIEVAL: bool = os.getenv(
+        "ENABLE_GRAPH_RETRIEVAL", "false"
+    ).lower() in ("1", "true", "yes")
     # Optional process-local named retrieval presets (see retrieval_presets.py).
     RETRIEVAL_PRESETS_PATH: str | None = os.getenv("RETRIEVAL_PRESETS_PATH") or None
     RETRIEVAL_PRESETS: str | None = os.getenv("RETRIEVAL_PRESETS") or None

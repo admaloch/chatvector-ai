@@ -1,5 +1,10 @@
 import pytest
-from core.config import STALE_INGESTION_STATUSES, get_embedding_dim
+from core.config import STALE_INGESTION_STATUSES, config, get_embedding_dim
+
+
+def test_graph_retrieval_disabled_by_default():
+    """ENABLE_GRAPH_RETRIEVAL must stay false so the default pgvector path is unchanged."""
+    assert config.ENABLE_GRAPH_RETRIEVAL is False
 
 def test_stale_ingestion_statuses_include_uploaded():
     assert "uploaded" in STALE_INGESTION_STATUSES
