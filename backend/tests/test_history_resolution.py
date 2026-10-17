@@ -347,6 +347,31 @@ async def test_history_aware_default_false_restores_phase3_gating(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_chat_skip_history_transform_does_not_resolve(monkeypatch):
+    monkeypatch.setattr(config, "QUERY_TRANSFORMATION_ENABLED", False)
+    monkeypatch.setattr(config, "HISTORY_AWARE_RETRIEVAL_DEFAULT", True)
+    captured: dict = {}
+
+    async def resolve_must_not_run(question: str, history: list[dict]) -> StandaloneResolutionCall:
+        raise AssertionError("skip_history_transform must not resolve")
+
+    monkeypatch.setattr("services.query_service._call_standalone_resolution", resolve_must_not_run)
+    with _service_patches(_embed_capture(captured)):
+        result = await answer_question_for_document(
+            question=_PRONOUN,
+            doc_id="doc-1",
+            session_id="sess-1",
+            auth=TEST_AUTH,
+            debug_retrieval=True,
+            retrieval_fields={"skip_history_transform": True},
+        )
+
+    assert captured["texts"] == [_PRONOUN]
+    assert result["retrieval_debug"]["history_resolution_skipped_reason"] == "compare_skip"
+    assert result["retrieval_debug"]["history_considered"] == []
+
+
+@pytest.mark.asyncio
 async def test_request_can_disable_resolution_and_windows_are_observable(monkeypatch):
     monkeypatch.setattr(config, "QUERY_TRANSFORMATION_ENABLED", True)
     monkeypatch.setattr(config, "HISTORY_AWARE_RETRIEVAL_DEFAULT", True)

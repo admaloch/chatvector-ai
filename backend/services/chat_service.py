@@ -670,7 +670,7 @@ async def answer_question_for_document(
     plan = prepare_turn_history(
         history,
         history_fields,
-        skip_history_transform=False,
+        skip_history_transform=effective.skip_history_transform,
         apply_generation_history=True,
         global_query_transformation_enabled=bool(config.QUERY_TRANSFORMATION_ENABLED),
     )
@@ -796,7 +796,7 @@ async def answer_question_stream_for_document(
         plan = prepare_turn_history(
             history,
             history_fields,
-            skip_history_transform=False,
+            skip_history_transform=effective.skip_history_transform,
             apply_generation_history=True,
             global_query_transformation_enabled=bool(config.QUERY_TRANSFORMATION_ENABLED),
         )
