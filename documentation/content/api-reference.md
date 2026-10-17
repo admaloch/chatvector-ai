@@ -44,7 +44,7 @@ Create keys with `python -m backend.cli create-tenant-key`. See [Getting Started
 
 `POST /upload` accepts an optional multipart form field `metadata`: a JSON object of flat key/value pairs, for example `{"department": "legal", "year": 2026, "final": true}`. Values must be strings, numbers, or booleans. Nested objects, arrays, `null` values, non-object JSON (including a top-level array), and invalid JSON are rejected with `422`. Omitting `metadata` stores `{}`.
 
-`GET /documents` and `GET /documents/{document_id}/status` return the stored object as `metadata`. Size is bounded by `DOCUMENT_METADATA_MAX_KEYS` (default 20) and `DOCUMENT_METADATA_MAX_BYTES` (default 4096). Metadata is not yet used to filter retrieval.
+`GET /documents` and `GET /documents/{document_id}/status` return the stored object as `metadata`. Size is bounded by `DOCUMENT_METADATA_MAX_KEYS` (default 20) and `DOCUMENT_METADATA_MAX_BYTES` (default 4096). Retrieval can be narrowed by metadata with `metadata_filter` (see [Retrieval overrides](#retrieval-overrides)).
 
 ## Retrieval overrides
 
@@ -60,10 +60,21 @@ Create keys with `python -m backend.cli create-tenant-key`. See [Getting Started
 | `query_transformation_enabled` | Explicitly enable or disable query transformation. |
 | `query_transformation_strategy` | `rewrite`, `expand`, `stepback`, or `none`. |
 | `skip_history_transform` | When `false` on a compare-style batch item, session history is passed into query transformation. |
-
-`metadata_filter` is reserved for Metadata-First Document Ingestion and Retrieval Filters and is not accepted in v1.
+| `metadata_filter` | Narrow which in-scope documents participate in retrieval by their stored document metadata. See below. |
 
 A strategy other than `none` enables transformation for that request even when `QUERY_TRANSFORMATION_ENABLED=false`. `query_transformation_enabled=false` disables it even if a strategy is set. `query_transformation_enabled=true` with strategy `none` does not run rewrite, expand, or step-back. Those strategies are never turned on by omission alone.
+
+### Metadata filter
+
+`metadata_filter` is an object whose keys are document metadata field names. Values are strings, numbers, or booleans, matching what `POST /upload` stores. Comparison is same-type, and strings are case-sensitive.
+
+- Exact match: `{ "department": "legal" }`. The document must have the key and an equal value.
+- Scalar in-list: `{ "department": { "in": ["legal", "hr"] } }`. The document value must equal one listed value. The list must be non-empty.
+- Multiple keys are ANDed.
+
+Nested objects, arrays as operands, `null`, an empty object, unknown operators, and any other shape are rejected with `422`. The filter is bounded by `DOCUMENT_METADATA_MAX_KEYS` and `DOCUMENT_METADATA_MAX_BYTES`. Array metadata such as tags is not supported in v1.
+
+The filter applies at document level, after the session or tenant scope is resolved and always within the authenticated tenant. `doc_id` stays required on `POST /chat` and `POST /chat/stream`. The anchor document must itself match the filter. Otherwise the request returns an error with code `anchor_document_excluded_by_filter` (an `error` event on the stream). On `POST /chat/batch`, documents that do not match are dropped from each item's scope, and an item left with no documents reports `no_documents_in_scope`. Omitting `metadata_filter` leaves retrieval unchanged.
 
 ## History overrides
 
