@@ -570,7 +570,84 @@ class SessionListResponse:
 
     def to_dict(self) -> JSONDict:
         """Convert the model back to a JSON-serializable dictionary."""
-        return {"sessions": [session.to_dict() for session in self.sessions]        }
+        return {"sessions": [session.to_dict() for session in self.sessions]}
+
+
+FeedbackType = Literal["answer", "citation", "retrieval"]
+
+
+@dataclass(slots=True)
+class FeedbackItem:
+    """One feedback record returned by ``POST /feedback`` or ``GET /feedback``."""
+
+    id: str
+    type: FeedbackType
+    rating: int
+    session_id: str
+    created_at: str
+    comment: str | None = None
+    message_id: str | None = None
+    document_id: str | None = None
+    chunk_index: int | None = None
+    raw: JSONDict = field(default_factory=dict, repr=False)
+
+    @classmethod
+    def from_dict(cls, payload: JSONMapping) -> "FeedbackItem":
+        raw = dict(payload)
+        feedback_type = payload.get("type")
+        if feedback_type not in ("answer", "citation", "retrieval"):
+            feedback_type = "answer"
+        return cls(
+            id=str(payload.get("id", "")),
+            type=feedback_type,  # type: ignore[arg-type]
+            rating=int(payload.get("rating", 0)),
+            session_id=str(payload.get("session_id", "")),
+            created_at=str(payload.get("created_at", "")),
+            comment=_optional_str(payload.get("comment")),
+            message_id=_optional_str(payload.get("message_id")),
+            document_id=_optional_str(payload.get("document_id")),
+            chunk_index=(
+                int(payload["chunk_index"])
+                if isinstance(payload.get("chunk_index"), int)
+                else None
+            ),
+            raw=raw,
+        )
+
+    def to_dict(self) -> JSONDict:
+        return {
+            "id": self.id,
+            "type": self.type,
+            "rating": self.rating,
+            "session_id": self.session_id,
+            "created_at": self.created_at,
+            "comment": self.comment,
+            "message_id": self.message_id,
+            "document_id": self.document_id,
+            "chunk_index": self.chunk_index,
+        }
+
+
+@dataclass(slots=True)
+class FeedbackListResponse:
+    """Collection response returned from ``GET /feedback``."""
+
+    feedback: list[FeedbackItem] = field(default_factory=list)
+    raw: JSONDict = field(default_factory=dict, repr=False)
+
+    @classmethod
+    def from_dict(cls, payload: JSONMapping) -> "FeedbackListResponse":
+        raw = dict(payload)
+        items_payload = payload.get("feedback")
+        feedback = [
+            FeedbackItem.from_dict(item)
+            for item in items_payload
+            if isinstance(item, Mapping)
+        ] if isinstance(items_payload, list) else []
+        return cls(feedback=feedback, raw=raw)
+
+    def to_dict(self) -> JSONDict:
+        return {"feedback": [item.to_dict() for item in self.feedback]}
 
 
 @dataclass(slots=True)

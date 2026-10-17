@@ -16,6 +16,10 @@ import type {
   Session,
   SessionHistoryResponse,
   SessionListResponse,
+  FeedbackItem,
+  FeedbackListResponse,
+  ListFeedbackInput,
+  PostFeedbackInput,
   UploadDirectoryOptions,
   UploadInput,
   UploadManyOptions,
@@ -25,6 +29,7 @@ import type { UploadManyItem } from "./internal/bulk-upload.js";
 import { ChatsResource } from "./resources/chats.js";
 import { DocumentsResource } from "./resources/documents.js";
 import { SessionsResource } from "./resources/sessions.js";
+import { FeedbackResource } from "./resources/feedback.js";
 
 export type ChatVectorClientOptions = {
   baseUrl: string;
@@ -45,6 +50,7 @@ export class ChatVectorClient {
   private readonly documents: DocumentsResource;
   private readonly chats: ChatsResource;
   private readonly sessions: SessionsResource;
+  private readonly feedback: FeedbackResource;
 
   constructor(options: ChatVectorClientOptions) {
     if (!options || typeof options !== "object") {
@@ -63,6 +69,7 @@ export class ChatVectorClient {
     this.documents = new DocumentsResource(http, internal.__clock);
     this.chats = new ChatsResource(http);
     this.sessions = new SessionsResource(http);
+    this.feedback = new FeedbackResource(http);
   }
 
   uploadDocument(
@@ -157,5 +164,19 @@ export class ChatVectorClient {
     options?: RequestOptions,
   ): Promise<SessionHistoryResponse> {
     return this.sessions.getSessionHistory(sessionId, options);
+  }
+
+  postFeedback(
+    input: PostFeedbackInput,
+    options?: RequestOptions,
+  ): Promise<FeedbackItem> {
+    return this.feedback.postFeedback(input, options);
+  }
+
+  listFeedback(
+    input?: ListFeedbackInput,
+    options?: RequestOptions,
+  ): Promise<FeedbackListResponse> {
+    return this.feedback.listFeedback(input ?? {}, options);
   }
 }

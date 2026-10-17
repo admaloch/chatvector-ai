@@ -37,6 +37,8 @@ Create keys with `python -m backend.cli create-tenant-key`. See [Getting Started
 | `GET` | `/sessions/{session_id}` | Get session metadata |
 | `GET` | `/sessions/{session_id}/history` | Session message history |
 | `DELETE` | `/sessions/{session_id}` | Delete a session |
+| `POST` | `/feedback` | Submit structured retrieval or answer feedback |
+| `GET` | `/feedback` | List feedback for the authenticated tenant |
 | `GET` | `/status` | Service health and configuration summary |
 | `GET` | `/queue/stats` | Ingestion queue statistics |
 
@@ -126,6 +128,34 @@ A strategy other than `none` enables transformation for that request even when `
 Nested objects, arrays as operands, `null`, an empty object, unknown operators, and any other shape are rejected with `422`. The filter is bounded by `DOCUMENT_METADATA_MAX_KEYS` and `DOCUMENT_METADATA_MAX_BYTES`. Array metadata such as tags is not supported in v1.
 
 The filter applies at document level, after the session or tenant scope is resolved and always within the authenticated tenant. `doc_id` stays required on `POST /chat` and `POST /chat/stream`. The anchor document must itself match the filter. Otherwise the request returns an error with code `anchor_document_excluded_by_filter` (an `error` event on the stream). On `POST /chat/batch`, documents that do not match are dropped from each item's scope, and an item left with no documents reports `no_documents_in_scope`. Omitting `metadata_filter` leaves retrieval unchanged.
+
+## Retrieval feedback
+
+`POST /feedback` records thumbs-up (`rating: 1`) or thumbs-down (`rating: -1`) signals tied to a session. Authentication is required; anonymous feedback is not supported.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `type` | yes | `answer`, `citation`, or `retrieval` |
+| `rating` | yes | `-1` or `1` |
+| `session_id` | yes | Session the feedback applies to (must belong to the authenticated tenant) |
+| `comment` | no | Optional free-text note (max 4096 characters) |
+| `message_id` | linkage | UUID of a chat message from `GET /sessions/{session_id}/history` |
+| `document_id` | linkage | UUID of a tenant-owned document |
+| `chunk_index` | no | Chunk index when citing a specific retrieved chunk |
+
+**Linkage matrix (v1)**
+
+| `type` | Required linkage |
+|--------|------------------|
+| `answer` | `message_id` must reference a message in `session_id` for this tenant |
+| `citation` | `message_id` **or** (`document_id` with optional `chunk_index`) |
+| `retrieval` | Same as `citation` |
+
+Cross-tenant `message_id` or `document_id` values return `404`. Invalid combinations (for example `answer` without `message_id`, or `citation` without either message or document linkage) return `422`.
+
+`GET /feedback` supports optional query filters: `session_id`, `created_after`, `created_before` (ISO-8601 datetimes), and `limit` (default 50, max 200). Results are tenant-scoped.
+
+Existing databases need migration `backend/db/init/017_retrieval_feedback.sql` applied with `psql -f`.
 
 ## History overrides
 

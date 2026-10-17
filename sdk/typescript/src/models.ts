@@ -275,3 +275,40 @@ export type CreateSessionInput = {
   sessionId?: string;
   idempotencyKey?: string;
 };
+
+export type FeedbackType = "answer" | "citation" | "retrieval";
+
+export type PostFeedbackInput = {
+  type: FeedbackType;
+  rating: -1 | 1;
+  sessionId: string;
+  comment?: string;
+  messageId?: string;
+  documentId?: string;
+  chunkIndex?: number;
+};
+
+export type ListFeedbackInput = {
+  sessionId?: string;
+  createdAfter?: string;
+  createdBefore?: string;
+  limit?: number;
+};
+
+export type FeedbackItem = {
+  id: string;
+  type: FeedbackType;
+  rating: number;
+  sessionId: string;
+  createdAt: string;
+  comment?: string | null;
+  messageId?: string | null;
+  documentId?: string | null;
+  chunkIndex?: number | null;
+  _raw?: Record<string, unknown>;
+};
+
+export type FeedbackListResponse = {
+  feedback: FeedbackItem[];
+  _raw?: Record<string, unknown>;
+};

@@ -40,6 +40,9 @@ from .models import (
     Session,
     SessionHistoryResponse,
     SessionListResponse,
+    FeedbackItem,
+    FeedbackListResponse,
+    FeedbackType,
     StreamChatEvent,
 )
 from ._common import (
@@ -394,6 +397,57 @@ class ChatVectorClient:
         """
         payload = self._request_json("GET", "sessions")
         return SessionListResponse.from_dict(payload)
+
+    def post_feedback(
+        self,
+        *,
+        feedback_type: FeedbackType,
+        rating: int,
+        session_id: str,
+        comment: str | None = None,
+        message_id: str | None = None,
+        document_id: str | None = None,
+        chunk_index: int | None = None,
+    ) -> FeedbackItem:
+        """Submit structured feedback for an answer, citation, or retrieval result."""
+        if rating not in (-1, 1):
+            raise ValueError("rating must be -1 or 1.")
+        body: JSONDict = {
+            "type": feedback_type,
+            "rating": rating,
+            "session_id": session_id,
+        }
+        if comment is not None:
+            body["comment"] = comment
+        if message_id is not None:
+            body["message_id"] = message_id
+        if document_id is not None:
+            body["document_id"] = document_id
+        if chunk_index is not None:
+            body["chunk_index"] = chunk_index
+        payload = self._request_json("POST", "feedback", json=body)
+        return FeedbackItem.from_dict(payload)
+
+    def list_feedback(
+        self,
+        *,
+        session_id: str | None = None,
+        created_after: str | None = None,
+        created_before: str | None = None,
+        limit: int | None = None,
+    ) -> FeedbackListResponse:
+        """List feedback records for the authenticated tenant."""
+        params: dict[str, str | int] = {}
+        if session_id is not None:
+            params["session_id"] = session_id
+        if created_after is not None:
+            params["created_after"] = created_after
+        if created_before is not None:
+            params["created_before"] = created_before
+        if limit is not None:
+            params["limit"] = limit
+        payload = self._request_json("GET", "feedback", params=params or None)
+        return FeedbackListResponse.from_dict(payload)
 
     def delete_session(self, session_id: str) -> None:
         """
