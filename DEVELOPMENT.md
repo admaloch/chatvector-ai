@@ -669,10 +669,8 @@ pytest backend/tests/test_stale_reconciliation.py backend/tests/test_tenant_regi
 ```
 
 Manual two-replica checklist: see [DEPLOYMENT.md](DEPLOYMENT.md#horizontal-api-topology-smoke).
-
-```bash
-docker compose -f docker-compose.prod.yml --env-file backend/.env.prod up --scale api=2
-```
+Start a second API process on another host port with the same Redis/Postgres/S3
+settings — do not `--scale api=2` against the published `8000:8000` mapping.
 
 ---
 

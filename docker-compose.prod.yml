@@ -34,8 +34,9 @@ services:
   api:
     build:
       context: ./backend
-    # No fixed container_name so `docker compose up --scale api=2` works.
-    # Set MULTI_API_INSTANCE=true (and ARTIFACT_STORAGE=s3) before scaling.
+    # No fixed container_name. A second replica needs its own host port (or a
+    # load balancer): `8000:8000` cannot be published twice. Set
+    # MULTI_API_INSTANCE=true and ARTIFACT_STORAGE=s3 before running replicas.
     restart: always
     depends_on:
       db:
