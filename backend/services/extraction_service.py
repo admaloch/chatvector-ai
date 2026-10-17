@@ -17,6 +17,20 @@ logger = logging.getLogger(__name__)
 MARKDOWN_CONTENT_TYPES = frozenset({"text/markdown", "text/x-markdown"})
 MARKDOWN_FILENAME_SUFFIXES = (".md", ".markdown")
 
+HTML_CONTENT_TYPES = frozenset({"text/html"})
+HTML_FILENAME_SUFFIXES = (".html", ".htm")
+
+_SKIP_HTML_TAG_CONTENT = frozenset({"script", "style", "noscript"})
+_HTML_CHARSET_PATTERN = re.compile(
+    rb"""<meta[^>]+charset\s*=\s*['"]?\s*([a-zA-Z0-9._-]+)""",
+    re.IGNORECASE,
+)
+_HTML_HTTP_EQUIV_CHARSET_PATTERN = re.compile(
+    rb"""<meta[^>]+http-equiv\s*=\s*['"]?content-type['"]?[^>]+"""
+    rb"""content\s*=\s*['"][^'"]*charset\s*=\s*([a-zA-Z0-9._-]+)""",
+    re.IGNORECASE,
+)
+
 # Inline/reference Markdown links become visible link text only; URLs are not fetched.
 _MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\([^)]*\)")
 
@@ -143,11 +157,11 @@ class _HTMLTextExtractor(HTMLParser):
         self._skip_depth = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag.lower() in ("script", "style"):
+        if tag.lower() in _SKIP_HTML_TAG_CONTENT:
             self._skip_depth += 1
 
     def handle_endtag(self, tag: str) -> None:
-        if tag.lower() in ("script", "style") and self._skip_depth:
+        if tag.lower() in _SKIP_HTML_TAG_CONTENT and self._skip_depth:
             self._skip_depth -= 1
 
     def handle_data(self, data: str) -> None:
@@ -158,21 +172,66 @@ class _HTMLTextExtractor(HTMLParser):
         return "".join(self._parts)
 
 
-def _strip_embedded_html(text: str) -> str:
+def _extract_visible_html_text(html: str, *, strict_failure: bool = False) -> str:
     """
-    Remove HTML markup from Markdown payloads without executing scripts.
+    Reduce HTML to visible text without executing scripts or fetching resources.
 
-    Tag contents are kept as plain text; ``script``/``style`` bodies are dropped.
+    ``script``/``style``/``noscript`` bodies are omitted. When ``strict_failure``
+    is true, a parse failure that yields no visible text raises DocumentExtractionError.
     """
-    if "<" not in text:
-        return text
+    if "<" not in html:
+        return html
     parser = _HTMLTextExtractor()
     try:
-        parser.feed(text)
+        parser.feed(html)
         parser.close()
-    except Exception:
-        return re.sub(r"<[^>]+>", "", text)
-    return parser.get_text()
+        return parser.get_text()
+    except Exception as exc:
+        fallback = re.sub(r"<[^>]+>", "", html)
+        if strict_failure and html.strip() and not fallback.strip():
+            raise DocumentExtractionError("Failed to parse HTML content.") from exc
+        return fallback
+
+
+def _strip_embedded_html(text: str) -> str:
+    """Remove HTML markup from Markdown payloads without executing scripts."""
+    return _extract_visible_html_text(text)
+
+
+def _html_declared_charset(contents: bytes) -> str | None:
+    """Return a charset name from early ``<meta>`` tags when present."""
+    head = contents[:8192]
+    for pattern in (_HTML_CHARSET_PATTERN, _HTML_HTTP_EQUIV_CHARSET_PATTERN):
+        match = pattern.search(head)
+        if match:
+            try:
+                return match.group(1).decode("ascii").strip().lower()
+            except UnicodeDecodeError:
+                continue
+    return None
+
+
+def _decode_html_contents(contents: bytes, *, filename: str = "") -> str:
+    """Decode HTML bytes using declared charset, then utf-8, then cp1254."""
+    encodings: list[str] = []
+    declared = _html_declared_charset(contents)
+    if declared:
+        encodings.append(declared)
+    encodings.extend(["utf-8", "cp1254"])
+
+    seen: set[str] = set()
+    for encoding in encodings:
+        normalized = encoding.strip().lower()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        try:
+            return contents.decode(normalized)
+        except (UnicodeDecodeError, LookupError):
+            continue
+
+    logger.error(f"Failed to decode HTML file {filename}: no supported encoding matched")
+    raise DocumentExtractionError("Failed to decode HTML content.")
 
 
 def _normalize_markdown_links(text: str) -> str:
@@ -186,6 +245,35 @@ def is_markdown_content_type(content_type: str | None) -> bool:
 def is_markdown_filename(filename: str) -> bool:
     lower = (filename or "").lower()
     return any(lower.endswith(suffix) for suffix in MARKDOWN_FILENAME_SUFFIXES)
+
+
+def is_html_content_type(content_type: str | None) -> bool:
+    return _normalize_content_type(content_type) in HTML_CONTENT_TYPES
+
+
+def is_html_filename(filename: str) -> bool:
+    lower = (filename or "").lower()
+    return any(lower.endswith(suffix) for suffix in HTML_FILENAME_SUFFIXES)
+
+
+class HtmlExtractor(DocumentExtractor):
+    """
+    HTML extraction to visible text only (no script execution, no network I/O).
+
+    Remote resources referenced by tags are not fetched. ``page_number`` provenance
+    is not populated for HTML inputs.
+    """
+
+    def extract(self, contents: bytes, *, filename: str = "") -> ExtractedDocument:
+        file_text = _decode_html_contents(contents, filename=filename)
+
+        if "\x00" in file_text:
+            logger.error(f"HTML file {filename} contains null bytes")
+            raise DocumentExtractionError("Failed to parse HTML content.")
+
+        file_text = _extract_visible_html_text(file_text, strict_failure=True)
+        logger.info(f"Extracted {len(file_text)} characters from HTML file")
+        return ExtractedDocument(text=file_text)
 
 
 class MarkdownExtractor(DocumentExtractor):
@@ -236,6 +324,7 @@ class PlainTextExtractor(DocumentExtractor):
 _EXTRACTOR_REGISTRY: dict[str, type[DocumentExtractor]] = {
     "application/pdf": PdfExtractor,
     "text/plain": PlainTextExtractor,
+    "text/html": HtmlExtractor,
     "text/markdown": MarkdownExtractor,
     "text/x-markdown": MarkdownExtractor,
 }
@@ -286,7 +375,7 @@ def _extract_text_with_metadata_sync(
 
 async def extract_text_from_file(file: UploadFile, contents: bytes | None = None) -> str:
     """
-    Extract text from a PDF, TXT, or Markdown UploadFile.
+    Extract text from a PDF, TXT, Markdown, or HTML UploadFile.
     Raises ValueError for unsupported file types or unreadable payloads.
     """
     text, _ = await extract_text_with_metadata(file, contents)
@@ -298,11 +387,11 @@ async def extract_text_with_metadata(
     contents: bytes | None = None,
 ) -> tuple[str, list[PageBoundary]]:
     """
-    Extract text and per-page boundary information from a PDF, TXT, or Markdown UploadFile.
+    Extract text and per-page boundary information from an allowlisted UploadFile.
 
     Returns:
         (full_text, page_boundaries) where page_boundaries is populated for PDFs
-        and empty for plain-text files.
+        and empty for other text-like formats.
     Raises ValueError for unsupported file types or unreadable payloads.
     """
     if contents is None:
