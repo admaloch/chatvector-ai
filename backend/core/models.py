@@ -40,6 +40,8 @@ class Document(Base):
     file_name = Column(String, nullable=False)
     tenant_id = Column(String(255), nullable=False, index=True)
     status = Column(String, nullable=False, default="uploaded")
+    # Retrieval-neutral replacement state (migration 014); never gates retrieval.
+    status_detail = Column(String, nullable=True)
     chunks = Column(JSONB, nullable=False, default=lambda: {"total": 0, "processed": 0})
     error = Column(JSONB, nullable=True)
     # "metadata" is reserved on declarative classes, so map the column under a different attribute name.
