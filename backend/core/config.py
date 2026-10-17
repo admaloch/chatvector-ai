@@ -209,6 +209,19 @@ class Settings:
         "QUEUE_BACKEND", 
         "redis" if APP_ENV.lower() == "production" else "memory"
     ).strip().lower()
+    # Horizontal API replicas. When true: tenant lists are DB-authoritative
+    # by default, stale reconciliation uses a Redis lock, and split API/worker
+    # hosts require ARTIFACT_STORAGE=s3.
+    MULTI_API_INSTANCE: bool = os.getenv("MULTI_API_INSTANCE", "false").lower() in (
+        "1", "true", "yes"
+    )
+    TENANT_REGISTRY_DISABLED: bool = os.getenv(
+        "TENANT_REGISTRY_DISABLED",
+        "true" if MULTI_API_INSTANCE else "false",
+    ).lower() in ("1", "true", "yes")
+    STALE_RECONCILE_LOCK_TTL_SECONDS: int = max(
+        1, int(os.getenv("STALE_RECONCILE_LOCK_TTL_SECONDS", "600"))
+    )
 
     # Background ingestion queue
     QUEUE_WORKER_COUNT: int = max(1, min(5, int(os.getenv("QUEUE_WORKER_COUNT", "3"))))
@@ -374,10 +387,26 @@ def _validate_artifact_storage(settings: Settings) -> None:
         )
 
 
+def _validate_multi_api_instance(settings: Settings) -> None:
+    if not settings.MULTI_API_INSTANCE:
+        return
+    if settings.QUEUE_BACKEND != "redis":
+        raise ValueError(
+            "MULTI_API_INSTANCE=true requires QUEUE_BACKEND=redis "
+            "(needed for the stale-document reconciler lock)."
+        )
+    if settings.ARTIFACT_STORAGE != "s3":
+        raise ValueError(
+            "MULTI_API_INSTANCE=true requires ARTIFACT_STORAGE=s3. "
+            "Local spill is not visible across split API/worker hosts."
+        )
+
+
 config = Settings()
 _validate_queue_backend_for_env(config.APP_ENV, config.QUEUE_BACKEND)
 _validate_webhook_settings(config)
 _validate_artifact_storage(config)
+_validate_multi_api_instance(config)
 
 if config.QUERY_TRANSFORMATION_HISTORY_WINDOW > config.MAX_SESSION_HISTORY_MESSAGES:
     logger.warning(

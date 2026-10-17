@@ -40,6 +40,7 @@ from services.retrieval_presets import (
     RetrievalPresetsLoadError,
     load_retrieval_presets,
 )
+from services.stale_reconciliation import reconcile_stale_documents_on_startup
 
 import logging
 
@@ -162,8 +163,19 @@ async def lifespan(app: FastAPI):
 
     # Resolve documents that were in-flight during the previous server run before
     # any workers start, so clients polling for status get a definitive answer.
+    # Multi-instance startups compete for a Redis lock so a late replica cannot
+    # fail documents that another instance has already started processing.
     try:
-        stale_doc_ids = await db.fail_stale_documents_global(STALE_INGESTION_STATUSES)
+        reconcile_redis = None
+        if config.MULTI_API_INSTANCE:
+            from core.clients import redis_client as reconcile_redis
+
+        stale_doc_ids = await reconcile_stale_documents_on_startup(
+            db.fail_stale_documents_global,
+            STALE_INGESTION_STATUSES,
+            redis=reconcile_redis,
+            multi_api_instance=config.MULTI_API_INSTANCE,
+        )
         if stale_doc_ids:
             logger.warning(
                 f"Marked {len(stale_doc_ids)} stale document(s) as failed "
@@ -181,6 +193,11 @@ async def lifespan(app: FastAPI):
                     removed,
                     len(stale_doc_ids),
                 )
+        elif stale_doc_ids is None:
+            logger.info(
+                "Stale-document reconciliation skipped (another API instance "
+                "holds the lock)"
+            )
     except Exception:
         logger.exception("Failed to reset stale documents on startup — continuing anyway")
 

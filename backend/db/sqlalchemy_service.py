@@ -674,7 +674,10 @@ class SQLAlchemyService(DatabaseService):
             if doc_ids:
                 await session.execute(
                     sql_update(Document)
-                    .where(Document.id.in_(doc_ids))
+                    .where(
+                        Document.id.in_(doc_ids),
+                        Document.status.in_(statuses),
+                    )
                     .values(
                         status="failed",
                         error={
