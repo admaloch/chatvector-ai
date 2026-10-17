@@ -11,6 +11,7 @@ from services.extraction_service import (
     DocumentExtractionError,
     DocumentExtractor,
     ExtractedDocument,
+    HtmlExtractor,
     MarkdownExtractor,
     PageBoundary,
     PdfExtractor,
@@ -19,6 +20,8 @@ from services.extraction_service import (
     build_document_extractor,
     extract_text_from_file,
     extract_text_with_metadata,
+    is_html_content_type,
+    is_html_filename,
     is_markdown_content_type,
     is_markdown_filename,
     prepare_extracted_document_for_chunking,
@@ -106,6 +109,7 @@ def registry(monkeypatch):
 def test_factory_selects_extractor_for_allowlisted_types():
     assert isinstance(build_document_extractor("application/pdf"), PdfExtractor)
     assert isinstance(build_document_extractor("text/plain"), PlainTextExtractor)
+    assert isinstance(build_document_extractor("text/html"), HtmlExtractor)
     assert isinstance(build_document_extractor("text/markdown"), MarkdownExtractor)
     assert isinstance(build_document_extractor("text/x-markdown"), MarkdownExtractor)
 
@@ -221,6 +225,92 @@ async def test_extract_text_with_metadata_markdown():
         _MARKDOWN_FIXTURE,
     )
     assert "Product Guide" in text
+    assert boundaries == []
+
+
+# ---------------------------------------------------------------------------
+# HtmlExtractor
+# ---------------------------------------------------------------------------
+
+
+_HTML_FIXTURE = b"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Fixture Page</title></head>
+<body>
+  <h1>HTML Ingest Fixture</h1>
+  <p>Unique visible phrase for HTML ingestion tests.</p>
+  <style>body { display: none; } secret-style-phrase</style>
+  <script>alert("must-not-persist-script")</script>
+  <img src="http://example.com/remote-only.png" alt="ignored remote asset">
+</body>
+</html>
+"""
+
+
+def test_html_extractor_strips_script_and_style():
+    doc = HtmlExtractor().extract(_HTML_FIXTURE, filename="page.html")
+
+    assert "HTML Ingest Fixture" in doc.text
+    assert "Unique visible phrase for HTML ingestion tests." in doc.text
+    assert "secret-style-phrase" not in doc.text
+    assert "must-not-persist-script" not in doc.text
+    assert doc.page_boundaries == []
+
+
+def test_html_extractor_respects_declared_charset():
+    body = "Caf\xe9 phrase".encode("iso-8859-1")
+    wrapped = (
+        b'<!DOCTYPE html><html><head><meta charset="iso-8859-1"></head><body>'
+        + body
+        + b"</body></html>"
+    )
+    doc = HtmlExtractor().extract(wrapped, filename="latin.html")
+    assert "Café phrase" in doc.text
+
+
+def test_html_extractor_malformed_html_best_effort():
+    broken = b"<html><body><p>Unclosed paragraph phrase<div>More visible text</style>"
+    doc = HtmlExtractor().extract(broken, filename="broken.html")
+    assert "Unclosed paragraph phrase" in doc.text
+    assert "More visible text" in doc.text
+
+
+def test_html_extractor_raises_on_null_bytes():
+    with pytest.raises(DocumentExtractionError, match="Failed to parse HTML content."):
+        HtmlExtractor().extract(b"<html>\x00<body></body></html>", filename="bad.html")
+
+
+def test_html_extractor_raises_on_undecodable_bytes():
+    with pytest.raises(DocumentExtractionError, match="Failed to decode HTML content."):
+        HtmlExtractor().extract(b"\xff\x81", filename="binary.html")
+
+
+def test_html_extractor_performs_no_network_io():
+    with patch("urllib.request.urlopen") as mock_urlopen, patch(
+        "socket.create_connection"
+    ) as mock_connect:
+        HtmlExtractor().extract(_HTML_FIXTURE, filename="page.html")
+
+    mock_urlopen.assert_not_called()
+    mock_connect.assert_not_called()
+
+
+def test_html_content_type_and_filename_helpers():
+    assert is_html_content_type("text/html")
+    assert is_html_content_type("Text/HTML; charset=utf-8")
+    assert not is_html_content_type("text/plain")
+    assert is_html_filename("page.html")
+    assert is_html_filename("legacy.HTM")
+    assert not is_html_filename("page.txt")
+
+
+@pytest.mark.asyncio
+async def test_extract_text_with_metadata_html():
+    text, boundaries = await extract_text_with_metadata(
+        _upload("text/html", "page.html"),
+        _HTML_FIXTURE,
+    )
+    assert "Unique visible phrase for HTML ingestion tests." in text
     assert boundaries == []
 
 

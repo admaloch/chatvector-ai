@@ -644,6 +644,109 @@ async def test_corrupt_markdown_marks_document_failed_without_storing_chunks():
     assert mock_update.await_args_list[-1].kwargs["error"]["stage"] == "extracting"
 
 
+@pytest.mark.asyncio
+async def test_validate_file_rejects_html_mime_with_non_html_extension():
+    mock_file = AsyncMock(spec=UploadFile)
+    mock_file.content_type = "text/html"
+    mock_file.filename = "notes.txt"
+    pipeline = IngestionPipeline()
+
+    with pytest.raises(UploadPipelineError) as excinfo:
+        pipeline.validate_file(mock_file, b"<html><body>ok</body></html>")
+
+    assert excinfo.value.code == "invalid_file_content"
+
+
+@pytest.mark.asyncio
+async def test_validate_file_rejects_html_extension_with_plain_text_mime():
+    mock_file = AsyncMock(spec=UploadFile)
+    mock_file.content_type = "text/plain"
+    mock_file.filename = "page.html"
+    pipeline = IngestionPipeline()
+
+    with pytest.raises(UploadPipelineError) as excinfo:
+        pipeline.validate_file(mock_file, b"<html><body>ok</body></html>")
+
+    assert excinfo.value.code == "invalid_file_content"
+
+
+@pytest.mark.asyncio
+async def test_process_document_html_ingests_to_completed(monkeypatch):
+    html_bytes = b"""<!DOCTYPE html><html><body>
+<h1>HTML Pipeline Ingest</h1>
+<p>Unique HTML pipeline phrase beta.</p>
+<script>ignored();</script>
+</body></html>"""
+    mock_file = AsyncMock(spec=UploadFile)
+    mock_file.filename = "page.html"
+    mock_file.content_type = "text/html"
+    mock_file.read = AsyncMock(return_value=html_bytes)
+
+    monkeypatch.setattr("services.ingestion_pipeline.config.MAX_UPLOAD_SIZE_BYTES", 10 * 1024 * 1024)
+    monkeypatch.setattr("services.ingestion_pipeline.config.MAX_UPLOAD_SIZE_MB", 10)
+
+    pipeline = IngestionPipeline(splitter_cls=_TrackingSplitter)
+
+    with patch("services.ingestion_pipeline.db.create_document", new=AsyncMock(return_value="doc-html")) as mock_create, patch(
+        "services.ingestion_pipeline.db.update_document_status", new=AsyncMock()
+    ) as mock_update, patch(
+        "services.ingestion_pipeline.db.store_chunks_with_embeddings", new=AsyncMock(return_value=["c1"])
+    ) as mock_store, patch(
+        "services.ingestion_pipeline.db.delete_document_chunks", new=AsyncMock()
+    ), patch(
+        "services.ingestion_pipeline.get_embeddings", new=AsyncMock(return_value=[[0.1, 0.2]])
+    ):
+        result = await pipeline.process_document(mock_file, tenant_id="dev")
+
+    assert result["status"] == "completed"
+    mock_create.assert_awaited_once()
+    stored_records = mock_store.await_args.args[1]
+    assert any("Unique HTML pipeline phrase beta" in r.chunk_text for r in stored_records)
+    assert "HTML Pipeline Ingest" in _TrackingSplitter.last_create["texts"][0]
+    assert "ignored" not in _TrackingSplitter.last_create["texts"][0]
+    assert mock_update.await_args_list[-1].kwargs["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_process_document_rejects_pptx_at_validation():
+    mock_file = AsyncMock(spec=UploadFile)
+    mock_file.filename = "slides.pptx"
+    mock_file.content_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    mock_file.read = AsyncMock(return_value=b"PK\x03\x04")
+
+    pipeline = IngestionPipeline(splitter_cls=_SingleChunkSplitter)
+
+    with pytest.raises(UploadPipelineError) as excinfo:
+        await pipeline.process_document(mock_file, tenant_id="dev")
+
+    assert excinfo.value.code == "invalid_file_type"
+
+
+@pytest.mark.asyncio
+async def test_corrupt_html_marks_document_failed_without_storing_chunks():
+    pipeline = IngestionPipeline()
+
+    with patch(
+        "services.ingestion_pipeline.db.update_document_status", new=AsyncMock()
+    ) as mock_update, patch(
+        "services.ingestion_pipeline.db.delete_document_chunks", new=AsyncMock()
+    ), patch(
+        "services.ingestion_pipeline.db.store_chunks_with_embeddings", new=AsyncMock()
+    ) as mock_store:
+        with pytest.raises(DocumentExtractionError):
+            await pipeline.process_document_background(
+                doc_id="doc-html-fail",
+                file_name="bad.html",
+                content_type="text/html",
+                file_bytes=b"<html>\x00<body></body></html>",
+                tenant_id="dev",
+            )
+
+    mock_store.assert_not_awaited()
+    assert mock_update.await_args_list[-1].kwargs["status"] == "failed"
+    assert mock_update.await_args_list[-1].kwargs["error"]["stage"] == "extracting"
+
+
 # ---------------------------------------------------------------------------
 # Error classification unit tests (Issue #394)
 # ---------------------------------------------------------------------------
