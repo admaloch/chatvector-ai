@@ -3,7 +3,7 @@ from datetime import datetime
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import declarative_base
 
@@ -42,6 +42,14 @@ class Document(Base):
     status = Column(String, nullable=False, default="uploaded")
     chunks = Column(JSONB, nullable=False, default=lambda: {"total": 0, "processed": 0})
     error = Column(JSONB, nullable=True)
+    # "metadata" is reserved on declarative classes, so map the column under a different attribute name.
+    doc_metadata = Column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

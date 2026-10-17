@@ -163,7 +163,7 @@ set automatically).
 | ---- | ------ |
 | Location | `backend/db/init/` |
 | Filename | `NNN_descriptive_name.sql` — three-digit prefix, then a short slug |
-| Order | Lexical sort on the filename (`001` … `012` today; next is `013_*`) |
+| Order | Lexical sort on the filename (`001` … `013` today; next is `014_*`) |
 | Idempotency | Prefer `CREATE … IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, and guarded `DO …` blocks so re-runs are safe |
 | ORM models | Update SQLAlchemy models in `backend/db/` to match new tables/columns |
 | Ledger | Migrations after `008_schema_migrations.sql` must record their own filename as their final operation before `COMMIT` |
@@ -184,9 +184,10 @@ Current files (in apply order):
 010_api_key_lifecycle.sql
 011_document_chunks_unique_index.sql
 012_documents_tenant_id_not_null_reconcile.sql
+013_document_metadata.sql
 ```
 
-> **Do not add another `004_*` file.** Use the next unused number (`013_*` at
+> **Do not add another `004_*` file.** Use the next unused number (`014_*` at
 > time of writing). The duplicate `004` pair is historical; chat history always
 > runs before hybrid retrieval because of alphabetical sort. Migration `008`
 > baselines `004_hybrid_retrieval.sql` for databases created before the ledger;
@@ -228,9 +229,9 @@ psql -d chatvector_dev -v ON_ERROR_STOP=1 \
 
 ### Adding a new migration (contributors)
 
-1. Pick the next number — check `backend/db/init/`; use `013_*` if
-   `012_documents_tenant_id_not_null_reconcile.sql` is the latest.
-2. Add `backend/db/init/013_your_change.sql` with idempotent DDL (and any
+1. Pick the next number — check `backend/db/init/`; use `014_*` if
+   `013_document_metadata.sql` is the latest.
+2. Add `backend/db/init/014_your_change.sql` with idempotent DDL (and any
    backfill `UPDATE`/`INSERT` the change needs) inside a transaction.
 3. Make the idempotent ledger insert the final operation before `COMMIT`, so the
    schema changes and their ledger row become visible atomically:
@@ -1121,7 +1122,7 @@ ALTER TABLE documents DROP CONSTRAINT IF EXISTS fk_documents_tenant_id;
 ```
 
 > **Duplicate `004` prefixes:** Documented in [Database migrations](#database-migrations).
-> Do not add another `004_*` file; use the next unused number (`013_*` at time of writing).
+> Do not add another `004_*` file; use the next unused number (`014_*` at time of writing).
 
 ### Hybrid retrieval (`content_tsv`)
 
