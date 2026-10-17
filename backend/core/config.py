@@ -139,6 +139,14 @@ class Settings:
 
     MAX_UPLOAD_SIZE_MB: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
     MAX_UPLOAD_SIZE_BYTES: int = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    DOCX_MAX_UNCOMPRESSED_MB: int = int(
+        os.getenv("DOCX_MAX_UNCOMPRESSED_MB", str(max(50, MAX_UPLOAD_SIZE_MB * 10)))
+    )
+    DOCX_MAX_UNCOMPRESSED_BYTES: int = DOCX_MAX_UNCOMPRESSED_MB * 1024 * 1024
+    DOCX_MAX_ZIP_ENTRIES: int = max(1, int(os.getenv("DOCX_MAX_ZIP_ENTRIES", "500")))
+    DOCX_MAX_COMPRESSION_RATIO: int = max(
+        1, int(os.getenv("DOCX_MAX_COMPRESSION_RATIO", "100"))
+    )
     CHUNK_SIZE: int = max(1, int(os.getenv("CHUNK_SIZE", "1000")))
     CHUNK_OVERLAP: int = max(0, int(os.getenv("CHUNK_OVERLAP", "200")))
     CHUNKING_STRATEGY: str = _get_chunking_strategy()

@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
 import asyncio
 import bisect
+import io
 import logging
 import pathlib
 import re
+import zipfile
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -76,6 +78,12 @@ from core.config import config
 from db.base import ChunkRecord
 from db.tenant_scope import require_tenant_id
 from services.embedding_service import get_embeddings
+from services.docx_extraction import (
+    DOCX_CONTENT_TYPES,
+    docx_package_has_expected_layout,
+    is_docx_content_type,
+    is_docx_filename,
+)
 from services.extraction_service import (
     HTML_CONTENT_TYPES,
     MARKDOWN_CONTENT_TYPES,
@@ -98,9 +106,10 @@ ALLOWED_UPLOAD_TYPES = {
     "text/plain",
     *MARKDOWN_CONTENT_TYPES,
     *HTML_CONTENT_TYPES,
+    *DOCX_CONTENT_TYPES,
 }
 _SUPPORTED_UPLOAD_MESSAGE = (
-    "Only PDF, TXT, Markdown (.md), and HTML (.html/.htm) files are supported."
+    "Only PDF, TXT, Markdown (.md), HTML (.html/.htm), and DOCX (.docx) files are supported."
 )
 HEADING_PATTERN = re.compile(r"^\s{0,3}#{1,6}\s+(?P<heading>.+?)\s*$")
 FALLBACK_SENTENCE_PATTERN = re.compile(r".+?(?:[.!?](?=\s+|$)|$)", re.DOTALL)
@@ -817,6 +826,23 @@ class IngestionPipeline:
                 message="File content type does not match the HTML extension.",
             )
 
+        docx_mime = is_docx_content_type(file.content_type)
+        docx_ext = is_docx_filename(filename)
+        if docx_mime and not docx_ext:
+            raise UploadPipelineError(
+                status_code=400,
+                code="invalid_file_content",
+                stage=stage,
+                message="File extension does not match the declared DOCX type.",
+            )
+        if docx_ext and not docx_mime:
+            raise UploadPipelineError(
+                status_code=400,
+                code="invalid_file_content",
+                stage=stage,
+                message="File content type does not match the DOCX extension.",
+            )
+
         if not file_bytes:
             raise UploadPipelineError(
                 status_code=400,
@@ -842,6 +868,32 @@ class IngestionPipeline:
                 stage=stage,
                 message="File content does not match the declared PDF type.",
             )
+
+        if docx_mime:
+            if not file_bytes.startswith(b"PK"):
+                raise UploadPipelineError(
+                    status_code=400,
+                    code="invalid_file_content",
+                    stage=stage,
+                    message="File content does not match the declared DOCX type.",
+                )
+            try:
+                with zipfile.ZipFile(io.BytesIO(file_bytes)) as archive:
+                    names = set(archive.namelist())
+            except zipfile.BadZipFile:
+                raise UploadPipelineError(
+                    status_code=400,
+                    code="invalid_file_content",
+                    stage=stage,
+                    message="File content does not match the declared DOCX type.",
+                )
+            if not docx_package_has_expected_layout(names):
+                raise UploadPipelineError(
+                    status_code=400,
+                    code="invalid_file_content",
+                    stage=stage,
+                    message="File content does not match the declared DOCX type.",
+                )
 
         if file.content_type == "text/plain" or markdown_mime or html_mime:
             try:

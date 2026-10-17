@@ -9,6 +9,13 @@ from html.parser import HTMLParser
 from fastapi import UploadFile
 from pypdf import PdfReader
 
+from services.docx_extraction import (
+    DOCX_CONTENT_TYPE,
+    DocxExtractionError,
+    extract_docx_text,
+    is_docx_content_type,
+    is_docx_filename,
+)
 from services.text_cleaning_service import clean_text
 
 logger = logging.getLogger(__name__)
@@ -303,6 +310,25 @@ class MarkdownExtractor(DocumentExtractor):
         return ExtractedDocument(text=file_text)
 
 
+class DocxExtractor(DocumentExtractor):
+    """
+    DOCX extraction via safe ZIP/XML parsing only (no macros, no OCR, no network).
+
+    Embedded media without text is omitted. ``page_number`` provenance is not populated.
+    """
+
+    def extract(self, contents: bytes, *, filename: str = "") -> ExtractedDocument:
+        try:
+            text = extract_docx_text(contents, filename=filename)
+        except DocxExtractionError as exc:
+            message = str(exc)
+            if message.startswith("Encrypted"):
+                raise DocumentExtractionError(message) from exc
+            raise DocumentExtractionError("Failed to parse DOCX content.") from exc
+        logger.info(f"Extracted {len(text)} characters from DOCX file")
+        return ExtractedDocument(text=text)
+
+
 class PlainTextExtractor(DocumentExtractor):
     """Plain-text extraction (utf-8, cp1254 fallback) with no page boundaries."""
 
@@ -327,6 +353,7 @@ _EXTRACTOR_REGISTRY: dict[str, type[DocumentExtractor]] = {
     "text/html": HtmlExtractor,
     "text/markdown": MarkdownExtractor,
     "text/x-markdown": MarkdownExtractor,
+    DOCX_CONTENT_TYPE: DocxExtractor,
 }
 
 
@@ -375,7 +402,7 @@ def _extract_text_with_metadata_sync(
 
 async def extract_text_from_file(file: UploadFile, contents: bytes | None = None) -> str:
     """
-    Extract text from a PDF, TXT, Markdown, or HTML UploadFile.
+    Extract text from a PDF, TXT, Markdown, HTML, or DOCX UploadFile.
     Raises ValueError for unsupported file types or unreadable payloads.
     """
     text, _ = await extract_text_with_metadata(file, contents)
