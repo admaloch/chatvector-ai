@@ -18,8 +18,14 @@ export class SessionsResource {
   ): Promise<Session> {
     const body: Record<string, unknown> = {};
     if (input.sessionId !== undefined) body.session_id = input.sessionId;
+    const headers: Record<string, string> = {};
+    const idempotencyKey = input.idempotencyKey?.trim();
+    if (idempotencyKey) {
+      headers["Idempotency-Key"] = idempotencyKey;
+    }
     const payload = await this.http.requestJson("POST", "/sessions", {
       json: body,
+      ...(Object.keys(headers).length > 0 ? { headers } : {}),
       ...signalOption(options.signal),
     });
     return mapSession(payload);

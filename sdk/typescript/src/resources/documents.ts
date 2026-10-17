@@ -262,11 +262,16 @@ function waitTimeoutError(
 function uploadSessionHeaders(
   input: UploadInput,
 ): Record<string, string> | undefined {
+  const headers: Record<string, string> = {};
   const sessionId = input.sessionId?.trim();
-  if (!sessionId) {
-    return undefined;
+  if (sessionId) {
+    headers["X-Session-Id"] = sessionId;
   }
-  return { "X-Session-Id": sessionId };
+  const idempotencyKey = input.idempotencyKey?.trim();
+  if (idempotencyKey) {
+    headers["Idempotency-Key"] = idempotencyKey;
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined;
 }
 
 function mapDocumentSummary(

@@ -47,6 +47,7 @@ export type UploadInput =
       sessionId?: string;
       /** Re-ingest this completed/failed document in place instead of creating a new one. */
       replaceDocumentId?: string;
+      idempotencyKey?: string;
     }
   | {
       data: Uint8Array | Blob;
@@ -55,6 +56,7 @@ export type UploadInput =
       sessionId?: string;
       /** Re-ingest this completed/failed document in place instead of creating a new one. */
       replaceDocumentId?: string;
+      idempotencyKey?: string;
     };
 
 /** Opt-in retrieval debug metadata when the backend exposes it. */
@@ -233,4 +235,7 @@ export type SessionListResponse = {
   _raw?: Record<string, unknown>;
 };
 
-export type CreateSessionInput = { sessionId?: string };
+export type CreateSessionInput = {
+  sessionId?: string;
+  idempotencyKey?: string;
+};

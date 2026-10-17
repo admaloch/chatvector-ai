@@ -40,6 +40,32 @@ Create keys with `python -m backend.cli create-tenant-key`. See [Getting Started
 | `GET` | `/status` | Service health and configuration summary |
 | `GET` | `/queue/stats` | Ingestion queue statistics |
 
+## Idempotency keys
+
+`POST /upload` and `POST /sessions` accept an optional request header:
+
+```http
+Idempotency-Key: <client-chosen string, max 255 characters>
+```
+
+When the header is **omitted**, behavior is unchanged from Phase 3 (each request runs normally).
+
+When the header is **present**, the server stores the response in Redis keyed by `(tenant_id, route, idempotency_key)` for `IDEMPOTENCY_TTL_SECONDS` (default 86400):
+
+| Route | Request fingerprint (must match for replay) |
+|-------|---------------------------------------------|
+| `POST /upload` | SHA-256 of file bytes, normalized filename, `Content-Type` when sent, and `replace_document_id` when present |
+| `POST /sessions` | Optional JSON `session_id` field (tenant is scoped by auth) |
+
+Semantics:
+
+- Same key and same fingerprint while a stored response exists → replay the stored HTTP status and body (including the same `document_id` or `session_id`).
+- Same key and different fingerprint → `409` with `code: idempotency_key_mismatch`.
+- Concurrent in-flight requests with the same key and fingerprint → the second waits for the first to finish (up to `IDEMPOTENCY_WAIT_TIMEOUT_SECONDS`, default 30s), then replays; only one document or session is created.
+- After TTL expiry the key may be reused; a retry with a reused key is a new operation.
+
+SDKs expose optional `idempotency_key` / `idempotencyKey` on upload and session create. The SDK does **not** automatically retry mutating POST requests.
+
 ## Document metadata
 
 `POST /upload` accepts an optional multipart form field `metadata`: a JSON object of flat key/value pairs, for example `{"department": "legal", "year": 2026, "final": true}`. Values must be strings, numbers, or booleans. Nested objects, arrays, `null` values, non-object JSON (including a top-level array), and invalid JSON are rejected with `422`. Omitting `metadata` stores `{}`.

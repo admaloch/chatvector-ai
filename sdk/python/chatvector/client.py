@@ -113,6 +113,7 @@ class ChatVectorClient:
         *,
         session_id: str | None = None,
         replace_document_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> DocumentResponse:
         """
         Upload a document for ingestion.
@@ -128,6 +129,7 @@ class ChatVectorClient:
                 prior content stays retrievable until the new content is ready;
                 use ``wait_for_ready`` to wait for the swap. Raises
                 ``ChatVectorAPIError`` (409) if a replacement is already running.
+            idempotency_key: Optional ``Idempotency-Key`` header for safe retries.
 
         Returns:
             A typed upload response with the document identifier and status.
@@ -145,9 +147,14 @@ class ChatVectorClient:
         content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         endpoints = ("ingest", "upload")
         last_error: ChatVectorAPIError | None = None
-        headers: JSONDict | None = None
+        headers: JSONDict = {}
         if session_id is not None:
-            headers = {"X-Session-Id": session_id}
+            headers["X-Session-Id"] = session_id
+        if idempotency_key is not None:
+            if not idempotency_key.strip():
+                raise ValueError("idempotency_key must not be empty.")
+            headers["Idempotency-Key"] = idempotency_key.strip()
+        request_headers: JSONDict | None = headers or None
         form_data: JSONDict | None = None
         if replace_document_id is not None:
             if not replace_document_id.strip():
@@ -162,7 +169,7 @@ class ChatVectorClient:
                         "POST",
                         endpoint,
                         files=files,
-                        headers=headers,
+                        headers=request_headers,
                         **({} if form_data is None else {"data": form_data}),
                     )
                     return DocumentResponse.from_dict(payload)
@@ -220,12 +227,18 @@ class ChatVectorClient:
         encoded_id = encode_path_component(document_id)
         self._request_no_content("DELETE", f"documents/{encoded_id}")
 
-    def create_session(self, session_id: str | None = None) -> Session:
+    def create_session(
+        self,
+        session_id: str | None = None,
+        *,
+        idempotency_key: str | None = None,
+    ) -> Session:
         """
         Create a new chat session.
 
         Args:
             session_id: Optional client-provided session identifier.
+            idempotency_key: Optional ``Idempotency-Key`` header for safe retries.
 
         Returns:
             A typed session response.
@@ -233,7 +246,12 @@ class ChatVectorClient:
         body: JSONDict = {}
         if session_id is not None:
             body["session_id"] = session_id
-        payload = self._request_json("POST", "sessions", json=body)
+        headers: JSONDict | None = None
+        if idempotency_key is not None:
+            if not idempotency_key.strip():
+                raise ValueError("idempotency_key must not be empty.")
+            headers = {"Idempotency-Key": idempotency_key.strip()}
+        payload = self._request_json("POST", "sessions", json=body, headers=headers)
         return Session.from_dict(payload)
 
     def get_session(self, session_id: str) -> Session:
