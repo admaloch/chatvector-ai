@@ -1,6 +1,7 @@
 import type {
   FeedbackItem,
   FeedbackListResponse,
+  FeedbackType,
   ListFeedbackInput,
   PostFeedbackInput,
   RequestOptions,
@@ -59,10 +60,17 @@ export class FeedbackResource {
   }
 }
 
+function feedbackTypeValue(value: unknown): FeedbackType {
+  if (value === "answer" || value === "citation" || value === "retrieval") {
+    return value;
+  }
+  return "answer";
+}
+
 function mapFeedbackItem(payload: Record<string, unknown>): FeedbackItem {
   const item: FeedbackItem = {
     id: stringValue(payload.id),
-    type: stringValue(payload.type),
+    type: feedbackTypeValue(payload.type),
     rating: typeof payload.rating === "number" ? payload.rating : 0,
     sessionId: stringValue(payload.session_id),
     createdAt: stringValue(payload.created_at),
