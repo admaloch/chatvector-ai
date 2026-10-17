@@ -82,6 +82,16 @@ def test_expand_chunks_empty_graph_is_noop():
     assert expand_chunks(seeds, EntityChunkGraph()) == seeds
 
 
+def test_expand_chunks_respects_extra_limit(multihop_graph):
+    seeds = [_chunk("graph-doc-01", 0)]
+    expanded = expand_chunks(seeds, multihop_graph, extra_limit=0)
+    assert [(c.document_id, c.chunk_index) for c in expanded] == [("graph-doc-01", 0)]
+
+    expanded = expand_chunks(seeds, multihop_graph, extra_limit=1)
+    keys = [(c.document_id, c.chunk_index) for c in expanded]
+    assert keys == [("graph-doc-01", 0), ("graph-doc-01", 1)]
+
+
 def test_expand_chunks_if_enabled_noop_when_flag_off(monkeypatch, multihop_graph):
     monkeypatch.setattr(config, "ENABLE_GRAPH_RETRIEVAL", False)
     monkeypatch.setattr(config, "GRAPH_RETRIEVAL_FIXTURE_PATH", str(FIXTURE_PATH))
@@ -92,6 +102,14 @@ def test_expand_chunks_if_enabled_noop_when_flag_off(monkeypatch, multihop_graph
 def test_expand_chunks_if_enabled_noop_without_fixture_path(monkeypatch):
     monkeypatch.setattr(config, "ENABLE_GRAPH_RETRIEVAL", True)
     monkeypatch.setattr(config, "GRAPH_RETRIEVAL_FIXTURE_PATH", None)
+    seeds = [_chunk("graph-doc-01", 0)]
+    assert expand_chunks_if_enabled(seeds) == seeds
+
+
+def test_expand_chunks_if_enabled_noop_on_missing_file(monkeypatch, tmp_path):
+    missing = tmp_path / "no-such-graph.json"
+    monkeypatch.setattr(config, "ENABLE_GRAPH_RETRIEVAL", True)
+    monkeypatch.setattr(config, "GRAPH_RETRIEVAL_FIXTURE_PATH", str(missing))
     seeds = [_chunk("graph-doc-01", 0)]
     assert expand_chunks_if_enabled(seeds) == seeds
 
