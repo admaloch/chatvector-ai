@@ -21,6 +21,7 @@ from services.idempotency import (
     parse_idempotency_key,
     upload_request_fingerprint,
 )
+from services.ingestion_job_metadata import patch_enqueued, patch_terminal_failure
 from services.tenant_registry import register_tenant_document
 
 logger = logging.getLogger(__name__)
@@ -169,6 +170,14 @@ async def upload(
 
         try:
             queue_position = await ingestion_queue.enqueue(job)
+            await db.merge_document_job_metadata(
+                doc_id,
+                tenant_id,
+                patch_enqueued(
+                    enqueued_at=job.enqueued_at,
+                    attempt=job.attempt + 1,
+                ),
+            )
         except QueueFull:
             queue_full_error = {
                 "stage": "queued",
@@ -189,6 +198,7 @@ async def upload(
                     status="failed",
                     error=queue_full_error,
                     tenant_id=tenant_id,
+                    job_metadata_patch=patch_terminal_failure(queue_full_error),
                 )
             raise _http_error(
                     status_code=503,
@@ -275,15 +285,17 @@ async def upload(
                 },
             )
         elif doc_id:
+            upload_failed_error = {
+                "stage": "queued",
+                "code": "upload_failed",
+                "message": "An unexpected error occurred during upload.",
+            }
             await db.update_document_status(
                 doc_id=doc_id,
                 status="failed",
-                error={
-                    "stage": "queued", 
-                    "code": "upload_failed", 
-                    "message": "An unexpected error occurred during upload."
-                },
+                error=upload_failed_error,
                 tenant_id=tenant_id,
+                job_metadata_patch=patch_terminal_failure(upload_failed_error),
             )
         log_msg = (
             f"Unexpected error during upload of {safe_filename!r} "

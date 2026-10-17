@@ -13,11 +13,30 @@ from middleware.rate_limit import limiter
 import db
 from core.config import STALE_INGESTION_STATUSES
 from db.base import REPLACEMENT_IN_PROGRESS
+from services.ingestion_job_metadata import build_document_status_response
 from services.queue_service import ingestion_queue
 from services.tenant_registry import invalidate_tenant_cache
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _status_response_from_payload(
+    document_id: UUID | str,
+    status_payload: dict,
+) -> dict:
+    queue_pos = None
+    if (
+        status_payload.get("status") == "queued"
+        or status_payload.get("status_detail") == REPLACEMENT_IN_PROGRESS
+    ):
+        queue_pos = ingestion_queue.queue_position(str(document_id))
+
+    return build_document_status_response(
+        str(document_id),
+        status_payload,
+        queue_position=queue_pos,
+    )
 
 
 @router.get("/documents")
@@ -43,30 +62,7 @@ async def get_document_status(request: Request, document_id: UUID, auth: AuthCon
             },
         )
 
-    response: dict = {
-        "document_id": str(document_id),
-        "status": status_payload.get("status"),
-        "chunks": status_payload.get("chunks"),
-        "metadata": status_payload.get("metadata") or {},
-        "created_at": status_payload.get("created_at"),
-        "updated_at": status_payload.get("updated_at"),
-    }
-
-    if status_payload.get("status_detail") is not None:
-        response["status_detail"] = status_payload["status_detail"]
-
-    if status_payload.get("error") is not None:
-        response["error"] = status_payload["error"]
-
-    if (
-        status_payload.get("status") == "queued"
-        or status_payload.get("status_detail") == REPLACEMENT_IN_PROGRESS
-    ):
-        queue_pos = ingestion_queue.queue_position(str(document_id))
-        if queue_pos is not None:
-            response["queue_position"] = queue_pos
-
-    return response
+    return _status_response_from_payload(document_id, status_payload)
 
 
 @router.get("/documents/{document_id}/status/stream")
@@ -95,28 +91,7 @@ async def get_document_status_stream(request: Request, document_id: UUID, auth: 
                 yield f"event: error\ndata: {json.dumps({'message': 'Document not found.'})}\n\n"
                 break
 
-            response = {
-                "document_id": str(document_id),
-                "status": status_payload.get("status"),
-                "chunks": status_payload.get("chunks"),
-                "metadata": status_payload.get("metadata") or {},
-                "created_at": status_payload.get("created_at"),
-                "updated_at": status_payload.get("updated_at"),
-            }
-
-            if status_payload.get("status_detail") is not None:
-                response["status_detail"] = status_payload["status_detail"]
-
-            if status_payload.get("error") is not None:
-                response["error"] = status_payload["error"]
-
-            if (
-                status_payload.get("status") == "queued"
-                or status_payload.get("status_detail") == REPLACEMENT_IN_PROGRESS
-            ):
-                queue_pos = ingestion_queue.queue_position(str(document_id))
-                if queue_pos is not None:
-                    response["queue_position"] = queue_pos
+            response = _status_response_from_payload(document_id, status_payload)
 
             yield f"event: status\ndata: {json.dumps(response)}\n\n"
 

@@ -232,6 +232,7 @@ class AsyncioIngestionQueue(BaseIngestionQueue):
                 rate_limiter=self._rate_limiter,
                 replace=job.replace,
                 metadata=job.metadata,
+                attempt=job.attempt,
             )
         except Exception as exc:
             if isinstance(exc, UploadPipelineError) and 400 <= exc.status_code < 500:
@@ -275,6 +276,7 @@ class AsyncioIngestionQueue(BaseIngestionQueue):
                     f"Document {job.doc_id} failed on attempt {job.attempt} "
                     f"— requeueing after {delay:.2f}s: {exc}"
                 )
+                retry_job_patch = {"attempt": job.attempt + 1}
                 try:
                     if job.replace:
                         # Keep `status` (and the retrievable chunks) untouched.
@@ -282,12 +284,14 @@ class AsyncioIngestionQueue(BaseIngestionQueue):
                             job.doc_id,
                             REPLACEMENT_IN_PROGRESS,
                             tenant_id=job.tenant_id,
+                            job_metadata_patch=retry_job_patch,
                         )
                     else:
                         await db.update_document_status(
                             doc_id=job.doc_id,
                             status="retrying",
                             tenant_id=job.tenant_id,
+                            job_metadata_patch=retry_job_patch,
                         )
                 except Exception as status_err:
                     logger.error(

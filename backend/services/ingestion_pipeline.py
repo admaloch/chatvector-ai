@@ -955,14 +955,20 @@ class IngestionPipeline:
         *,
         error: dict | None = None,
         chunks: dict | None = None,
+        job_metadata_patch: dict | None = None,
     ) -> None:
         tenant_id = require_tenant_id(tenant_id, method="update_document_status")
+        if status == "completed" and job_metadata_patch is None:
+            from services.ingestion_job_metadata import patch_terminal_success
+
+            job_metadata_patch = patch_terminal_success()
         await db.update_document_status(
             doc_id=doc_id,
             status=status,
             tenant_id=tenant_id,
             error=error,
             chunks=chunks,
+            job_metadata_patch=job_metadata_patch,
         )
 
     async def _handle_error(
@@ -975,13 +981,20 @@ class IngestionPipeline:
     ) -> None:
         tenant_id = require_tenant_id(tenant_id, method="delete_document_chunks")
         error = _classify_ingestion_error(exc, stage)
+        from services.ingestion_job_metadata import patch_terminal_failure
+
+        terminal_job_patch = patch_terminal_failure(error)
 
         if replace:
             # The active chunks and `status` are the last known-good content:
             # record the failure in status_detail and leave both untouched.
             try:
                 await db.set_document_status_detail(
-                    doc_id, REPLACEMENT_FAILED, tenant_id=tenant_id, error=error
+                    doc_id,
+                    REPLACEMENT_FAILED,
+                    tenant_id=tenant_id,
+                    error=error,
+                    job_metadata_patch=terminal_job_patch,
                 )
             except Exception as status_error:
                 logger.error(
@@ -995,6 +1008,7 @@ class IngestionPipeline:
                 status="failed",
                 tenant_id=tenant_id,
                 error=error,
+                job_metadata_patch=terminal_job_patch,
             )
         except Exception as status_error:
             logger.error(f"Failed to mark document {doc_id} as failed: {status_error}")
@@ -1134,8 +1148,22 @@ class IngestionPipeline:
         rate_limiter=None,
         replace: bool = False,
         metadata: dict | None = None,
+        attempt: int = 0,
     ) -> None:
         tenant_id = require_tenant_id(tenant_id, method="update_document_status")
+        from services.ingestion_job_metadata import patch_started
+
+        await db.merge_document_job_metadata(
+            doc_id,
+            tenant_id,
+            patch_started(),
+        )
+        if attempt:
+            await db.merge_document_job_metadata(
+                doc_id,
+                tenant_id,
+                {"attempt": attempt + 1},
+            )
         """
         Run the extraction→chunking→embedding→storing pipeline stages for a
         document that was already created and queued by the upload endpoint.
@@ -1218,6 +1246,13 @@ class IngestionPipeline:
                     tenant_id=tenant_id,
                     file_name=safe_filename,
                     metadata=metadata,
+                )
+                from services.ingestion_job_metadata import patch_terminal_success
+
+                await db.merge_document_job_metadata(
+                    doc_id,
+                    tenant_id,
+                    patch_terminal_success(),
                 )
             else:
                 await self._update_status(doc_id=doc_id, status="storing", tenant_id=tenant_id)

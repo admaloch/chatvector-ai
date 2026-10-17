@@ -209,6 +209,7 @@ async def _async_execute_job(
                 rate_limiter=rate_limiter,
                 replace=replace,
                 metadata=metadata,
+                attempt=attempt,
             )
             _cleanup_temp_file(temp_path)
         except Exception as exc:
