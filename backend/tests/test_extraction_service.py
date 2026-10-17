@@ -11,6 +11,7 @@ from services.extraction_service import (
     DocumentExtractionError,
     DocumentExtractor,
     ExtractedDocument,
+    MarkdownExtractor,
     PageBoundary,
     PdfExtractor,
     PlainTextExtractor,
@@ -18,6 +19,8 @@ from services.extraction_service import (
     build_document_extractor,
     extract_text_from_file,
     extract_text_with_metadata,
+    is_markdown_content_type,
+    is_markdown_filename,
     prepare_extracted_document_for_chunking,
     register_document_extractor,
 )
@@ -103,6 +106,8 @@ def registry(monkeypatch):
 def test_factory_selects_extractor_for_allowlisted_types():
     assert isinstance(build_document_extractor("application/pdf"), PdfExtractor)
     assert isinstance(build_document_extractor("text/plain"), PlainTextExtractor)
+    assert isinstance(build_document_extractor("text/markdown"), MarkdownExtractor)
+    assert isinstance(build_document_extractor("text/x-markdown"), MarkdownExtractor)
 
 
 def test_factory_normalizes_mime_type():
@@ -156,6 +161,67 @@ def test_plain_text_extractor_raises_structured_error_on_undecodable_bytes():
     # 0xFF is invalid utf-8 and 0x81 is undefined in cp1254.
     with pytest.raises(DocumentExtractionError):
         PlainTextExtractor().extract(b"\xff\x81")
+
+
+# ---------------------------------------------------------------------------
+# MarkdownExtractor
+# ---------------------------------------------------------------------------
+
+
+_MARKDOWN_FIXTURE = b"""# Product Guide
+
+A short overview paragraph for ingestion tests.
+
+- First list item phrase
+- Second list item phrase
+
+```python
+def sample_code_block():
+    return "fixture code phrase"
+```
+
+See [Example Link](https://example.com/ignored) for details.
+
+<p>Inline HTML paragraph phrase</p>
+<script>alert("must not run")</script>
+"""
+
+
+def test_markdown_extractor_preserves_structure_and_normalizes_links():
+    doc = MarkdownExtractor().extract(_MARKDOWN_FIXTURE, filename="guide.md")
+
+    assert "# Product Guide" in doc.text
+    assert "First list item phrase" in doc.text
+    assert 'return "fixture code phrase"' in doc.text
+    assert "Example Link" in doc.text
+    assert "https://example.com/ignored" not in doc.text
+    assert "Inline HTML paragraph phrase" in doc.text
+    assert "alert" not in doc.text
+    assert doc.page_boundaries == []
+
+
+def test_markdown_content_type_and_filename_helpers():
+    assert is_markdown_content_type("text/markdown")
+    assert is_markdown_content_type("Text/Markdown; charset=utf-8")
+    assert not is_markdown_content_type("text/plain")
+    assert is_markdown_filename("notes.md")
+    assert is_markdown_filename("Guide.MARKDOWN")
+    assert not is_markdown_filename("notes.txt")
+
+
+def test_markdown_extractor_raises_on_null_bytes():
+    with pytest.raises(DocumentExtractionError, match="Failed to parse Markdown content."):
+        MarkdownExtractor().extract(b"# Title\x00broken", filename="bad.md")
+
+
+@pytest.mark.asyncio
+async def test_extract_text_with_metadata_markdown():
+    text, boundaries = await extract_text_with_metadata(
+        _upload("text/markdown", "guide.md"),
+        _MARKDOWN_FIXTURE,
+    )
+    assert "Product Guide" in text
+    assert boundaries == []
 
 
 # ---------------------------------------------------------------------------

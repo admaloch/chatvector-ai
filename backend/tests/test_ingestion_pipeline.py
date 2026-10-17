@@ -43,7 +43,7 @@ from services.ingestion_pipeline import (
     _classify_ingestion_error,
     _resolve_page_number,
 )
-from services.extraction_service import PageBoundary
+from services.extraction_service import DocumentExtractionError, PageBoundary
 
 
 class _FakeDoc:
@@ -543,6 +543,7 @@ def test_sanitize_filename_edge_cases():
 @pytest.mark.asyncio
 async def test_validate_file_rejects_pdf_without_magic_bytes():
     mock_file = AsyncMock(spec=UploadFile)
+    mock_file.filename = "report.pdf"
     mock_file.content_type = "application/pdf"
     pipeline = IngestionPipeline()
     
@@ -554,9 +555,93 @@ async def test_validate_file_rejects_pdf_without_magic_bytes():
 @pytest.mark.asyncio
 async def test_validate_file_accepts_valid_cp1254_fallback():
     mock_file = AsyncMock(spec=UploadFile)
+    mock_file.filename = "notes.txt"
     mock_file.content_type = "text/plain"
     pipeline = IngestionPipeline()
     pipeline.validate_file(mock_file, b"\xff\xfe")
+
+
+@pytest.mark.asyncio
+async def test_validate_file_rejects_markdown_mime_with_non_md_extension():
+    mock_file = AsyncMock(spec=UploadFile)
+    mock_file.content_type = "text/markdown"
+    mock_file.filename = "notes.txt"
+    pipeline = IngestionPipeline()
+
+    with pytest.raises(UploadPipelineError) as excinfo:
+        pipeline.validate_file(mock_file, b"# Title\n")
+
+    assert excinfo.value.code == "invalid_file_content"
+
+
+@pytest.mark.asyncio
+async def test_validate_file_rejects_md_extension_with_plain_text_mime():
+    mock_file = AsyncMock(spec=UploadFile)
+    mock_file.content_type = "text/plain"
+    mock_file.filename = "notes.md"
+    pipeline = IngestionPipeline()
+
+    with pytest.raises(UploadPipelineError) as excinfo:
+        pipeline.validate_file(mock_file, b"# Title\n")
+
+    assert excinfo.value.code == "invalid_file_content"
+
+
+@pytest.mark.asyncio
+async def test_process_document_markdown_ingests_to_completed(monkeypatch):
+    md_bytes = b"# Markdown Ingest\n\nUnique fixture phrase alpha.\n"
+    mock_file = AsyncMock(spec=UploadFile)
+    mock_file.filename = "guide.md"
+    mock_file.content_type = "text/markdown"
+    mock_file.read = AsyncMock(return_value=md_bytes)
+
+    monkeypatch.setattr("services.ingestion_pipeline.config.MAX_UPLOAD_SIZE_BYTES", 10 * 1024 * 1024)
+    monkeypatch.setattr("services.ingestion_pipeline.config.MAX_UPLOAD_SIZE_MB", 10)
+
+    pipeline = IngestionPipeline(splitter_cls=_TrackingSplitter)
+
+    with patch("services.ingestion_pipeline.db.create_document", new=AsyncMock(return_value="doc-md")) as mock_create, patch(
+        "services.ingestion_pipeline.db.update_document_status", new=AsyncMock()
+    ) as mock_update, patch(
+        "services.ingestion_pipeline.db.store_chunks_with_embeddings", new=AsyncMock(return_value=["c1"])
+    ) as mock_store, patch(
+        "services.ingestion_pipeline.db.delete_document_chunks", new=AsyncMock()
+    ), patch(
+        "services.ingestion_pipeline.get_embeddings", new=AsyncMock(return_value=[[0.1, 0.2]])
+    ):
+        result = await pipeline.process_document(mock_file, tenant_id="dev")
+
+    assert result["status"] == "completed"
+    mock_create.assert_awaited_once()
+    stored_records = mock_store.await_args.args[1]
+    assert any("Unique fixture phrase alpha" in r.chunk_text for r in stored_records)
+    assert "Markdown Ingest" in _TrackingSplitter.last_create["texts"][0]
+    assert mock_update.await_args_list[-1].kwargs["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_corrupt_markdown_marks_document_failed_without_storing_chunks():
+    pipeline = IngestionPipeline()
+
+    with patch(
+        "services.ingestion_pipeline.db.update_document_status", new=AsyncMock()
+    ) as mock_update, patch(
+        "services.ingestion_pipeline.db.delete_document_chunks", new=AsyncMock()
+    ), patch(
+        "services.ingestion_pipeline.db.store_chunks_with_embeddings", new=AsyncMock()
+    ) as mock_store:
+        with pytest.raises(DocumentExtractionError):
+            await pipeline.process_document_background(
+                doc_id="doc-md-fail",
+                file_name="bad.md",
+                content_type="text/markdown",
+                file_bytes=b"# Broken\x00markdown",
+                tenant_id="dev",
+            )
+
+    mock_store.assert_not_awaited()
+    assert mock_update.await_args_list[-1].kwargs["status"] == "failed"
+    assert mock_update.await_args_list[-1].kwargs["error"]["stage"] == "extracting"
 
 
 # ---------------------------------------------------------------------------
