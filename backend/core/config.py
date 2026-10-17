@@ -215,6 +215,24 @@ class Settings:
     QUEUE_MAX_SIZE: int = max(1, int(os.getenv("QUEUE_MAX_SIZE", "100")))
     QUEUE_EMBEDDING_RPS: float = max(0.1, float(os.getenv("QUEUE_EMBEDDING_RPS", "2.0")))
     QUEUE_SPILL_DIR: str = os.getenv("QUEUE_SPILL_DIR", "/tmp/chatvector")
+    # Durable upload artifacts. ``local`` keeps Redis spill on QUEUE_SPILL_DIR
+    # (single-host default). ``s3`` is required when API and workers do not
+    # share a filesystem.
+    ARTIFACT_STORAGE: str = os.getenv("ARTIFACT_STORAGE", "local").strip().lower()
+    ARTIFACT_TTL_SECONDS: int = max(0, int(os.getenv("ARTIFACT_TTL_SECONDS", "86400")))
+    ARTIFACT_S3_BUCKET: str | None = os.getenv("ARTIFACT_S3_BUCKET") or None
+    ARTIFACT_S3_ENDPOINT_URL: str | None = os.getenv("ARTIFACT_S3_ENDPOINT_URL") or None
+    ARTIFACT_S3_REGION: str = os.getenv("ARTIFACT_S3_REGION", "us-east-1").strip() or "us-east-1"
+    ARTIFACT_S3_ACCESS_KEY: str | None = (
+        os.getenv("ARTIFACT_S3_ACCESS_KEY") or os.getenv("AWS_ACCESS_KEY_ID") or None
+    )
+    ARTIFACT_S3_SECRET_KEY: str | None = (
+        os.getenv("ARTIFACT_S3_SECRET_KEY") or os.getenv("AWS_SECRET_ACCESS_KEY") or None
+    )
+    ARTIFACT_S3_PREFIX: str = os.getenv("ARTIFACT_S3_PREFIX", "chatvector/artifacts/")
+    ARTIFACT_S3_FORCE_PATH_STYLE: bool = os.getenv(
+        "ARTIFACT_S3_FORCE_PATH_STYLE", "true"
+    ).lower() in ("1", "true", "yes")
     QUEUE_DLQ_MAX_ENTRIES: int = max(1, int(os.getenv("QUEUE_DLQ_MAX_ENTRIES", "1000")))
     QUEUE_JOB_MAX_RETRIES: int = max(0, int(os.getenv("QUEUE_JOB_MAX_RETRIES", "3")))
     QUEUE_RETRY_BASE_DELAY: float = max(
@@ -308,6 +326,7 @@ class Settings:
     )
 
 VALID_QUEUE_BACKENDS = {"memory", "redis"}
+VALID_ARTIFACT_STORAGES = {"local", "s3"}
 
 
 def _validate_queue_backend(backend: str) -> None:
@@ -342,9 +361,23 @@ def _validate_webhook_settings(settings: Settings) -> None:
         )
 
 
+def _validate_artifact_storage(settings: Settings) -> None:
+    backend = settings.ARTIFACT_STORAGE
+    if backend not in VALID_ARTIFACT_STORAGES:
+        valid = ", ".join(sorted(VALID_ARTIFACT_STORAGES))
+        raise ValueError(
+            f"Invalid ARTIFACT_STORAGE={backend!r}. Expected one of: {valid}."
+        )
+    if backend == "s3" and not (settings.ARTIFACT_S3_BUCKET or "").strip():
+        raise ValueError(
+            "ARTIFACT_STORAGE=s3 requires ARTIFACT_S3_BUCKET."
+        )
+
+
 config = Settings()
 _validate_queue_backend_for_env(config.APP_ENV, config.QUEUE_BACKEND)
 _validate_webhook_settings(config)
+_validate_artifact_storage(config)
 
 if config.QUERY_TRANSFORMATION_HISTORY_WINDOW > config.MAX_SESSION_HISTORY_MESSAGES:
     logger.warning(
