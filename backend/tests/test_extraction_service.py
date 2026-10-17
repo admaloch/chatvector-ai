@@ -7,7 +7,15 @@ import pytest
 from fastapi import UploadFile
 
 from services import extraction_service
+from services.docx_extraction import (
+    DOCX_CONTENT_TYPE,
+    DocxExtractionError,
+    extract_docx_text,
+    is_docx_content_type,
+    is_docx_filename,
+)
 from services.extraction_service import (
+    DocxExtractor,
     DocumentExtractionError,
     DocumentExtractor,
     ExtractedDocument,
@@ -26,6 +34,11 @@ from services.extraction_service import (
     is_markdown_filename,
     prepare_extracted_document_for_chunking,
     register_document_extractor,
+)
+from tests.docx_fixtures import (
+    build_encrypted_docx_stub,
+    build_minimal_docx,
+    build_zip_bomb_like_docx,
 )
 from services.ingestion_pipeline import (
     IngestionPipeline,
@@ -112,6 +125,7 @@ def test_factory_selects_extractor_for_allowlisted_types():
     assert isinstance(build_document_extractor("text/html"), HtmlExtractor)
     assert isinstance(build_document_extractor("text/markdown"), MarkdownExtractor)
     assert isinstance(build_document_extractor("text/x-markdown"), MarkdownExtractor)
+    assert isinstance(build_document_extractor(DOCX_CONTENT_TYPE), DocxExtractor)
 
 
 def test_factory_normalizes_mime_type():
@@ -138,6 +152,62 @@ def test_factory_rejects_unsupported_types(content_type):
 def test_default_extractors_hold_no_instance_state():
     assert vars(PdfExtractor()) == {}
     assert vars(PlainTextExtractor()) == {}
+
+
+# ---------------------------------------------------------------------------
+# DocxExtractor
+# ---------------------------------------------------------------------------
+
+
+def test_docx_extractor_extracts_paragraphs_headings_and_tables_in_order():
+    docx_bytes = build_minimal_docx(
+        paragraphs=["DOCX Fixture Heading", "Unique docx paragraph phrase."],
+        table_rows=[["Alpha cell", "Beta cell"], ["Gamma cell", "Delta cell"]],
+    )
+    doc = DocxExtractor().extract(docx_bytes, filename="fixture.docx")
+
+    assert "DOCX Fixture Heading" in doc.text
+    assert "Unique docx paragraph phrase." in doc.text
+    assert "Alpha cell\tBeta cell" in doc.text
+    assert "Gamma cell\tDelta cell" in doc.text
+    assert doc.page_boundaries == []
+
+
+def test_docx_content_type_and_filename_helpers():
+    assert is_docx_content_type(DOCX_CONTENT_TYPE)
+    assert is_docx_content_type(f"{DOCX_CONTENT_TYPE}; charset=binary")
+    assert not is_docx_content_type("text/plain")
+    assert is_docx_filename("report.docx")
+    assert is_docx_filename("Report.DOCX")
+    assert not is_docx_filename("report.pdf")
+
+
+def test_docx_extractor_rejects_corrupt_and_encrypted_packages():
+    with pytest.raises(DocumentExtractionError, match="Failed to parse DOCX content."):
+        DocxExtractor().extract(b"not-a-zip", filename="bad.docx")
+
+    with pytest.raises(DocumentExtractionError, match="Encrypted DOCX"):
+        DocxExtractor().extract(build_encrypted_docx_stub(), filename="locked.docx")
+
+
+def test_docx_zip_bomb_like_fixture_fails_safely(monkeypatch):
+    monkeypatch.setattr("services.docx_extraction.config.DOCX_MAX_COMPRESSION_RATIO", 5)
+    monkeypatch.setattr(
+        "services.docx_extraction.config.DOCX_MAX_UNCOMPRESSED_BYTES", 50_000
+    )
+    with pytest.raises(DocxExtractionError):
+        extract_docx_text(build_zip_bomb_like_docx(), filename="bomb.docx")
+
+
+@pytest.mark.asyncio
+async def test_extract_text_with_metadata_docx():
+    docx_bytes = build_minimal_docx(paragraphs=["Async docx fixture phrase"])
+    text, boundaries = await extract_text_with_metadata(
+        _upload(DOCX_CONTENT_TYPE, "notes.docx"),
+        docx_bytes,
+    )
+    assert "Async docx fixture phrase" in text
+    assert boundaries == []
 
 
 # ---------------------------------------------------------------------------
