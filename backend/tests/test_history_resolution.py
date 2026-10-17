@@ -466,6 +466,63 @@ async def test_request_can_disable_resolution_and_windows_are_observable(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_retrieval_debug_history_considered_matches_retrieval_window(monkeypatch):
+    monkeypatch.setattr(config, "QUERY_TRANSFORMATION_ENABLED", False)
+    monkeypatch.setattr(config, "HISTORY_AWARE_RETRIEVAL_DEFAULT", True)
+    full_history = [{"role": "user", "content": f"message-{i}"} for i in range(8)]
+    captured: dict = {}
+
+    async def resolve_must_not_run(question: str, history: list[dict]) -> StandaloneResolutionCall:
+        raise AssertionError("standalone question must not call the resolution LLM")
+
+    monkeypatch.setattr("services.query_service._call_standalone_resolution", resolve_must_not_run)
+    with (
+        patch("services.chat_service._resolve_retrieval_doc_ids", new=AsyncMock(return_value=["doc-1"])),
+        patch("services.chat_service._retrieve_chunks_for_documents", new=AsyncMock(return_value=[])),
+        patch("services.chat_service.get_embeddings", new=_embed_capture(captured)),
+        patch("services.chat_service.generate_answer", new=AsyncMock(return_value=("ans", 1, "m"))),
+        patch("db.get_session_history", new=AsyncMock(return_value=full_history)),
+        patch("db.store_chat_turn", new=AsyncMock()),
+    ):
+        result = await answer_question_for_document(
+            question=_STANDALONE,
+            doc_id="doc-1",
+            session_id="sess-1",
+            auth=TEST_AUTH,
+            debug_retrieval=True,
+            history_fields={"retrieval_history_window": 2},
+        )
+
+    debug = result["retrieval_debug"]
+    assert [entry["content_preview"] for entry in debug["history_considered"]] == [
+        "message-6",
+        "message-7",
+    ]
+    assert debug["history_window"]["retrieval"] == 2
+    assert debug["history_truncation"]["retrieval_messages_dropped"] == 6
+    assert debug["history_truncation"]["max_context_chars"] > 0
+
+
+@pytest.mark.asyncio
+async def test_resolution_echo_omits_history_resolved_query_but_marks_applied(monkeypatch):
+    async def fake_llm(system_instruction: str, user_text: str) -> str:
+        return _STANDALONE
+
+    monkeypatch.setattr("services.query_service._llm_transform", fake_llm)
+
+    result = await transform_query(
+        _STANDALONE,
+        history=_HISTORY,
+        resolution_policy=HistoryResolutionPolicy(run=True, use_gate=False),
+    )
+
+    debug = result.to_retrieval_debug()
+    assert debug["history_resolution_applied"] is True
+    assert "history_resolved_query" not in debug
+    assert debug["history_resolution_latency_ms"] >= 0
+
+
+@pytest.mark.asyncio
 async def test_stream_followup_uses_resolved_query(monkeypatch):
     monkeypatch.setattr(config, "QUERY_TRANSFORMATION_ENABLED", False)
     monkeypatch.setattr(config, "HISTORY_AWARE_RETRIEVAL_DEFAULT", True)
