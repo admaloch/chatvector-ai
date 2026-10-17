@@ -154,6 +154,17 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
+    async def filter_document_ids_by_metadata(
+        self, tenant_id: str, doc_ids: list[str], metadata_filter: dict
+    ) -> list[str]:
+        """Return the subset of doc_ids owned by tenant_id whose metadata matches.
+
+        ``metadata_filter`` is a validated v1 filter (exact match / ``in`` list,
+        keys ANDed). Input order is preserved.
+        """
+        pass
+
+    @abstractmethod
     async def list_tenant_document_summaries(self, tenant_id: str) -> list[dict]:
         """Return summary metadata for all documents owned by tenant_id."""
         pass

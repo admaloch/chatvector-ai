@@ -316,6 +316,27 @@ async def list_tenant_documents(tenant_id: str) -> list[str]:
     )
 
 
+async def filter_document_ids_by_metadata(
+    tenant_id: str, doc_ids: list[str], metadata_filter: dict
+) -> list[str]:
+    tenant_id = require_tenant_id(tenant_id, method="filter_document_ids_by_metadata")
+    service = get_db_service()
+
+    async def _filter():
+        return await service.filter_document_ids_by_metadata(
+            tenant_id, doc_ids, metadata_filter
+        )
+
+    return await retry_async(
+        _filter,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=0.5,
+        backoff=2.0,
+        timeout=get_default_db_timeout_sec(),
+        func_name=f"{service.__class__.__name__}.filter_document_ids_by_metadata",
+    )
+
+
 async def list_tenant_document_summaries(tenant_id: str) -> list[dict]:
     tenant_id = require_tenant_id(tenant_id, method="list_tenant_document_summaries")
     service = get_db_service()
@@ -474,6 +495,7 @@ __all__ = [
     "find_similar_chunks",
     "list_tenant_documents",
     "list_tenant_document_summaries",
+    "filter_document_ids_by_metadata",
     "update_document_status",
     "get_document_status",
     "delete_document_chunks",

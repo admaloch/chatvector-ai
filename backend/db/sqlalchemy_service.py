@@ -8,10 +8,12 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
+    and_,
     delete,
     func,
     literal,
     literal_column,
+    or_,
     select,
     text,
     update as sql_update,
@@ -721,6 +723,37 @@ class SQLAlchemyService(DatabaseService):
                 .order_by(Document.created_at)
             )
             return [str(row[0]) for row in rows]
+
+    async def filter_document_ids_by_metadata(
+        self, tenant_id: str, doc_ids: list[str], metadata_filter: dict
+    ) -> list[str]:
+        tenant_id = require_tenant_id(tenant_id, method="filter_document_ids_by_metadata")
+        candidate_ids: dict[str, uuid.UUID] = {}
+        for doc_id in doc_ids:
+            try:
+                candidate_ids[doc_id] = uuid.UUID(str(doc_id))
+            except ValueError:
+                continue  # not a document ID, so it cannot match
+        if not candidate_ids:
+            return []
+
+        # JSONB containment (@>) is same-type and uses idx_documents_metadata_gin.
+        conditions = [
+            Document.tenant_id == tenant_id,
+            Document.id.in_(set(candidate_ids.values())),
+        ]
+        for key, operand in metadata_filter.items():
+            if isinstance(operand, dict):
+                conditions.append(
+                    or_(*[Document.doc_metadata.contains({key: value}) for value in operand["in"]])
+                )
+            else:
+                conditions.append(Document.doc_metadata.contains({key: operand}))
+
+        async with self.async_session() as session:
+            rows = await session.execute(select(Document.id).where(and_(*conditions)))
+            matched = {row[0] for row in rows}
+        return [doc_id for doc_id, doc_uuid in candidate_ids.items() if doc_uuid in matched]
 
     async def list_tenant_document_summaries(self, tenant_id: str) -> list[dict]:
         tenant_id = require_tenant_id(tenant_id, method="list_tenant_document_summaries")

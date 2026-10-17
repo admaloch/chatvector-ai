@@ -3,12 +3,12 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass, replace
-from typing import Optional, AsyncGenerator, cast
+from typing import Any, Mapping, Optional, AsyncGenerator, cast
 
 from core.auth import AuthContext, require_current_tenant
 from core.config import config
 from core.session import SessionContext
-from db import find_similar_chunks
+from db import filter_document_ids_by_metadata, find_similar_chunks
 from services.context_service import build_context_from_chunks
 from services.history_config import prepare_turn_history
 from services.query_service import QueryTransformResult, transform_query
@@ -162,8 +162,9 @@ async def _resolve_retrieval_doc_ids(
     requested_doc_ids: list[str],
     session_id: Optional[str] = None,
     tenant_id: Optional[str] = None,
+    metadata_filter: Mapping[str, Any] | None = None,
 ) -> list[str]:
-    """Apply retrieval scope rules and tenant isolation checks.
+    """Apply retrieval scope rules, tenant isolation checks, and metadata filter.
 
     Falls back to the database when the in-memory tenant registry is empty
     (e.g. after a server restart) so that tenant-scope retrieval continues
@@ -186,7 +187,38 @@ async def _resolve_retrieval_doc_ids(
         tenant_doc_ids=tenant_doc_ids,
     )
     doc_ids = filter_doc_ids_for_tenant(doc_ids, tenant_doc_ids, tenant_id)
+    if metadata_filter and doc_ids:
+        # Document-level filter over the already tenant-scoped candidates.
+        doc_ids = await filter_document_ids_by_metadata(
+            tenant_id=tenant_id,
+            doc_ids=doc_ids,
+            metadata_filter=dict(metadata_filter),
+        )
     return doc_ids
+
+
+def _scope_error(
+    doc_ids: list[str],
+    *,
+    doc_id: str,
+    effective: EffectiveRetrievalConfig,
+) -> dict | None:
+    """Structured error when a chat request has no usable scope, else ``None``.
+
+    With a ``metadata_filter`` the anchor ``doc_id`` must itself be in the
+    filtered scope set; the filter never replaces the anchor.
+    """
+    if effective.metadata_filter and doc_id not in doc_ids:
+        return {
+            "code": "anchor_document_excluded_by_filter",
+            "message": "The requested document is not in the retrieval scope after applying metadata_filter.",
+        }
+    if not doc_ids:
+        return {
+            "code": "no_documents_in_scope",
+            "message": "No documents available for retrieval in the requested scope.",
+        }
+    return None
 
 
 async def _retrieve_chunks_for_documents(
@@ -637,8 +669,10 @@ async def answer_question_for_document(
         requested_doc_ids=[doc_id],
         session_id=session_id,
         tenant_id=tenant_id,
+        metadata_filter=effective.metadata_filter,
     )
-    if not doc_ids:
+    scope_error = _scope_error(doc_ids, doc_id=doc_id, effective=effective)
+    if scope_error is not None:
         return {
             "question": question,
             "doc_id": doc_id,
@@ -649,10 +683,7 @@ async def answer_question_for_document(
             "model": "",
             "status": "error",
             "session_id": session_id,
-            "error": {
-                "code": "no_documents_in_scope",
-                "message": "No documents available for retrieval in the requested scope.",
-            },
+            "error": scope_error,
         }
 
     # Load session history before query transformation so follow-up questions
@@ -770,13 +801,15 @@ async def answer_question_stream_for_document(
             requested_doc_ids=[doc_id],
             session_id=session_id,
             tenant_id=tenant_id,
+            metadata_filter=effective.metadata_filter,
         )
-        if not doc_ids:
+        scope_error = _scope_error(doc_ids, doc_id=doc_id, effective=effective)
+        if scope_error is not None:
             yield _format_sse_event(
                 "error",
                 _build_stream_error_payload(
-                    code="no_documents_in_scope",
-                    message="No documents available for retrieval in the requested scope.",
+                    code=scope_error["code"],
+                    message=scope_error["message"],
                 ),
             )
             return
@@ -1074,6 +1107,7 @@ async def answer_questions_for_documents_batch(
                 requested_doc_ids=query["doc_ids"],
                 session_id=session_id,
                 tenant_id=tenant_id,
+                metadata_filter=effective.metadata_filter,
             )
             if not doc_ids:
                 return {
