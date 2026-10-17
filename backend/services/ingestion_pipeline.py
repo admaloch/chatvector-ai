@@ -1153,17 +1153,9 @@ class IngestionPipeline:
         tenant_id = require_tenant_id(tenant_id, method="update_document_status")
         from services.ingestion_job_metadata import patch_started
 
-        await db.merge_document_job_metadata(
-            doc_id,
-            tenant_id,
-            patch_started(),
-        )
+        start_job_patch = patch_started()
         if attempt:
-            await db.merge_document_job_metadata(
-                doc_id,
-                tenant_id,
-                {"attempt": attempt + 1},
-            )
+            start_job_patch["attempt"] = attempt + 1
         """
         Run the extraction→chunking→embedding→storing pipeline stages for a
         document that was already created and queued by the upload endpoint.
@@ -1183,7 +1175,18 @@ class IngestionPipeline:
 
         try:
             if not replace:
-                await self._update_status(doc_id=doc_id, status="extracting", tenant_id=tenant_id)
+                await self._update_status(
+                    doc_id=doc_id,
+                    status="extracting",
+                    tenant_id=tenant_id,
+                    job_metadata_patch=start_job_patch,
+                )
+            else:
+                await db.merge_document_job_metadata(
+                    doc_id,
+                    tenant_id,
+                    start_job_patch,
+                )
             file_text, page_boundaries = await extract_text_with_metadata(file_meta, file_bytes)  # type: ignore[arg-type]
             file_text, page_boundaries = prepare_extracted_document_for_chunking(
                 file_text, page_boundaries

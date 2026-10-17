@@ -122,7 +122,6 @@ async def upload(
                 safe_filename, tenant_id=tenant_id, metadata=document_metadata
             )
             register_tenant_document(tenant_id, doc_id)
-            await db.update_document_status(doc_id=doc_id, status="queued", tenant_id=tenant_id)
         else:
             # Claim the document atomically. `status` and the active chunks are
             # not touched: prior completed content stays retrievable.
@@ -170,14 +169,23 @@ async def upload(
 
         try:
             queue_position = await ingestion_queue.enqueue(job)
-            await db.merge_document_job_metadata(
-                doc_id,
-                tenant_id,
-                patch_enqueued(
-                    enqueued_at=job.enqueued_at,
-                    attempt=job.attempt + 1,
-                ),
+            enqueued_patch = patch_enqueued(
+                enqueued_at=job.enqueued_at,
+                attempt=job.attempt + 1,
             )
+            if replacing:
+                await db.merge_document_job_metadata(
+                    doc_id,
+                    tenant_id,
+                    enqueued_patch,
+                )
+            else:
+                await db.update_document_status(
+                    doc_id=doc_id,
+                    status="queued",
+                    tenant_id=tenant_id,
+                    job_metadata_patch=enqueued_patch,
+                )
         except QueueFull:
             queue_full_error = {
                 "stage": "queued",

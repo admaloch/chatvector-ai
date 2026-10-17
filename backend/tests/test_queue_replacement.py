@@ -94,7 +94,10 @@ async def test_retry_of_replacement_does_not_set_retrying_status(monkeypatch):
     assert pipeline.process_document_background.await_count == 2
     update_status.assert_not_awaited()
     set_detail.assert_awaited_once_with(
-        "doc-retry", REPLACEMENT_IN_PROGRESS, tenant_id="tenant-1"
+        "doc-retry",
+        REPLACEMENT_IN_PROGRESS,
+        tenant_id="tenant-1",
+        job_metadata_patch={"attempt": 2},
     )
 
 
