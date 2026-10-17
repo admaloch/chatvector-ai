@@ -6,7 +6,6 @@ import {
   sendBatchMessage,
   sendSynthesizedBatchMessage,
   listDocuments,
-  ChatError,
   type BatchResultItem,
 } from "../lib/api";
 import { apiErrorMessage } from "../lib/apiErrorMessage";

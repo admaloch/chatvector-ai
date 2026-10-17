@@ -70,7 +70,7 @@ describe("useChat", () => {
       };
     });
 
-    const { result, rerender } = renderHook(
+    const { result } = renderHook(
       ({ sessionId }) => useChat(sessionId, DEFAULT_RETRIEVAL_SETTINGS),
       { initialProps: { sessionId: "session-a" } },
     );
