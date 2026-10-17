@@ -18,14 +18,26 @@ export async function createUploadFormData(
     throw new TypeError("upload input is required");
   }
 
+  let form: FormData;
   if ("path" in input) {
-    return createPathFormData(input);
-  }
-  if ("data" in input) {
-    return createMemoryFormData(input);
+    form = await createPathFormData(input);
+  } else if ("data" in input) {
+    form = createMemoryFormData(input);
+  } else {
+    throw new TypeError("upload input must provide path or replayable data");
   }
 
-  throw new TypeError("upload input must provide path or replayable data");
+  if (input.replaceDocumentId !== undefined) {
+    const replaceDocumentId =
+      typeof input.replaceDocumentId === "string"
+        ? input.replaceDocumentId.trim()
+        : "";
+    if (replaceDocumentId.length === 0) {
+      throw new TypeError("replaceDocumentId must be a non-empty string");
+    }
+    form.set("replace_document_id", replaceDocumentId);
+  }
+  return form;
 }
 
 async function createPathFormData(

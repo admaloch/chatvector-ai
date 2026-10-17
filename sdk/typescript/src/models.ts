@@ -41,12 +41,20 @@ export type WaitForReadyOptions = RequestOptions & {
 };
 
 export type UploadInput =
-  | { path: string; contentType?: string; sessionId?: string }
+  | {
+      path: string;
+      contentType?: string;
+      sessionId?: string;
+      /** Re-ingest this completed/failed document in place instead of creating a new one. */
+      replaceDocumentId?: string;
+    }
   | {
       data: Uint8Array | Blob;
       fileName: string;
       contentType?: string;
       sessionId?: string;
+      /** Re-ingest this completed/failed document in place instead of creating a new one. */
+      replaceDocumentId?: string;
     };
 
 /** Opt-in retrieval debug metadata when the backend exposes it. */
@@ -107,6 +115,8 @@ export type DocumentSummary = {
   documentId: string;
   fileName: string | null;
   status: string;
+  /** Set while a replacement is running or after one failed; never gates retrieval. */
+  statusDetail?: string;
   createdAt?: string | null;
   updatedAt?: string | null;
   _raw?: Record<string, unknown>;
@@ -137,6 +147,8 @@ export type DocumentResponse = {
   message?: string;
   queuePosition?: number;
   statusEndpoint?: string;
+  /** `"replacement_in_progress"` after a successful `replaceDocumentId` upload. */
+  statusDetail?: string;
   _raw?: Record<string, unknown>;
 };
 
@@ -148,6 +160,11 @@ export type DocumentStatus = {
   updatedAt?: string | null;
   error?: Record<string, unknown> | null;
   queuePosition?: number;
+  /**
+   * `"replacement_in_progress"` while new content is being prepared (the prior
+   * content stays retrievable) or `"replacement_failed"` after a failed attempt.
+   */
+  statusDetail?: string;
   _raw?: Record<string, unknown>;
 };
 

@@ -236,3 +236,70 @@ describe("waitForReady", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("waitForReady with document replacement", () => {
+  const replacingPayload = {
+    ...completedStatusPayload,
+    status_detail: "replacement_in_progress",
+  };
+  const replacementFailedPayload = {
+    ...completedStatusPayload,
+    status_detail: "replacement_failed",
+    error: { stage: "embedding", message: "Embedding provider timed out." },
+  };
+
+  it("maps status_detail onto getDocumentStatus", async () => {
+    const fetch = createFetchMock(jsonResponse(replacingPayload));
+    const { clock } = createAdvancingClock();
+    const status = await makeClient(fetch, clock).getDocumentStatus(DOCUMENT_ID);
+    expect(status.status).toBe("completed");
+    expect(status.statusDetail).toBe("replacement_in_progress");
+  });
+
+  it("keeps polling while a replacement is in progress", async () => {
+    const fetch = createFetchMock(
+      jsonResponse(replacingPayload),
+      jsonResponse(replacingPayload),
+      jsonResponse(completedStatusPayload),
+    );
+    const { clock, sleeps } = createAdvancingClock();
+    const result = await makeClient(fetch, clock).waitForReady(DOCUMENT_ID);
+    expect(result.status).toBe("completed");
+    expect(result.statusDetail).toBeUndefined();
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(sleeps).toEqual([2_000, 2_000]);
+  });
+
+  it("throws document_failed when the replacement failed", async () => {
+    const fetch = createFetchMock(jsonResponse(replacementFailedPayload));
+    const { clock } = createAdvancingClock();
+    const error = await captureRejection(
+      makeClient(fetch, clock).waitForReady(DOCUMENT_ID),
+    );
+    expect(error).toBeInstanceOf(ChatVectorAPIError);
+    expect(error).toMatchObject({
+      code: "document_failed",
+      details: expect.objectContaining({
+        status: "completed",
+        statusDetail: "replacement_failed",
+      }),
+    });
+    expect((error as Error).message).toContain("replacement failed");
+    expect((error as Error).message).toContain("Embedding provider timed out.");
+  });
+
+  it("keeps polling past a failed status while a retry is replacing", async () => {
+    const failedButReplacing = {
+      ...failedStatusPayload,
+      status_detail: "replacement_in_progress",
+    };
+    const fetch = createFetchMock(
+      jsonResponse(failedButReplacing),
+      jsonResponse(completedStatusPayload),
+    );
+    const { clock } = createAdvancingClock();
+    const result = await makeClient(fetch, clock).waitForReady(DOCUMENT_ID);
+    expect(result.status).toBe("completed");
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+});

@@ -224,6 +224,7 @@ class DocumentResponse:
     message: str | None = None
     queue_position: int | None = None
     status_endpoint: str | None = None
+    status_detail: str | None = None
     raw: JSONDict = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -236,6 +237,7 @@ class DocumentResponse:
             message=_optional_str(payload.get("message")),
             queue_position=_optional_int(payload.get("queue_position")),
             status_endpoint=_optional_str(payload.get("status_endpoint")),
+            status_detail=_optional_str(payload.get("status_detail")),
             raw=raw,
         )
 
@@ -251,6 +253,8 @@ class DocumentResponse:
             payload["queue_position"] = self.queue_position
         if self.status_endpoint is not None:
             payload["status_endpoint"] = self.status_endpoint
+        if self.status_detail is not None:
+            payload["status_detail"] = self.status_detail
         return payload
 
 
@@ -265,6 +269,7 @@ class DocumentStatus:
     updated_at: str | None = None
     error: JSONDict | None = None
     queue_position: int | None = None
+    status_detail: str | None = None
     raw: JSONDict = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -281,6 +286,7 @@ class DocumentStatus:
             updated_at=_optional_str(payload.get("updated_at")),
             error=dict(error) if isinstance(error, Mapping) else None,
             queue_position=_optional_int(payload.get("queue_position")),
+            status_detail=_optional_str(payload.get("status_detail")),
             raw=raw,
         )
 
@@ -300,6 +306,8 @@ class DocumentStatus:
             payload["error"] = dict(self.error)
         if self.queue_position is not None:
             payload["queue_position"] = self.queue_position
+        if self.status_detail is not None:
+            payload["status_detail"] = self.status_detail
         return payload
 
 
@@ -374,6 +382,7 @@ class DocumentSummary:
     status: str
     created_at: str | None = None
     updated_at: str | None = None
+    status_detail: str | None = None
     raw: JSONDict = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -386,6 +395,7 @@ class DocumentSummary:
             status=str(payload.get("status", "")),
             created_at=_optional_str(payload.get("created_at")),
             updated_at=_optional_str(payload.get("updated_at")),
+            status_detail=_optional_str(payload.get("status_detail")),
             raw=raw,
         )
 
@@ -400,6 +410,8 @@ class DocumentSummary:
             payload["created_at"] = self.created_at
         if self.updated_at is not None:
             payload["updated_at"] = self.updated_at
+        if self.status_detail is not None:
+            payload["status_detail"] = self.status_detail
         return payload
 
 

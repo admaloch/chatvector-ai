@@ -225,3 +225,87 @@ describe("uploadDocument", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+describe("uploadDocument replaceDocumentId", () => {
+  const replacementAcceptedPayload = {
+    ...uploadAcceptedPayload,
+    status: "completed",
+    status_detail: "replacement_in_progress",
+  };
+
+  it("sends replace_document_id as a form field and maps statusDetail", async () => {
+    let capturedForm: FormData | undefined;
+    const fetch = createFetchMock(async (_input, init) => {
+      capturedForm = (await getMultipartFile(init ?? {})).form;
+      return jsonResponse(replacementAcceptedPayload, { status: 202 });
+    });
+    const result = await makeClient(fetch).uploadDocument({
+      data: new Uint8Array([1, 2, 3]),
+      fileName: "guide-v2.pdf",
+      replaceDocumentId: `  ${DOCUMENT_ID} `,
+    });
+
+    expect(capturedForm?.get("replace_document_id")).toBe(DOCUMENT_ID);
+    expect(result.documentId).toBe(DOCUMENT_ID);
+    expect(result.status).toBe("completed");
+    expect(result.statusDetail).toBe("replacement_in_progress");
+  });
+
+  it("sends replace_document_id for path uploads too", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "chatvector-sdk-replace-"));
+    temporaryDirectories.push(directory);
+    const path = join(directory, "guide.txt");
+    await writeFile(path, "replacement text");
+
+    const form = await createUploadFormData({
+      path,
+      replaceDocumentId: DOCUMENT_ID,
+    });
+    expect(form.get("replace_document_id")).toBe(DOCUMENT_ID);
+    expect(form.get("file")).toBeInstanceOf(Blob);
+  });
+
+  it("omits replace_document_id when not provided", async () => {
+    const form = await createUploadFormData({
+      data: new Uint8Array([1]),
+      fileName: "guide.pdf",
+    });
+    expect(form.has("replace_document_id")).toBe(false);
+  });
+
+  it("rejects a blank replaceDocumentId without making a request", async () => {
+    const fetch = createFetchMock(jsonResponse(uploadAcceptedPayload));
+    await expect(
+      makeClient(fetch).uploadDocument({
+        data: new Uint8Array([1]),
+        fileName: "guide.pdf",
+        replaceDocumentId: "   ",
+      }),
+    ).rejects.toBeInstanceOf(TypeError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a 409 replacement conflict as ChatVectorAPIError", async () => {
+    const fetch = createFetchMock(
+      jsonResponse(
+        {
+          detail: {
+            code: "replacement_in_progress",
+            message: "A replacement for this document is already in progress.",
+          },
+        },
+        { status: 409 },
+      ),
+    );
+    const error = await captureRejection(
+      makeClient(fetch).uploadDocument({
+        data: new Uint8Array([1]),
+        fileName: "guide.pdf",
+        replaceDocumentId: DOCUMENT_ID,
+      }),
+    );
+    expect(error).toBeInstanceOf(ChatVectorAPIError);
+    expect(error).toMatchObject({ statusCode: 409 });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});

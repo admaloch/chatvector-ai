@@ -108,12 +108,18 @@ class AsyncChatVectorClient:
         file_path: str,
         *,
         session_id: str | None = None,
+        replace_document_id: str | None = None,
     ) -> DocumentResponse:
         """
         Upload a document for ingestion.
 
         The SDK targets ``POST /ingest`` and transparently falls back to the
         repository's current ``POST /upload`` route when needed.
+
+        Pass ``replace_document_id`` to re-ingest an existing completed or failed
+        document in place: it keeps its ID, and its prior content stays
+        retrievable until the new content is ready (use ``wait_for_ready`` to
+        wait for the swap).
         """
         path = Path(file_path)
         if not path.is_file():
@@ -125,6 +131,11 @@ class AsyncChatVectorClient:
         headers: JSONDict | None = None
         if session_id is not None:
             headers = {"X-Session-Id": session_id}
+        form_data: JSONDict | None = None
+        if replace_document_id is not None:
+            if not replace_document_id.strip():
+                raise ValueError("replace_document_id must not be empty.")
+            form_data = {"replace_document_id": replace_document_id.strip()}
 
         for endpoint in endpoints:
             with path.open("rb") as file_handle:
@@ -135,6 +146,7 @@ class AsyncChatVectorClient:
                         endpoint,
                         files=files,
                         headers=headers,
+                        **({} if form_data is None else {"data": form_data}),
                     )
                     return DocumentResponse.from_dict(payload)
                 except ChatVectorAPIError as exc:
@@ -385,12 +397,19 @@ class AsyncChatVectorClient:
             except RetryDeadlineExceeded:
                 raise self._wait_timeout_error(document_id, timeout, last_response) from None
             status = last_response.status
+            status_detail = last_response.status_detail
 
-            if status == "completed":
+            # A replacement keeps `status` completed/failed while it runs, so only
+            # `status_detail` says whether the latest content is ready yet.
+            if status_detail == "replacement_in_progress":
+                pass
+            elif status == "completed" and status_detail != "replacement_failed":
                 return last_response
-
-            if status == "failed":
-                message = f"Document '{document_id}' processing failed."
+            elif status == "failed" or status_detail == "replacement_failed":
+                stage_label = (
+                    "replacement" if status_detail == "replacement_failed" else "processing"
+                )
+                message = f"Document '{document_id}' {stage_label} failed."
                 error_payload = last_response.error
                 if isinstance(error_payload, dict):
                     error_message = error_payload.get("message")

@@ -193,17 +193,26 @@ export class DocumentsResource {
             { signal: controller.signal, deadlineMs: deadline },
           ),
         );
-        if (lastStatus.status === "completed") {
+        // A replacement keeps `status` completed/failed while it runs, so only
+        // `statusDetail` says whether the latest content is ready yet.
+        const replacing = lastStatus.statusDetail === "replacement_in_progress";
+        const replacementFailed =
+          lastStatus.statusDetail === "replacement_failed";
+        if (
+          !replacing &&
+          !replacementFailed &&
+          lastStatus.status === "completed"
+        ) {
           return lastStatus;
         }
-        if (lastStatus.status === "failed") {
+        if (!replacing && (replacementFailed || lastStatus.status === "failed")) {
           const backendMessage =
             isRecord(lastStatus.error) &&
             typeof lastStatus.error.message === "string"
               ? ` ${lastStatus.error.message}`
               : "";
           throw new ChatVectorAPIError(
-            `Document '${documentId}' processing failed.${backendMessage}`,
+            `Document '${documentId}' ${replacementFailed ? "replacement" : "processing"} failed.${backendMessage}`,
             {
               code: "document_failed",
               details: lastStatus,
@@ -272,6 +281,9 @@ function mapDocumentSummary(
     status: stringValue(payload.status),
     _raw: payload,
   };
+  if (typeof payload.status_detail === "string") {
+    result.statusDetail = payload.status_detail;
+  }
   if (payload.created_at === null || typeof payload.created_at === "string") {
     result.createdAt = payload.created_at;
   }
@@ -295,6 +307,9 @@ function mapDocumentResponse(
   }
   if (typeof payload.status_endpoint === "string") {
     result.statusEndpoint = payload.status_endpoint;
+  }
+  if (typeof payload.status_detail === "string") {
+    result.statusDetail = payload.status_detail;
   }
   return result;
 }
@@ -321,6 +336,9 @@ function mapDocumentStatus(
   }
   if (typeof payload.queue_position === "number") {
     result.queuePosition = payload.queue_position;
+  }
+  if (typeof payload.status_detail === "string") {
+    result.statusDetail = payload.status_detail;
   }
   return result;
 }
