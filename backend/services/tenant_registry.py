@@ -1,5 +1,5 @@
 """
-In-memory tenant document registry for Phase 3 tenant isolation.
+In-memory tenant document registry for single-process tenant isolation.
 
 Design
 ──────
@@ -34,30 +34,29 @@ marked complete, so step 3 triggers the DB scan that returns all 6 docs.
 Durable truth
 ─────────────
 The database (documents.tenant_id column) is authoritative.  The in-memory
-registry is a performance optimisation for the supported single-process API
-topology only.  Phase 3 does not support multiple API processes or containers;
-the cache is process-local and must not be shared across API instances.
-
-Set TENANT_REGISTRY_DISABLED=true to bypass the cache and always query the DB
-(for debugging or if you intentionally run an unsupported multi-process layout).
+registry is a performance optimisation for the single-process API topology.
+Multiple API processes must not share this cache: set MULTI_API_INSTANCE=true
+(which defaults TENANT_REGISTRY_DISABLED=true) or set TENANT_REGISTRY_DISABLED
+explicitly so every read queries the database.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
-# Set TENANT_REGISTRY_DISABLED=true to bypass the cache entirely (always query DB).
-_REGISTRY_DISABLED: bool = os.getenv("TENANT_REGISTRY_DISABLED", "false").lower() in (
-    "1", "true", "yes"
-)
-
 _TENANT_DOCUMENTS: dict[str, set[str]] = defaultdict(set)
 # Tenants for which a full DB scan has been completed in this process.
 _TENANT_REGISTRY_LOADED: set[str] = set()
+
+
+def _registry_disabled() -> bool:
+    """True when the process-local cache must not be treated as complete."""
+    from core.config import config
+
+    return config.TENANT_REGISTRY_DISABLED
 
 
 def register_tenant_document(tenant_id: str | None, doc_id: str) -> None:
@@ -81,12 +80,13 @@ async def get_tenant_document_ids(tenant_id: str | None) -> list[str]:
     queried, results are merged into the cache, and the tenant is marked
     as fully loaded so future calls skip the query.
 
-    When TENANT_REGISTRY_DISABLED is true the DB is always queried.
+    When TENANT_REGISTRY_DISABLED is true the DB is always queried and the
+    process-local cache is ignored so replicas cannot omit or invent docs.
     """
     if not tenant_id:
         return []
 
-    if not _REGISTRY_DISABLED and tenant_id in _TENANT_REGISTRY_LOADED:
+    if not _registry_disabled() and tenant_id in _TENANT_REGISTRY_LOADED:
         # Cache is complete for this tenant.
         return sorted(_TENANT_DOCUMENTS.get(tenant_id, set()))
 
@@ -103,13 +103,15 @@ async def get_tenant_document_ids(tenant_id: str | None) -> list[str]:
         # next request retries the DB.
         return sorted(_TENANT_DOCUMENTS.get(tenant_id, set()))
 
+    if _registry_disabled():
+        return sorted(db_doc_ids)
+
     # Merge DB results into the cache (keeps any in-flight uploads that
     # arrived after the list query started).
     for doc_id in db_doc_ids:
         _TENANT_DOCUMENTS[tenant_id].add(doc_id)
 
-    if not _REGISTRY_DISABLED:
-        _TENANT_REGISTRY_LOADED.add(tenant_id)
+    _TENANT_REGISTRY_LOADED.add(tenant_id)
 
     return sorted(_TENANT_DOCUMENTS.get(tenant_id, set()))
 

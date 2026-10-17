@@ -85,6 +85,41 @@ async def test_session_scope_blocks_document_outside_session():
 
 
 @pytest.mark.asyncio
+async def test_tenant_scope_registry_bypass_returns_all_tenant_docs(monkeypatch):
+    """TENANT_REGISTRY_DISABLED must search every DB document, not the cache."""
+    register_tenant_document("tenant-a", "only-cached")
+    from services import tenant_registry as registry
+
+    registry._TENANT_REGISTRY_LOADED.add("tenant-a")
+    monkeypatch.setattr("core.config.config.TENANT_REGISTRY_DISABLED", True)
+
+    with patch(
+        "db.list_tenant_documents",
+        new=AsyncMock(return_value=["doc-1", "doc-2", "doc-3"]),
+    ), patch(
+        "services.chat_service.get_embeddings",
+        new=AsyncMock(return_value=[[0.1, 0.2]]),
+    ), patch(
+        "services.chat_service.find_similar_chunks", new=AsyncMock(return_value=[])
+    ) as mock_find, patch(
+        "services.chat_service.build_context_from_chunks", return_value="ctx"
+    ), patch(
+        "services.chat_service.generate_answer", new=AsyncMock(return_value=("answer", 0, "m"))
+    ):
+        result = await answer_question_for_document(
+            question="Q?",
+            doc_id="doc-1",
+            auth=AuthContext(tenant_id="tenant-a"),
+            scope="tenant",
+        )
+
+    assert result["status"] == "ok"
+    searched_doc_ids = {call.kwargs["doc_id"] for call in mock_find.await_args_list}
+    assert searched_doc_ids == {"doc-1", "doc-2", "doc-3"}
+    assert "only-cached" not in searched_doc_ids
+
+
+@pytest.mark.asyncio
 async def test_tenant_scope_searches_all_tenant_documents():
     register_tenant_document("tenant-a", "doc-1")
     register_tenant_document("tenant-a", "doc-2")
