@@ -26,6 +26,33 @@ from services.query_service import (
 )
 
 TEST_AUTH = AuthContext(tenant_id="dev")
+
+
+def _patch_process_flags(monkeypatch, **flags: object) -> None:
+    """Set process flags on every Settings instance this suite can observe.
+
+    Earlier tests call ``importlib.reload(core.config)``, which replaces
+    ``core.config.config``. Module-level ``from core.config import config``
+    bindings keep the previous instance, and ``HistoryProcessDefaults.from_process``
+    imports the live one.
+    """
+    import core.config as config_module
+    import services.chat_service as chat_service_mod
+    import services.query_service as query_service_mod
+
+    targets = (
+        config,
+        config_module.config,
+        chat_service_mod.config,
+        query_service_mod.config,
+    )
+    seen: set[int] = set()
+    for target in targets:
+        if id(target) in seen:
+            continue
+        seen.add(id(target))
+        for name, value in flags.items():
+            monkeypatch.setattr(target, name, value)
 _HISTORY = [
     {"role": "user", "content": "Summarize the liability section of the agreement."},
     {"role": "assistant", "content": "The liability section limits damages."},
@@ -310,8 +337,11 @@ async def test_chat_resolution_failure_keeps_200_and_records_debug(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_history_aware_default_false_restores_phase3_gating(monkeypatch):
-    monkeypatch.setattr(config, "HISTORY_AWARE_RETRIEVAL_DEFAULT", False)
-    monkeypatch.setattr(config, "QUERY_TRANSFORMATION_ENABLED", False)
+    _patch_process_flags(
+        monkeypatch,
+        HISTORY_AWARE_RETRIEVAL_DEFAULT=False,
+        QUERY_TRANSFORMATION_ENABLED=False,
+    )
     captured: dict = {}
 
     async def resolve_must_not_run(question: str, history: list[dict]) -> StandaloneResolutionCall:
@@ -327,7 +357,11 @@ async def test_history_aware_default_false_restores_phase3_gating(monkeypatch):
         )
     assert captured["texts"] == [_PRONOUN]
 
-    monkeypatch.setattr(config, "QUERY_TRANSFORMATION_ENABLED", True)
+    _patch_process_flags(
+        monkeypatch,
+        HISTORY_AWARE_RETRIEVAL_DEFAULT=False,
+        QUERY_TRANSFORMATION_ENABLED=True,
+    )
     calls: list[str] = []
 
     async def fake_resolve(question: str, history: list[dict]) -> StandaloneResolutionCall:
