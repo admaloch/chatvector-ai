@@ -1,5 +1,5 @@
 import logging
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 from uuid import UUID
 
 import db
@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from core.auth import AuthContext, require_auth, require_current_tenant
 from core.config import config
 from middleware.rate_limit import limiter
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 
 from services.chat_service import (
     answer_question_for_document,
@@ -19,6 +19,7 @@ from services.chat_service import (
     prepare_batch_chat_items,
 )
 from services.history_config import HISTORY_FIELD_NAMES, merge_history_fields
+from services.metadata_filter import validate_metadata_filter
 from services.retrieval_config import merge_retrieval_field_layers
 from services.session_service import get_or_create_session, register_session_document
 from services.tenant_registry import register_tenant_document
@@ -31,6 +32,16 @@ QueryTransformationStrategyParam = Literal["rewrite", "expand", "stepback", "non
 RerankerProviderParam = Literal["similarity"]
 DebugRetrievalQuery = Annotated[bool, Query()]
 
+
+def _validate_optional_metadata_filter(value: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    # ValueError from the validator surfaces as a 422 request validation error.
+    return None if value is None else validate_metadata_filter(value)
+
+
+MetadataFilterParam = Annotated[
+    Optional[dict[str, Any]], AfterValidator(_validate_optional_metadata_filter)
+]
+
 _RETRIEVAL_FIELD_NAMES = (
     "match_count",
     "scope",
@@ -40,6 +51,7 @@ _RETRIEVAL_FIELD_NAMES = (
     "query_transformation_enabled",
     "query_transformation_strategy",
     "skip_history_transform",
+    "metadata_filter",
 )
 
 
@@ -47,8 +59,8 @@ class RetrievalOverrides(BaseModel):
     """Optional per-request retrieval overrides.
 
     Top-level request fields win over this object. Omitted fields keep the
-    process env default. ``metadata_filter`` is reserved for Metadata-First
-    Document Ingestion and Retrieval Filters and is not accepted in v1.
+    process env default. ``metadata_filter`` narrows which in-scope documents
+    participate in retrieval (v1: exact match and scalar ``in`` lists, keys ANDed).
     """
 
     match_count: Optional[int] = Field(default=None, ge=1, le=20)
@@ -59,6 +71,7 @@ class RetrievalOverrides(BaseModel):
     query_transformation_enabled: Optional[bool] = None
     query_transformation_strategy: Optional[QueryTransformationStrategyParam] = None
     skip_history_transform: Optional[bool] = None
+    metadata_filter: MetadataFilterParam = None
 
 
 class HistoryOverrides(BaseModel):
@@ -184,6 +197,7 @@ class ChatBatchItem(BaseModel):
     query_transformation_enabled: Optional[bool] = None
     query_transformation_strategy: Optional[QueryTransformationStrategyParam] = None
     skip_history_transform: Optional[bool] = None
+    metadata_filter: MetadataFilterParam = None
     retrieval: Optional[RetrievalOverrides] = None
     history: Optional[HistoryOverrides] = None
 
@@ -199,6 +213,7 @@ class ChatBatchRequest(BaseModel):
     query_transformation_enabled: Optional[bool] = None
     query_transformation_strategy: Optional[QueryTransformationStrategyParam] = None
     skip_history_transform: Optional[bool] = None
+    metadata_filter: MetadataFilterParam = None
     retrieval: Optional[RetrievalOverrides] = None
     history: Optional[HistoryOverrides] = None
 
@@ -230,6 +245,7 @@ class ChatRequest(BaseModel):
     query_transformation_enabled: Optional[bool] = None
     query_transformation_strategy: Optional[QueryTransformationStrategyParam] = None
     skip_history_transform: Optional[bool] = None
+    metadata_filter: MetadataFilterParam = None
     retrieval: Optional[RetrievalOverrides] = None
     history: Optional[HistoryOverrides] = None
 

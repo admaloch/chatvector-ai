@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Mapping
 
+from services.metadata_filter import InvalidMetadataFilterError, validate_metadata_filter
+
 VALID_QUERY_STRATEGIES = {"rewrite", "expand", "stepback", "none"}
 _OVERRIDE_FIELDS = (
     "match_count",
@@ -20,6 +22,7 @@ _OVERRIDE_FIELDS = (
     "query_transformation_enabled",
     "query_transformation_strategy",
     "skip_history_transform",
+    "metadata_filter",
 )
 _DEBUG_FIELDS = (
     "match_count",
@@ -79,6 +82,7 @@ class EffectiveRetrievalConfig:
     sources: Mapping[str, str]
     skip_history_transform: bool = False
     max_context_chars: int = 32000
+    metadata_filter: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "sources", MappingProxyType(dict(self.sources)))
@@ -98,6 +102,11 @@ class EffectiveRetrievalConfig:
         if self.sources.get("skip_history_transform") == "request":
             payload["skip_history_transform"] = {
                 "value": self.skip_history_transform,
+                "source": "request",
+            }
+        if self.sources.get("metadata_filter") == "request":
+            payload["metadata_filter"] = {
+                "value": self.metadata_filter,
                 "source": "request",
             }
         return payload
@@ -276,6 +285,13 @@ def resolve_retrieval_config(
 
     skip_history, skip_source = _pick("skip_history_transform", top, nested, False)
 
+    metadata_filter, metadata_filter_source = _pick("metadata_filter", top, nested, None)
+    if metadata_filter_source == "request":
+        try:
+            metadata_filter = validate_metadata_filter(metadata_filter)
+        except InvalidMetadataFilterError as exc:
+            raise InvalidRetrievalConfigError(str(exc)) from exc
+
     sources = {
         "match_count": match_source,
         "scope": scope_source,
@@ -285,6 +301,7 @@ def resolve_retrieval_config(
         "query_transformation_enabled": qt_enabled_source,
         "query_transformation_strategy": qt_strategy_source,
         "skip_history_transform": skip_source,
+        "metadata_filter": metadata_filter_source,
     }
     return EffectiveRetrievalConfig(
         match_count=match_count,
@@ -298,4 +315,5 @@ def resolve_retrieval_config(
         sources=sources,
         skip_history_transform=bool(skip_history),
         max_context_chars=env.max_context_chars,
+        metadata_filter=metadata_filter,
     )
