@@ -103,7 +103,12 @@ class ChatVectorClient:
         """Close the underlying HTTP client."""
         self._client.close()
 
-    def upload_document(self, file_path: str) -> DocumentResponse:
+    def upload_document(
+        self,
+        file_path: str,
+        *,
+        session_id: str | None = None,
+    ) -> DocumentResponse:
         """
         Upload a document for ingestion.
 
@@ -127,12 +132,20 @@ class ChatVectorClient:
         content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         endpoints = ("ingest", "upload")
         last_error: ChatVectorAPIError | None = None
+        headers: JSONDict | None = None
+        if session_id is not None:
+            headers = {"X-Session-Id": session_id}
 
         for endpoint in endpoints:
             with path.open("rb") as file_handle:
                 files = {"file": (path.name, file_handle, content_type)}
                 try:
-                    payload = self._request_json("POST", endpoint, files=files)
+                    payload = self._request_json(
+                        "POST",
+                        endpoint,
+                        files=files,
+                        headers=headers,
+                    )
                     return DocumentResponse.from_dict(payload)
                 except ChatVectorAPIError as exc:
                     if endpoint == "ingest" and exc.status_code == 404:
@@ -257,6 +270,7 @@ class ChatVectorClient:
         match_count: int = 5,
         session_id: str | None = None,
         scope: RetrievalScope | None = None,
+        debug_retrieval: bool = False,
     ) -> ChatResponse:
         """
         Ask a question against a single document.
@@ -280,6 +294,8 @@ class ChatVectorClient:
             payload["session_id"] = session_id
         if scope is not None:
             payload["scope"] = scope
+        if debug_retrieval:
+            payload["debug_retrieval"] = True
         response_payload = self._request_json("POST", "chat", json=payload)
         return ChatResponse.from_dict(response_payload)
 
@@ -290,6 +306,7 @@ class ChatVectorClient:
         match_count: int = 5,
         session_id: str | None = None,
         scope: RetrievalScope | None = None,
+        debug_retrieval: bool = False,
         timeout: float | httpx.Timeout | None = None,
     ) -> Iterator[StreamChatEvent]:
         """
@@ -318,6 +335,8 @@ class ChatVectorClient:
             payload["session_id"] = session_id
         if scope is not None:
             payload["scope"] = scope
+        if debug_retrieval:
+            payload["debug_retrieval"] = True
 
         request_kwargs: JSONDict = {"json": payload}
         if timeout is not None:
@@ -353,6 +372,7 @@ class ChatVectorClient:
         queries: Sequence[BatchChatQuery | JSONMapping],
         session_id: str | None = None,
         scope: RetrievalScope | None = None,
+        debug_retrieval: bool = False,
     ) -> BatchChatResponse:
         """
         Run multiple chat queries in a single API call.
@@ -376,6 +396,8 @@ class ChatVectorClient:
             payload["session_id"] = session_id
         if scope is not None:
             payload["scope"] = scope
+        if debug_retrieval:
+            payload["debug_retrieval"] = True
         response_payload = self._request_json("POST", "chat/batch", json=payload)
         return BatchChatResponse.from_dict(response_payload)
 

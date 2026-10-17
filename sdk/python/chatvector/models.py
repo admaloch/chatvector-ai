@@ -10,6 +10,25 @@ JSONMapping = Mapping[str, Any]
 
 RetrievalScope = Literal["session", "tenant"]
 
+_COMPONENT_SCORE_FIELDS = (
+    "vector_score",
+    "full_text_score",
+    "rrf_score",
+    "reranker_score",
+    "rerank_order",
+)
+
+_RETRIEVAL_DEBUG_KNOWN_KEYS = frozenset(
+    {
+        "original_query",
+        "transformed_queries",
+        "transformation_strategy",
+        "effective_retrieval_query",
+        "timing_ms",
+        "effective_config",
+    }
+)
+
 
 @dataclass(slots=True)
 class ChatSource:
@@ -20,16 +39,27 @@ class ChatSource:
     chunk_index: int | None
     score: float | None = None
     score_type: str | None = None
+    vector_score: float | None = None
+    full_text_score: float | None = None
+    rrf_score: float | None = None
+    reranker_score: float | None = None
+    rerank_order: int | None = None
 
     @classmethod
     def from_dict(cls, payload: JSONMapping) -> "ChatSource":
         """Build a source model from an API response payload."""
+        rerank_order = payload.get("rerank_order")
         return cls(
             file_name=_optional_str(payload.get("file_name")),
             page_number=_optional_int(payload.get("page_number")),
             chunk_index=_optional_int(payload.get("chunk_index")),
             score=_optional_float(payload.get("score")),
             score_type=_optional_str(payload.get("score_type")),
+            vector_score=_optional_float(payload.get("vector_score")),
+            full_text_score=_optional_float(payload.get("full_text_score")),
+            rrf_score=_optional_float(payload.get("rrf_score")),
+            reranker_score=_optional_float(payload.get("reranker_score")),
+            rerank_order=_optional_int(rerank_order) if rerank_order is not None else None,
         )
 
     def to_dict(self) -> JSONDict:
@@ -43,7 +73,67 @@ class ChatSource:
             d["score"] = self.score
         if self.score_type is not None:
             d["score_type"] = self.score_type
+        for field in _COMPONENT_SCORE_FIELDS:
+            value = getattr(self, field)
+            if value is not None:
+                d[field] = value
         return d
+
+
+@dataclass(slots=True)
+class RetrievalDebugMetadata:
+    """Opt-in retrieval debug payload from chat, stream, and batch responses."""
+
+    original_query: str | None = None
+    transformed_queries: list[str] | None = None
+    transformation_strategy: str | None = None
+    effective_retrieval_query: str | None = None
+    timing_ms: JSONDict | None = None
+    effective_config: JSONDict | None = None
+    passthrough: JSONDict = field(default_factory=dict, repr=False)
+
+    @classmethod
+    def from_dict(cls, payload: JSONMapping) -> "RetrievalDebugMetadata":
+        """Build a debug metadata model while retaining unknown backend fields."""
+        raw = dict(payload)
+        transformed = raw.get("transformed_queries")
+        timing_ms = raw.get("timing_ms")
+        effective_config = raw.get("effective_config")
+        passthrough = {
+            key: value
+            for key, value in raw.items()
+            if key not in _RETRIEVAL_DEBUG_KNOWN_KEYS
+        }
+        return cls(
+            original_query=_optional_str(raw.get("original_query")),
+            transformed_queries=_string_list(transformed)
+            if isinstance(transformed, list)
+            else None,
+            transformation_strategy=_optional_str(raw.get("transformation_strategy")),
+            effective_retrieval_query=_optional_str(raw.get("effective_retrieval_query")),
+            timing_ms=dict(timing_ms) if isinstance(timing_ms, Mapping) else None,
+            effective_config=dict(effective_config)
+            if isinstance(effective_config, Mapping)
+            else None,
+            passthrough=passthrough,
+        )
+
+    def to_dict(self) -> JSONDict:
+        """Convert the model back to a JSON-serializable dictionary."""
+        payload: JSONDict = dict(self.passthrough)
+        if self.original_query is not None:
+            payload["original_query"] = self.original_query
+        if self.transformed_queries is not None:
+            payload["transformed_queries"] = list(self.transformed_queries)
+        if self.transformation_strategy is not None:
+            payload["transformation_strategy"] = self.transformation_strategy
+        if self.effective_retrieval_query is not None:
+            payload["effective_retrieval_query"] = self.effective_retrieval_query
+        if self.timing_ms is not None:
+            payload["timing_ms"] = dict(self.timing_ms)
+        if self.effective_config is not None:
+            payload["effective_config"] = dict(self.effective_config)
+        return payload
 
 
 @dataclass(slots=True)
@@ -148,6 +238,7 @@ class ChatResponse:
     latency_ms: int = 0
     model: str = ""
     session_id: str | None = None
+    retrieval_debug: RetrievalDebugMetadata | None = None
     raw: JSONDict = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -158,6 +249,7 @@ class ChatResponse:
         sources = _parse_sources(sources_payload)
         error = payload.get("error")
         status = str(payload.get("status") or "ok")
+        debug_payload = payload.get("retrieval_debug")
         return cls(
             question=str(payload.get("question", "")),
             doc_id=str(payload.get("doc_id", "")),
@@ -169,6 +261,7 @@ class ChatResponse:
             latency_ms=int(payload.get("latency_ms") or 0),
             model=str(payload.get("model") or ""),
             session_id=_optional_str(payload.get("session_id")),
+            retrieval_debug=_parse_retrieval_debug(debug_payload),
             raw=raw,
         )
 
@@ -188,6 +281,8 @@ class ChatResponse:
             payload["session_id"] = self.session_id
         if self.error is not None:
             payload["error"] = dict(self.error)
+        if self.retrieval_debug is not None:
+            payload["retrieval_debug"] = self.retrieval_debug.to_dict()
         return payload
 
 
@@ -392,6 +487,7 @@ class StreamChatEvent:
     sources: list[ChatSource] = field(default_factory=list)
     latency_ms: int = 0
     model: str = ""
+    retrieval_debug: RetrievalDebugMetadata | None = None
 
     @classmethod
     def token(cls, content: str) -> "StreamChatEvent":
@@ -406,6 +502,7 @@ class StreamChatEvent:
         sources: list[ChatSource],
         latency_ms: int,
         model: str,
+        retrieval_debug: RetrievalDebugMetadata | None = None,
     ) -> "StreamChatEvent":
         """Build a structured completion event."""
         return cls(
@@ -414,6 +511,7 @@ class StreamChatEvent:
             sources=list(sources),
             latency_ms=latency_ms,
             model=model,
+            retrieval_debug=retrieval_debug,
         )
 
 
@@ -474,6 +572,7 @@ class BatchChatResult:
     latency_ms: int = 0
     model: str = ""
     session_id: str | None = None
+    retrieval_debug: RetrievalDebugMetadata | None = None
     raw: JSONDict = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -492,6 +591,7 @@ class BatchChatResult:
             latency_ms=int(payload.get("latency_ms") or 0),
             model=str(payload.get("model") or ""),
             session_id=_optional_str(payload.get("session_id")),
+            retrieval_debug=_parse_retrieval_debug(payload.get("retrieval_debug")),
             raw=raw,
         )
 
@@ -513,6 +613,8 @@ class BatchChatResult:
             payload["sources"] = [source.to_dict() for source in self.sources]
         if self.error is not None:
             payload["error"] = dict(self.error)
+        if self.retrieval_debug is not None:
+            payload["retrieval_debug"] = self.retrieval_debug.to_dict()
         return payload
 
 
@@ -592,3 +694,10 @@ def _parse_sources(value: Any) -> list[ChatSource]:
     if not isinstance(value, list):
         return []
     return [ChatSource.from_dict(item) for item in value if isinstance(item, Mapping)]
+
+
+def _parse_retrieval_debug(value: Any) -> RetrievalDebugMetadata | None:
+    """Parse optional retrieval debug payloads into typed metadata."""
+    if not isinstance(value, Mapping):
+        return None
+    return RetrievalDebugMetadata.from_dict(value)

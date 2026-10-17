@@ -14,7 +14,13 @@ from .exceptions import (
     ChatVectorRateLimitError,
     ChatVectorTimeoutError,
 )
-from .models import ChatSource, DocumentStatus, StreamChatEvent, StreamErrorEvent
+from .models import (
+    ChatSource,
+    DocumentStatus,
+    StreamChatEvent,
+    StreamErrorEvent,
+    _parse_retrieval_debug,
+)
 
 _DONE_PAYLOAD = "[DONE]"
 
@@ -141,12 +147,63 @@ def _dispatch_sse_event(
             sources=_parse_sources(payload.get("sources")),
             latency_ms=int(payload.get("latency_ms") or 0),
             model=str(payload.get("model") or ""),
+            retrieval_debug=_parse_retrieval_debug(payload.get("retrieval_debug")),
         )
 
     raise ChatVectorAPIError(
         "ChatVector returned an unexpected streaming event.",
         details={"event": event_name, "data": data},
     )
+
+
+async def async_iter_document_status_events(
+    lines: AsyncIterator[str],
+    *,
+    map_error: Any,
+) -> AsyncIterator[DocumentStatus]:
+    """
+    Parse SSE lines from an async document status stream into typed status payloads.
+
+    Args:
+        lines: Async iterable of response lines from ``httpx.Response.aiter_lines``.
+        map_error: Callable that converts error payloads into SDK exceptions.
+
+    Yields:
+        Document status snapshots emitted by the ingestion stream.
+
+    Raises:
+        ChatVectorAPIError: If the stream emits a structured error event.
+    """
+    event_name: str | None = None
+    data_lines: list[str] = []
+
+    async for line in lines:
+        if line == "":
+            if event_name is None and not data_lines:
+                continue
+            event = _dispatch_document_status_sse_event(
+                event_name, "\n".join(data_lines), map_error
+            )
+            if event is not None:
+                yield event
+            event_name = None
+            data_lines = []
+            continue
+
+        if line.startswith("event:"):
+            event_name = line[len("event:") :].strip() or None
+            continue
+
+        if line.startswith("data:"):
+            data_lines.append(line[len("data:") :].strip())
+            continue
+
+    if event_name is not None or data_lines:
+        event = _dispatch_document_status_sse_event(
+            event_name, "\n".join(data_lines), map_error
+        )
+        if event is not None:
+            yield event
 
 
 def iter_document_status_events(

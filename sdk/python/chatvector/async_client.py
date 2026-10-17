@@ -33,7 +33,9 @@ from ._common import (
 )
 from ._retry import RetryDeadlineExceeded, WantsRetry, retry_async
 from ._sse import (
+    async_iter_document_status_events,
     async_iter_stream_chat_events,
+    map_document_status_stream_error,
     map_stream_error,
     raise_for_stream_response,
 )
@@ -97,7 +99,12 @@ class AsyncChatVectorClient:
         """Close the underlying HTTP client."""
         await self._client.aclose()
 
-    async def upload_document(self, file_path: str) -> DocumentResponse:
+    async def upload_document(
+        self,
+        file_path: str,
+        *,
+        session_id: str | None = None,
+    ) -> DocumentResponse:
         """
         Upload a document for ingestion.
 
@@ -111,12 +118,20 @@ class AsyncChatVectorClient:
         content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         endpoints = ("ingest", "upload")
         last_error: ChatVectorAPIError | None = None
+        headers: JSONDict | None = None
+        if session_id is not None:
+            headers = {"X-Session-Id": session_id}
 
         for endpoint in endpoints:
             with path.open("rb") as file_handle:
                 files = {"file": (path.name, file_handle, content_type)}
                 try:
-                    payload = await self._request_json("POST", endpoint, files=files)
+                    payload = await self._request_json(
+                        "POST",
+                        endpoint,
+                        files=files,
+                        headers=headers,
+                    )
                     return DocumentResponse.from_dict(payload)
                 except ChatVectorAPIError as exc:
                     if endpoint == "ingest" and exc.status_code == 404:
@@ -194,6 +209,7 @@ class AsyncChatVectorClient:
         match_count: int = 5,
         session_id: str | None = None,
         scope: RetrievalScope | None = None,
+        debug_retrieval: bool = False,
     ) -> ChatResponse:
         """Ask a question against a single document."""
         payload: JSONDict = {
@@ -205,6 +221,8 @@ class AsyncChatVectorClient:
             payload["session_id"] = session_id
         if scope is not None:
             payload["scope"] = scope
+        if debug_retrieval:
+            payload["debug_retrieval"] = True
         response_payload = await self._request_json("POST", "chat", json=payload)
         return ChatResponse.from_dict(response_payload)
 
@@ -215,6 +233,7 @@ class AsyncChatVectorClient:
         match_count: int = 5,
         session_id: str | None = None,
         scope: RetrievalScope | None = None,
+        debug_retrieval: bool = False,
         timeout: float | httpx.Timeout | None = None,
     ) -> AsyncIterator[StreamChatEvent]:
         """Stream a chat answer as typed Server-Sent Events."""
@@ -227,6 +246,8 @@ class AsyncChatVectorClient:
             payload["session_id"] = session_id
         if scope is not None:
             payload["scope"] = scope
+        if debug_retrieval:
+            payload["debug_retrieval"] = True
 
         request_kwargs: JSONDict = {"json": payload}
         if timeout is not None:
@@ -266,6 +287,7 @@ class AsyncChatVectorClient:
         queries: Sequence[BatchChatQuery | JSONMapping],
         session_id: str | None = None,
         scope: RetrievalScope | None = None,
+        debug_retrieval: bool = False,
     ) -> BatchChatResponse:
         """Run multiple chat queries in a single API call.
 
@@ -280,8 +302,55 @@ class AsyncChatVectorClient:
             payload["session_id"] = session_id
         if scope is not None:
             payload["scope"] = scope
+        if debug_retrieval:
+            payload["debug_retrieval"] = True
         response_payload = await self._request_json("POST", "chat/batch", json=payload)
         return BatchChatResponse.from_dict(response_payload)
+
+    def iter_document_status(
+        self,
+        document_id: str,
+        timeout: float | httpx.Timeout | None = None,
+    ) -> AsyncIterator[DocumentStatus]:
+        """Stream document ingestion status updates as typed Server-Sent Events."""
+        request_kwargs: JSONDict = {}
+        if timeout is not None:
+            request_kwargs["timeout"] = timeout
+
+        encoded_id = encode_path_component(document_id)
+        return self._aiter_document_status_events(encoded_id, request_kwargs)
+
+    async def _aiter_document_status_events(
+        self,
+        document_id: str,
+        request_kwargs: JSONDict,
+    ) -> AsyncIterator[DocumentStatus]:
+        """Open a document status stream and yield parsed SSE events."""
+        try:
+            async with self._client.stream(
+                "GET",
+                f"documents/{document_id}/status/stream",
+                **request_kwargs,
+            ) as response:
+                raise_for_stream_response(response, self._map_http_error)
+                try:
+                    async for event in async_iter_document_status_events(
+                        response.aiter_lines(),
+                        map_error=map_document_status_stream_error,
+                    ):
+                        yield event
+                finally:
+                    await response.aclose()
+        except httpx.TimeoutException as exc:
+            raise ChatVectorTimeoutError(self._msg_timeout_or_connection()) from exc
+        except (httpx.ConnectError, httpx.NetworkError, httpx.RemoteProtocolError) as exc:
+            raise ChatVectorTimeoutError(self._msg_timeout_or_connection()) from exc
+        except httpx.HTTPStatusError as exc:
+            raise self._map_http_error(exc.response) from exc
+        except httpx.RequestError as exc:
+            raise ChatVectorAPIError(
+                msg_unexpected(), details={"error": str(exc)}
+            ) from exc
 
     async def wait_for_ready(
         self,
