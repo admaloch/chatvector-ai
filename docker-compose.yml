@@ -50,6 +50,8 @@ services:
       REDIS_URL: "redis://redis:6379/0"
       # QUEUE_BACKEND defaults to "memory" — set to "redis" in backend/.env
       # to enable the Redis-backed durable queue
+      # MULTI_API_INSTANCE=true requires QUEUE_BACKEND=redis and ARTIFACT_STORAGE=s3
+      MULTI_API_INSTANCE: ${MULTI_API_INSTANCE:-false}
     working_dir: /app
     volumes:
       - ./backend:/app

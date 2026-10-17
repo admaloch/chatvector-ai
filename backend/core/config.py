@@ -215,10 +215,11 @@ class Settings:
     MULTI_API_INSTANCE: bool = os.getenv("MULTI_API_INSTANCE", "false").lower() in (
         "1", "true", "yes"
     )
-    TENANT_REGISTRY_DISABLED: bool = os.getenv(
-        "TENANT_REGISTRY_DISABLED",
-        "true" if MULTI_API_INSTANCE else "false",
-    ).lower() in ("1", "true", "yes")
+    TENANT_REGISTRY_DISABLED: bool = (
+        MULTI_API_INSTANCE
+        if not (os.getenv("TENANT_REGISTRY_DISABLED") or "").strip()
+        else os.getenv("TENANT_REGISTRY_DISABLED", "").lower() in ("1", "true", "yes")
+    )
     STALE_RECONCILE_LOCK_TTL_SECONDS: int = max(
         1, int(os.getenv("STALE_RECONCILE_LOCK_TTL_SECONDS", "600"))
     )

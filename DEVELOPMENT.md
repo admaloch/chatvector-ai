@@ -9,6 +9,7 @@
 - [Database migrations](#database-migrations)
 - [Working with the Database Layer](#working-with-the-database-layer)
 - [Ingestion Queue](#ingestion-queue)
+- [Horizontal API scaling](#horizontal-api-scaling)
 - [Tests](#tests)
 - [Retry behavior](#retry-behavior)
 - [Deployment](#deployment)
@@ -638,6 +639,43 @@ webhooks.
 
 ---
 
+## Horizontal API scaling
+
+Each API container still runs `uvicorn --workers 1`. To run more than one
+container, set:
+
+```env
+MULTI_API_INSTANCE=true
+QUEUE_BACKEND=redis
+ARTIFACT_STORAGE=s3
+ARTIFACT_S3_BUCKET=your-bucket
+```
+
+`MULTI_API_INSTANCE=true` defaults `TENANT_REGISTRY_DISABLED=true` (DB-authoritative
+tenant document lists) and requires Redis plus S3 artifacts. Startup reconciliation
+uses a Redis lock so two replicas cannot double-fail the same in-flight document.
+
+Process-local semaphores (`RETRIEVAL_MAX_CONCURRENCY`,
+`CHAT_BATCH_LLM_CONCURRENCY`, `SQLALCHEMY_RETRIEVAL_CONCURRENCY`) and
+`QUEUE_EMBEDDING_RPS` are **per-instance caps**. HTTP rate limits are Redis-backed
+via slowapi.
+
+### Topology smoke procedure
+
+Automated (required — lock behavior is asserted in tests, not docs-only):
+
+```bash
+pytest backend/tests/test_stale_reconciliation.py backend/tests/test_tenant_registry.py -v --tb=short
+```
+
+Manual two-replica checklist: see [DEPLOYMENT.md](DEPLOYMENT.md#horizontal-api-topology-smoke).
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file backend/.env.prod up --scale api=2
+```
+
+---
+
 ## Tests
 
 This project uses `pytest` and `pytest-asyncio`.
@@ -972,16 +1010,15 @@ environment:
   PYTHONPATH: /app
 ```
 
-The production API runs with a single Uvicorn worker process in the Compose
-container (Phase 3 supported topology):
+The production API runs with a single Uvicorn worker process **per container**:
 
 ```yaml
 command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 ```
 
 RQ worker threads (`QUEUE_WORKER_COUNT`) provide ingestion concurrency within
-that one API process. Running multiple Uvicorn workers or API containers is not
-supported in Phase 3.
+that API process. Scale **containers** with `MULTI_API_INSTANCE=true` (see
+[Horizontal API scaling](#horizontal-api-scaling)); do not raise `--workers`.
 
 The API container has a 1 GB memory limit:
 
@@ -1579,6 +1616,14 @@ python -m backend.cli create-tenant-key --tenant "My Org" --tenant-id my-org
 ```
 
 Set the printed `cv_live_…` key in all API clients as the Bearer token.
+
+### Horizontal API scaling variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `MULTI_API_INSTANCE` | `false` | Enables more than one API container. Requires Redis + `ARTIFACT_STORAGE=s3`. |
+| `TENANT_REGISTRY_DISABLED` | `true` when `MULTI_API_INSTANCE` is set | Bypass the process-local tenant document cache (DB is authoritative). |
+| `STALE_RECONCILE_LOCK_TTL_SECONDS` | `600` | Redis lock TTL so only one replica runs `fail_stale_documents_global`. |
 
 See `backend/.env.example` for the full list including chunking
 strategy, rate limits, LLM timeouts, prompt configuration, and

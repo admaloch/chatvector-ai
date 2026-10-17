@@ -15,6 +15,7 @@ System design details and architectural decisions for ChatVector.
 - [Prompt Configuration](#prompt-configuration)
 - [Retry Logic & Resilience](#retry-logic--resilience)
 - [Rate Limiting](#rate-limiting)
+- [Horizontal API Scaling](#horizontal-api-scaling)
 - [Authentication & Multi-Tenancy](#authentication--multi-tenancy)
 - [Security Hardening](#security-hardening)
 - [Logging & Observability](#logging--observability)
@@ -209,25 +210,27 @@ An async in-memory `asyncio.Queue` decouples upload from processing.
 
 **On server restart:**
 Documents left in any in-progress state are bulk-updated to `failed`
-before workers start accepting new jobs. This reconciliation is safe under
-the supported single-process API topology only.
+before workers start accepting new jobs. Multiple API replicas compete for a
+Redis lock (`chatvector:stale-reconcile-lock`) so only one instance runs
+`fail_stale_documents_global`. Losers skip reconciliation entirely.
 
 > **Note:** The default queue is in-memory for local development. In production
 > (`APP_ENV=production`), the Redis-backed queue is the default for job durability
 > across API restarts. Set `QUEUE_BACKEND=memory` explicitly to override.
 >
-> **Production topology:** Phase 3 supports **one API process/container**
-> (`uvicorn --workers 1`). Redis/RQ worker threads provide ingestion concurrency
-> within that process. Redis does not by itself make API instances horizontally
-> scalable. Concurrency settings such as `QUEUE_WORKER_COUNT`,
-> `RETRIEVAL_MAX_CONCURRENCY`, DB pool sizes, and `QUEUE_EMBEDDING_RPS` are
-> process-scoped.
+> **Production topology:** Each API container still runs `uvicorn --workers 1`.
+> Set `MULTI_API_INSTANCE=true` to run more than one container. Redis/RQ worker
+> threads provide ingestion concurrency **within each process**. Concurrency
+> settings such as `QUEUE_WORKER_COUNT`, `RETRIEVAL_MAX_CONCURRENCY`, DB pool
+> sizes, and `QUEUE_EMBEDDING_RPS` are **per-instance caps**, not cluster-wide
+> limits.
 >
 > **Upload artifacts:** Redis jobs carry an `artifact_uri` (`documents.artifact_uri`)
 > instead of file bytes. `ARTIFACT_STORAGE=local` (default) writes `QUEUE_SPILL_DIR`
-> and still needs a shared disk. `ARTIFACT_STORAGE=s3` stores objects in S3/MinIO
-> so a worker without the API host's disk can fetch the payload. Artifacts are
-> deleted after successful ingest or a terminal failure; S3 objects are also TTL-marked.
+> and still needs a shared disk. `ARTIFACT_STORAGE=s3` is required when
+> `MULTI_API_INSTANCE=true` so a worker without the API host's disk can fetch
+> the payload. Artifacts are deleted after successful ingest or a terminal
+> failure; S3 objects are also TTL-marked.
 
 ---
 
@@ -373,11 +376,55 @@ All limits are configurable via env vars (`RATE_LIMIT_*`).
 429 responses return `{"detail": {"code": "rate_limited", "message": "..."}}`.
 Rate-limit events are logged with tenant ID and path — raw API keys are never logged.
 
-Storage uses Redis when `REDIS_URL` is configured. With the supported
-single-process production topology (`uvicorn --workers 1`), SlowAPI
-`in_memory_fallback_enabled=True` provides degraded per-process limiting if
-the Redis rate-limit store is temporarily unreachable; ingestion still
-requires Redis via RQ.
+Storage uses Redis when `REDIS_URL` is configured, so **HTTP** rate limits
+are shared across API replicas. SlowAPI `in_memory_fallback_enabled=True`
+provides degraded **per-process** limiting if the Redis rate-limit store is
+temporarily unreachable; ingestion still requires Redis via RQ.
+
+These limiters are **not** Redis-backed and remain process-local (each replica
+enforces its own cap):
+
+| Limiter | Setting | Scope |
+| --- | --- | --- |
+| Embedding token bucket | `QUEUE_EMBEDDING_RPS` | Per API process, across that process's queue workers |
+| Retrieval semaphore | `RETRIEVAL_MAX_CONCURRENCY` | Per API process |
+| Batch LLM semaphore | `CHAT_BATCH_LLM_CONCURRENCY` | Per API process |
+| SQLAlchemy retrieval semaphore | `SQLALCHEMY_RETRIEVAL_CONCURRENCY` | Per API process |
+
+---
+
+## Horizontal API Scaling
+
+Multiple API containers are supported when `MULTI_API_INSTANCE=true`. That flag
+enforces the requirements below at startup.
+
+**Required**
+
+| Requirement | Why |
+| --- | --- |
+| `QUEUE_BACKEND=redis` | Shared job queue and the stale-reconciler Redis lock |
+| `ARTIFACT_STORAGE=s3` | Split API/worker hosts cannot see `QUEUE_SPILL_DIR` |
+| `TENANT_REGISTRY_DISABLED=true` (default when `MULTI_API_INSTANCE=true`) | Tenant document lists are DB-authoritative; the in-memory registry is process-local |
+| Redis lock around `fail_stale_documents_global` | Two replicas starting together must not fail a document another replica has already started |
+
+**Distributed vs process-local**
+
+| Mechanism | Distributed? |
+| --- | --- |
+| HTTP rate limits (`slowapi` + `REDIS_URL`) | Yes |
+| Ingestion queue jobs (Redis/RQ) | Yes |
+| Idempotency keys | Yes |
+| Embedding cache (when enabled) | Yes |
+| Stale-document reconciler lock | Yes (single winner) |
+| Embedding / process token bucket (`QUEUE_EMBEDDING_RPS`) | No — per-instance cap |
+| Retrieval / batch-LLM / SQLAlchemy semaphores | No — per-instance cap |
+| Tenant registry cache | No — disabled by default in multi-instance |
+
+Do not use Redis pub/sub to replicate the tenant registry. Kubernetes operators
+and multi-region failover are out of scope.
+
+Each replica still runs `uvicorn --workers 1`. Scale **containers**, not Uvicorn
+worker processes.
 
 ---
 

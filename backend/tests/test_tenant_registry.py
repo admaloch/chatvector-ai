@@ -53,24 +53,47 @@ async def test_registry_cache_used_when_enabled_and_loaded(monkeypatch):
     list_db.assert_not_awaited()
 
 
-def test_tenant_registry_disabled_defaults_on_for_multi_instance(monkeypatch):
+def _reload_multi_instance_config(monkeypatch, *, registry_env: str | None):
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("MULTI_API_INSTANCE", "true")
     monkeypatch.setenv("QUEUE_BACKEND", "redis")
     monkeypatch.setenv("ARTIFACT_STORAGE", "s3")
     monkeypatch.setenv("ARTIFACT_S3_BUCKET", "chatvector-artifacts")
-    monkeypatch.delenv("TENANT_REGISTRY_DISABLED", raising=False)
+    if registry_env is None:
+        monkeypatch.delenv("TENANT_REGISTRY_DISABLED", raising=False)
+    else:
+        monkeypatch.setenv("TENANT_REGISTRY_DISABLED", registry_env)
     with patch("dotenv.load_dotenv"):
         import core.config
 
         importlib.reload(core.config)
-        try:
-            assert core.config.config.MULTI_API_INSTANCE is True
-            assert core.config.config.TENANT_REGISTRY_DISABLED is True
-        finally:
-            monkeypatch.setenv("APP_ENV", "test")
-            monkeypatch.delenv("MULTI_API_INSTANCE", raising=False)
-            monkeypatch.delenv("QUEUE_BACKEND", raising=False)
-            monkeypatch.delenv("ARTIFACT_STORAGE", raising=False)
-            monkeypatch.delenv("ARTIFACT_S3_BUCKET", raising=False)
-            importlib.reload(core.config)
+        return core.config
+
+
+def _restore_config(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.delenv("MULTI_API_INSTANCE", raising=False)
+    monkeypatch.delenv("QUEUE_BACKEND", raising=False)
+    monkeypatch.delenv("ARTIFACT_STORAGE", raising=False)
+    monkeypatch.delenv("ARTIFACT_S3_BUCKET", raising=False)
+    monkeypatch.delenv("TENANT_REGISTRY_DISABLED", raising=False)
+    import core.config
+
+    importlib.reload(core.config)
+
+
+def test_tenant_registry_disabled_defaults_on_for_multi_instance(monkeypatch):
+    try:
+        core_config = _reload_multi_instance_config(monkeypatch, registry_env=None)
+        assert core_config.config.MULTI_API_INSTANCE is True
+        assert core_config.config.TENANT_REGISTRY_DISABLED is True
+    finally:
+        _restore_config(monkeypatch)
+
+
+def test_tenant_registry_disabled_empty_env_keeps_multi_instance_default(monkeypatch):
+    try:
+        core_config = _reload_multi_instance_config(monkeypatch, registry_env="")
+        assert core_config.config.TENANT_REGISTRY_DISABLED is True
+    finally:
+        _restore_config(monkeypatch)
