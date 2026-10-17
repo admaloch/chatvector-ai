@@ -26,6 +26,7 @@ async def test_create_session():
         new=AsyncMock(return_value=Session(id="test-id", tenant_id="tenant-1")),
     ) as mock_create:
         result = await create_session(
+            make_test_request("POST", "/sessions"),
             SessionCreateRequest(session_id="test-id"),
             auth=AuthContext(tenant_id="tenant-1"),
         )
@@ -43,6 +44,7 @@ async def test_create_session_conflict():
     ):
         with pytest.raises(HTTPException) as excinfo:
             await create_session(
+                make_test_request("POST", "/sessions"),
                 SessionCreateRequest(session_id="test-id"),
                 auth=AuthContext(tenant_id="tenant-1"),
             )

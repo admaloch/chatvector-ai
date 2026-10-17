@@ -315,7 +315,16 @@ async def test_session_create_and_list_accept_valid_bearer():
         request = _make_request(_bearer(raw_key))
         auth = await require_auth(request)
 
-        created = await create_session(SessionCreateRequest(session_id=None), auth=auth)
+        from request_utils import make_test_request
+
+        session_request = make_test_request(
+            "POST",
+            "/sessions",
+            headers={"Authorization": _bearer(raw_key)},
+        )
+        created = await create_session(
+            session_request, SessionCreateRequest(session_id=None), auth=auth
+        )
         assert created.tenant_id == tenant_id
 
         listing = await list_sessions(auth=auth)
