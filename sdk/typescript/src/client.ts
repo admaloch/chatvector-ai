@@ -8,10 +8,12 @@ import type {
   ChatResponse,
   ChatStreamEvent,
   CreateSessionInput,
+  DocumentListResponse,
   DocumentResponse,
   DocumentStatus,
   RequestOptions,
   Session,
+  SessionHistoryResponse,
   SessionListResponse,
   UploadInput,
   WaitForReadyOptions,
@@ -80,6 +82,21 @@ export class ChatVectorClient {
     return this.documents.waitForReady(documentId, options);
   }
 
+  listDocuments(options?: RequestOptions): Promise<DocumentListResponse> {
+    return this.documents.listDocuments(options);
+  }
+
+  deleteDocument(documentId: string, options?: RequestOptions): Promise<void> {
+    return this.documents.deleteDocument(documentId, options);
+  }
+
+  streamDocumentStatus(
+    documentId: string,
+    options?: RequestOptions,
+  ): AsyncIterable<DocumentStatus> {
+    return this.documents.streamDocumentStatus(documentId, options);
+  }
+
   chat(request: ChatRequest, options?: RequestOptions): Promise<ChatResponse> {
     return this.chats.chat(request, options);
   }
@@ -115,5 +132,12 @@ export class ChatVectorClient {
 
   deleteSession(sessionId: string, options?: RequestOptions): Promise<void> {
     return this.sessions.deleteSession(sessionId, options);
+  }
+
+  getSessionHistory(
+    sessionId: string,
+    options?: RequestOptions,
+  ): Promise<SessionHistoryResponse> {
+    return this.sessions.getSessionHistory(sessionId, options);
   }
 }

@@ -2,6 +2,8 @@ import type {
   CreateSessionInput,
   RequestOptions,
   Session,
+  SessionHistoryMessage,
+  SessionHistoryResponse,
   SessionListResponse,
 } from "../models.js";
 import { HttpClient } from "../internal/http.js";
@@ -63,6 +65,22 @@ export class SessionsResource {
       signalOption(options.signal),
     );
   }
+
+  async getSessionHistory(
+    sessionId: string,
+    options: RequestOptions = {},
+  ): Promise<SessionHistoryResponse> {
+    assertSessionId(sessionId);
+    const payload = await this.http.requestJson(
+      "GET",
+      `/sessions/${encodeURIComponent(sessionId)}/history`,
+      signalOption(options.signal),
+    );
+    const messages = Array.isArray(payload.messages)
+      ? payload.messages.filter(isRecord).map(mapSessionHistoryMessage)
+      : [];
+    return { messages, _raw: payload };
+  }
 }
 
 function mapSession(payload: Record<string, unknown>): Session {
@@ -79,6 +97,21 @@ function mapSession(payload: Record<string, unknown>): Session {
       : [],
     _raw: payload,
   };
+}
+
+function mapSessionHistoryMessage(
+  payload: Record<string, unknown>,
+): SessionHistoryMessage {
+  const result: SessionHistoryMessage = {
+    id: stringValue(payload.id),
+    role: stringValue(payload.role),
+    content: stringValue(payload.content),
+    _raw: payload,
+  };
+  if (payload.created_at === null || typeof payload.created_at === "string") {
+    result.createdAt = payload.created_at;
+  }
+  return result;
 }
 
 function assertSessionId(value: unknown): asserts value is string {

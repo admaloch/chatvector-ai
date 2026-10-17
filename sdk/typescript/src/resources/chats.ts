@@ -9,6 +9,7 @@ import type {
   ChatSource,
   ChatStreamEvent,
   RequestOptions,
+  RetrievalDebugMetadata,
 } from "../models.js";
 import { HttpClient } from "../internal/http.js";
 import {
@@ -34,6 +35,9 @@ export class ChatsResource {
     addOptional(body, "match_count", request.matchCount);
     addOptional(body, "session_id", request.sessionId);
     addOptional(body, "scope", request.scope);
+    if (request.debugRetrieval === true) {
+      body.debug_retrieval = true;
+    }
 
     const payload = await this.http.requestJson("POST", "/chat", {
       json: body,
@@ -56,6 +60,9 @@ export class ChatsResource {
     };
     addOptional(body, "session_id", request.sessionId);
     addOptional(body, "scope", request.scope);
+    if (request.debugRetrieval === true) {
+      body.debug_retrieval = true;
+    }
 
     const payload = await this.http.requestJson("POST", "/chat/batch", {
       json: body,
@@ -84,6 +91,9 @@ export class ChatsResource {
     addOptional(body, "match_count", request.matchCount);
     addOptional(body, "session_id", request.sessionId);
     addOptional(body, "scope", request.scope);
+    if (request.debugRetrieval === true) {
+      body.debug_retrieval = true;
+    }
 
     const response = await this.http.openStream("POST", "/chat/stream", {
       json: body,
@@ -138,6 +148,8 @@ function mapChatResponse(payload: Record<string, unknown>): ChatResponse {
     _raw: payload,
   };
   if (typeof payload.session_id === "string") result.sessionId = payload.session_id;
+  const retrievalDebug = mapRetrievalDebug(payload.retrieval_debug);
+  if (retrievalDebug !== undefined) result.retrievalDebug = retrievalDebug;
   const error = mapSoftError(payload.error);
   if (error) result.error = error;
   return result;
@@ -169,6 +181,8 @@ function mapBatchResult(payload: Record<string, unknown>): BatchChatResult {
   if (typeof payload.answer === "string") result.answer = payload.answer;
   if (Array.isArray(payload.sources)) result.sources = mapSources(payload.sources);
   if (typeof payload.session_id === "string") result.sessionId = payload.session_id;
+  const retrievalDebug = mapRetrievalDebug(payload.retrieval_debug);
+  if (retrievalDebug !== undefined) result.retrievalDebug = retrievalDebug;
   const error = mapSoftError(payload.error);
   if (error) result.error = error;
   return result;
@@ -176,21 +190,75 @@ function mapBatchResult(payload: Record<string, unknown>): BatchChatResult {
 
 function mapSources(value: unknown): ChatSource[] {
   return Array.isArray(value)
-    ? value.filter(isRecord).map((source) => {
-        const result: ChatSource = {
-          fileName: nullableString(source.file_name),
-          pageNumber: nullableNumber(source.page_number),
-          chunkIndex: nullableNumber(source.chunk_index),
-        };
-        if (source.score === null || typeof source.score === "number") {
-          result.score = source.score;
-        }
-        if (source.score_type === null || typeof source.score_type === "string") {
-          result.scoreType = source.score_type;
-        }
-        return result;
-      })
+    ? value.filter(isRecord).map((source) => mapChatSource(source))
     : [];
+}
+
+function mapChatSource(source: Record<string, unknown>): ChatSource {
+  const result: ChatSource = {
+    fileName: nullableString(source.file_name),
+    pageNumber: nullableNumber(source.page_number),
+    chunkIndex: nullableNumber(source.chunk_index),
+  };
+  if (source.score === null || typeof source.score === "number") {
+    result.score = source.score;
+  }
+  if (source.score_type === null || typeof source.score_type === "string") {
+    result.scoreType = source.score_type;
+  }
+  assignNullableNumber(result, "vectorScore", source.vector_score);
+  assignNullableNumber(result, "fullTextScore", source.full_text_score);
+  assignNullableNumber(result, "rrfScore", source.rrf_score);
+  assignNullableNumber(result, "rerankerScore", source.reranker_score);
+  assignNullableNumber(result, "rerankOrder", source.rerank_order);
+  return result;
+}
+
+function mapRetrievalDebug(
+  value: unknown,
+): RetrievalDebugMetadata | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const result: RetrievalDebugMetadata = { ...value };
+  if (typeof value.original_query === "string") {
+    result.originalQuery = value.original_query;
+  }
+  if (Array.isArray(value.transformed_queries)) {
+    result.transformedQueries = value.transformed_queries.filter(
+      (item): item is string => typeof item === "string",
+    );
+  }
+  if (typeof value.transformation_strategy === "string") {
+    result.transformationStrategy = value.transformation_strategy;
+  }
+  if (typeof value.effective_retrieval_query === "string") {
+    result.effectiveRetrievalQuery = value.effective_retrieval_query;
+  }
+  if (isRecord(value.timing_ms)) {
+    result.timingMs = value.timing_ms as Record<string, number>;
+  }
+  if (value.effective_config !== undefined) {
+    result.effectiveConfig = isRecord(value.effective_config)
+      ? value.effective_config
+      : value.effective_config;
+  }
+  return result;
+}
+
+function assignNullableNumber(
+  target: ChatSource,
+  key:
+    | "vectorScore"
+    | "fullTextScore"
+    | "rrfScore"
+    | "rerankerScore"
+    | "rerankOrder",
+  value: unknown,
+): void {
+  if (value === null || (typeof value === "number" && Number.isFinite(value))) {
+    target[key] = value;
+  }
 }
 
 function mapSoftError(

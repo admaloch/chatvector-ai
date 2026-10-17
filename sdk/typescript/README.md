@@ -249,8 +249,14 @@ SSE events. Streaming POST requests are never automatically retried. Pass
 `{ signal: AbortSignal }` to cancel an in-flight stream when a downstream
 caller disconnects.
 
-Document-status SSE, browser support, pagination helpers, and logger/telemetry
-callbacks remain outside v0.
+`streamDocumentStatus()` consumes `GET /documents/{id}/status/stream` as typed
+SSE snapshots (same terminal semantics as `waitForReady()`). Long-lived SSE
+through reverse proxies may require buffering disabled (for example
+`X-Accel-Buffering: no` on nginx); prefer server-side polling helpers when a
+proxy cannot preserve event streams.
+
+Browser support, pagination helpers, and logger/telemetry callbacks remain
+outside v0.
 
 ## License
 

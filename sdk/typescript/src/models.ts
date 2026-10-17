@@ -11,12 +11,24 @@ export type WaitForReadyOptions = RequestOptions & {
 };
 
 export type UploadInput =
-  | { path: string; contentType?: string }
+  | { path: string; contentType?: string; sessionId?: string }
   | {
       data: Uint8Array | Blob;
       fileName: string;
       contentType?: string;
+      sessionId?: string;
     };
+
+/** Opt-in retrieval debug metadata when the backend exposes it. */
+export type RetrievalDebugMetadata = {
+  originalQuery?: string;
+  transformedQueries?: string[];
+  transformationStrategy?: string;
+  effectiveRetrievalQuery?: string;
+  timingMs?: Record<string, number>;
+  effectiveConfig?: Record<string, unknown>;
+  [key: string]: unknown;
+};
 
 export type ChatRequest = {
   question: string;
@@ -24,6 +36,7 @@ export type ChatRequest = {
   matchCount?: number;
   sessionId?: string;
   scope?: RetrievalScope;
+  debugRetrieval?: boolean;
 };
 
 export type BatchChatQuery = {
@@ -38,6 +51,7 @@ export type BatchChatRequest = {
   queries: BatchChatQuery[];
   sessionId?: string;
   scope?: RetrievalScope;
+  debugRetrieval?: boolean;
 };
 
 export type ChatSource = {
@@ -46,6 +60,39 @@ export type ChatSource = {
   chunkIndex: number | null;
   score?: number | null;
   scoreType?: string | null;
+  vectorScore?: number | null;
+  fullTextScore?: number | null;
+  rrfScore?: number | null;
+  rerankerScore?: number | null;
+  rerankOrder?: number | null;
+};
+
+export type DocumentSummary = {
+  documentId: string;
+  fileName: string | null;
+  status: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  _raw?: Record<string, unknown>;
+};
+
+export type DocumentListResponse = {
+  tenantId: string;
+  documents: DocumentSummary[];
+  _raw?: Record<string, unknown>;
+};
+
+export type SessionHistoryMessage = {
+  id: string;
+  role: string;
+  content: string;
+  createdAt?: string | null;
+  _raw?: Record<string, unknown>;
+};
+
+export type SessionHistoryResponse = {
+  messages: SessionHistoryMessage[];
+  _raw?: Record<string, unknown>;
 };
 
 export type DocumentResponse = {
@@ -76,6 +123,7 @@ export type ChatStreamEvent =
       sources: ChatSource[];
       latencyMs: number;
       model: string;
+      retrievalDebug?: RetrievalDebugMetadata;
       _raw?: Record<string, unknown>;
     };
 
@@ -89,6 +137,7 @@ export type ChatResponse = {
   model: string;
   status: "ok" | "error";
   sessionId?: string | null;
+  retrievalDebug?: RetrievalDebugMetadata;
   error?: { code: string; message: string };
   _raw?: Record<string, unknown>;
 };
@@ -104,6 +153,7 @@ export type BatchChatResult = {
   latencyMs: number;
   model: string;
   sessionId?: string | null;
+  retrievalDebug?: RetrievalDebugMetadata;
   _raw?: Record<string, unknown>;
 };
 

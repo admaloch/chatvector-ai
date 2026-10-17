@@ -4,12 +4,15 @@ import {
   isChatVectorError,
 } from "../errors.js";
 import type {
+  DocumentListResponse,
   DocumentResponse,
   DocumentStatus,
+  DocumentSummary,
   RequestOptions,
   UploadInput,
   WaitForReadyOptions,
 } from "../models.js";
+import { iterDocumentStatusEvents } from "../internal/sse.js";
 import { HttpClient } from "../internal/http.js";
 import {
   abortReason,
@@ -40,10 +43,12 @@ export class DocumentsResource {
   ): Promise<DocumentResponse> {
     throwIfAborted(options.signal);
     const ingestBody = await createUploadFormData(input);
+    const uploadHeaders = uploadSessionHeaders(input);
 
     try {
       const payload = await this.http.requestJson("POST", "/ingest", {
         body: ingestBody,
+        ...(uploadHeaders === undefined ? {} : { headers: uploadHeaders }),
         ...signalOption(options.signal),
       });
       return mapDocumentResponse(payload);
@@ -64,9 +69,71 @@ export class DocumentsResource {
     const uploadBody = await createUploadFormData(input);
     const payload = await this.http.requestJson("POST", "/upload", {
       body: uploadBody,
+      ...(uploadHeaders === undefined ? {} : { headers: uploadHeaders }),
       ...signalOption(options.signal),
     });
     return mapDocumentResponse(payload);
+  }
+
+  async listDocuments(
+    options: RequestOptions = {},
+  ): Promise<DocumentListResponse> {
+    const payload = await this.http.requestJson("GET", "/documents", {
+      ...signalOption(options.signal),
+    });
+    const documents = Array.isArray(payload.documents)
+      ? payload.documents.filter(isRecord).map(mapDocumentSummary)
+      : [];
+    return {
+      tenantId: stringValue(payload.tenant_id),
+      documents,
+      _raw: payload,
+    };
+  }
+
+  async deleteDocument(
+    documentId: string,
+    options: RequestOptions = {},
+  ): Promise<void> {
+    assertRequiredString(documentId, "documentId");
+    await this.http.requestVoid(
+      "DELETE",
+      `/documents/${encodeURIComponent(documentId)}`,
+      signalOption(options.signal),
+    );
+  }
+
+  streamDocumentStatus(
+    documentId: string,
+    options: RequestOptions = {},
+  ): AsyncIterable<DocumentStatus> {
+    return this.iterDocumentStatus(documentId, options);
+  }
+
+  private async *iterDocumentStatus(
+    documentId: string,
+    options: RequestOptions = {},
+  ): AsyncGenerator<DocumentStatus> {
+    assertRequiredString(documentId, "documentId");
+    const response = await this.http.openStream(
+      "GET",
+      `/documents/${encodeURIComponent(documentId)}/status/stream`,
+      signalOption(options.signal),
+    );
+
+    try {
+      const streamOptions: { signal?: AbortSignal } = {};
+      if (options.signal !== undefined) {
+        streamOptions.signal = options.signal;
+      }
+      yield* iterDocumentStatusEvents(response, streamOptions);
+    } finally {
+      try {
+        await response.body?.cancel();
+      } catch {
+        // Body cancellation failures are not authoritative for callers.
+      }
+    }
   }
 
   async getDocumentStatus(
@@ -181,6 +248,37 @@ function waitTimeoutError(
     `Timed out after ${timeoutMs}ms while waiting for document '${documentId}'.`,
     options,
   );
+}
+
+function uploadSessionHeaders(
+  input: UploadInput,
+): Record<string, string> | undefined {
+  const sessionId = input.sessionId?.trim();
+  if (!sessionId) {
+    return undefined;
+  }
+  return { "X-Session-Id": sessionId };
+}
+
+function mapDocumentSummary(
+  payload: Record<string, unknown>,
+): DocumentSummary {
+  const result: DocumentSummary = {
+    documentId: stringValue(payload.document_id),
+    fileName:
+      payload.file_name === null || typeof payload.file_name === "string"
+        ? payload.file_name
+        : null,
+    status: stringValue(payload.status),
+    _raw: payload,
+  };
+  if (payload.created_at === null || typeof payload.created_at === "string") {
+    result.createdAt = payload.created_at;
+  }
+  if (payload.updated_at === null || typeof payload.updated_at === "string") {
+    result.updatedAt = payload.updated_at;
+  }
+  return result;
 }
 
 function mapDocumentResponse(

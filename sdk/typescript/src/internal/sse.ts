@@ -4,7 +4,12 @@ import {
   ChatVectorRateLimitError,
   ChatVectorTimeoutError,
 } from "../errors.js";
-import type { ChatSource, ChatStreamEvent } from "../models.js";
+import type {
+  ChatSource,
+  ChatStreamEvent,
+  DocumentStatus,
+  RetrievalDebugMetadata,
+} from "../models.js";
 import { redactSecret, redactText } from "./redact.js";
 import { abortReason } from "./time.js";
 import { isRecord, stringValue } from "./utils.js";
@@ -198,12 +203,14 @@ function dispatchSseEvent(
 
   if (eventName === "complete") {
     const payload = parseJsonObject(data, "complete");
+    const retrievalDebug = mapRetrievalDebug(payload.retrieval_debug);
     return {
       type: "complete",
       sessionId: nullableString(payload.session_id),
       sources: mapSources(payload.sources),
       latencyMs: numberValue(payload.latency_ms),
       model: stringValue(payload.model),
+      ...(retrievalDebug === undefined ? {} : { retrievalDebug }),
       _raw: payload,
     };
   }
@@ -269,9 +276,199 @@ function mapSources(value: unknown): ChatSource[] {
         if (source.score_type === null || typeof source.score_type === "string") {
           result.scoreType = source.score_type;
         }
+        assignNullableNumber(result, "vectorScore", source.vector_score);
+        assignNullableNumber(result, "fullTextScore", source.full_text_score);
+        assignNullableNumber(result, "rrfScore", source.rrf_score);
+        assignNullableNumber(result, "rerankerScore", source.reranker_score);
+        assignNullableNumber(result, "rerankOrder", source.rerank_order);
         return result;
       })
     : [];
+}
+
+function mapRetrievalDebug(
+  value: unknown,
+): RetrievalDebugMetadata | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const result: RetrievalDebugMetadata = { ...value };
+  if (typeof value.original_query === "string") {
+    result.originalQuery = value.original_query;
+  }
+  if (Array.isArray(value.transformed_queries)) {
+    result.transformedQueries = value.transformed_queries.filter(
+      (item): item is string => typeof item === "string",
+    );
+  }
+  if (typeof value.transformation_strategy === "string") {
+    result.transformationStrategy = value.transformation_strategy;
+  }
+  if (typeof value.effective_retrieval_query === "string") {
+    result.effectiveRetrievalQuery = value.effective_retrieval_query;
+  }
+  if (isRecord(value.timing_ms)) {
+    result.timingMs = value.timing_ms as Record<string, number>;
+  }
+  if (value.effective_config !== undefined) {
+    result.effectiveConfig = isRecord(value.effective_config)
+      ? value.effective_config
+      : value.effective_config;
+  }
+  return result;
+}
+
+function assignNullableNumber(
+  target: ChatSource,
+  key:
+    | "vectorScore"
+    | "fullTextScore"
+    | "rrfScore"
+    | "rerankerScore"
+    | "rerankOrder",
+  value: unknown,
+): void {
+  if (value === null || (typeof value === "number" && Number.isFinite(value))) {
+    target[key] = value;
+  }
+}
+
+export function mapDocumentStatusStreamError(
+  payload: Record<string, unknown>,
+): ChatVectorAPIError {
+  const message = stringValue(payload.message) || "ChatVector document status stream failed.";
+  if (message.toLowerCase().includes("timed out")) {
+    return new ChatVectorTimeoutError(message, { details: payload });
+  }
+  return new ChatVectorAPIError(message, { details: payload });
+}
+
+export async function* iterDocumentStatusEvents(
+  response: Response,
+  options: StreamParseOptions = {},
+): AsyncGenerator<DocumentStatus> {
+  const { signal } = options;
+  if (response.body === null) {
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let eventName: string | null = null;
+  let dataLines: string[] = [];
+
+  const dispatchBufferedEvent = (): DocumentStatus | null => {
+    if (eventName === null && dataLines.length === 0) {
+      return null;
+    }
+    const event = dispatchDocumentStatusEvent(eventName, dataLines.join("\n"));
+    eventName = null;
+    dataLines = [];
+    return event;
+  };
+
+  try {
+    while (true) {
+      throwIfAborted(signal);
+      const { done, value } = await readStreamChunk(reader, signal);
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      let newlineIndex = buffer.indexOf("\n");
+      while (newlineIndex !== -1) {
+        const line = buffer.slice(0, newlineIndex).replace(/\r$/, "");
+        buffer = buffer.slice(newlineIndex + 1);
+        newlineIndex = buffer.indexOf("\n");
+
+        if (line === "") {
+          const event = dispatchBufferedEvent();
+          if (event !== null) {
+            yield event;
+          }
+          continue;
+        }
+
+        if (line.startsWith("event:")) {
+          eventName = line.slice("event:".length).trim() || null;
+          continue;
+        }
+
+        if (line.startsWith("data:")) {
+          dataLines.push(line.slice("data:".length).trim());
+        }
+      }
+    }
+
+    buffer += decoder.decode();
+    if (buffer.length > 0) {
+      const trailingLine = buffer.replace(/\r$/, "");
+      if (trailingLine.startsWith("event:")) {
+        eventName = trailingLine.slice("event:".length).trim() || null;
+      } else if (trailingLine.startsWith("data:")) {
+        dataLines.push(trailingLine.slice("data:".length).trim());
+      }
+    }
+
+    const trailingEvent = dispatchBufferedEvent();
+    if (trailingEvent !== null) {
+      yield trailingEvent;
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // Cancellation errors are not authoritative for callers.
+    }
+  }
+}
+
+function dispatchDocumentStatusEvent(
+  eventName: string | null,
+  data: string,
+): DocumentStatus | null {
+  if (eventName === "error") {
+    const payload = parseJsonObject(data, "error");
+    throw mapDocumentStatusStreamError(payload);
+  }
+
+  if (eventName === "status") {
+    const payload = parseJsonObject(data, "status");
+    return mapDocumentStatusPayload(payload);
+  }
+
+  throw new ChatVectorAPIError(
+    "ChatVector returned an unexpected document status streaming event.",
+    { details: { event: eventName, data: truncateMalformedData(data) } },
+  );
+}
+
+function mapDocumentStatusPayload(
+  payload: Record<string, unknown>,
+): DocumentStatus {
+  const result: DocumentStatus = {
+    documentId: stringValue(payload.document_id),
+    status: stringValue(payload.status),
+    _raw: payload,
+  };
+  if (payload.chunks === null || isRecord(payload.chunks)) {
+    result.chunks = payload.chunks;
+  }
+  if (payload.created_at === null || typeof payload.created_at === "string") {
+    result.createdAt = payload.created_at;
+  }
+  if (payload.updated_at === null || typeof payload.updated_at === "string") {
+    result.updatedAt = payload.updated_at;
+  }
+  if (payload.error === null || isRecord(payload.error)) {
+    result.error = payload.error;
+  }
+  if (typeof payload.queue_position === "number") {
+    result.queuePosition = payload.queue_position;
+  }
+  return result;
 }
 
 function numberValue(value: unknown, fallback = 0): number {

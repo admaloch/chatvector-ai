@@ -41,6 +41,7 @@ export type HttpRequestOptions = {
   json?: unknown;
   body?: BodyInit;
   deadlineMs?: number;
+  headers?: Record<string, string>;
 };
 
 class RequestDeadlineError extends Error {
@@ -276,6 +277,11 @@ export class HttpClient {
     const headers = new Headers({ Accept: "application/json" });
     if (this.authHeader) {
       headers.set("Authorization", this.authHeader);
+    }
+    if (options.headers !== undefined) {
+      for (const [name, value] of Object.entries(options.headers)) {
+        headers.set(name, value);
+      }
     }
 
     const init: RequestInit = {
