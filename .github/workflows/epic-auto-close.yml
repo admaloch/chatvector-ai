@@ -1,0 +1,195 @@
+name: Epic auto-close
+
+# When a child issue closes (typically via merged PR + Closes #N), check whether
+# its parent tracking epic (## Child issues in body) can be completed.
+
+on:
+  issues:
+    types: [closed]
+
+jobs:
+  close-epic-when-children-done:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Find and close completed tracking epics
+        id: close
+        uses: actions/github-script@v7
+        env:
+          CLOSED_CHILD: ${{ github.event.issue.number }}
+        with:
+          script: |
+            const closedChild = Number(process.env.CLOSED_CHILD);
+            const { owner, repo } = context.repo;
+
+            function parseChildIssueNumbers(body) {
+              const match = body.match(/## Child issues\s*\n([\s\S]*?)(?=\n## |\n*$)/);
+              if (!match) return [];
+              const numbers = [...match[1].matchAll(/#(\d+)/g)].map((m) => Number(m[1]));
+              return [...new Set(numbers)];
+            }
+
+            function isTrackingEpic(body) {
+              return (
+                body.includes("## Child issues") &&
+                (body.includes("Tracking epic") ||
+                  body.includes("Implementation lives in the child issues") ||
+                  body.includes("do not implement"))
+              );
+            }
+
+            const { data: searchResult } = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${owner}/${repo} is:issue is:open "#${closedChild}" in:body`,
+              per_page: 20,
+            });
+
+            const epicsClosed = [];
+
+            for (const item of searchResult.items) {
+              if (!item.body || !isTrackingEpic(item.body)) continue;
+              const children = parseChildIssueNumbers(item.body);
+              if (!children.includes(closedChild)) continue;
+
+              let allClosed = true;
+              for (const childNum of children) {
+                const { data: child } = await github.rest.issues.get({
+                  owner,
+                  repo,
+                  issue_number: childNum,
+                });
+                if (child.state !== "closed") {
+                  allClosed = false;
+                  core.info(
+                    `Epic #${item.number}: child #${childNum} still open; skipping epic close.`
+                  );
+                  break;
+                }
+              }
+              if (!allClosed) continue;
+
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: item.number,
+                body:
+                  `All child issues (${children.map((n) => `#${n}`).join(", ")}) are closed. ` +
+                  "Auto-closing this tracking epic.",
+              });
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: item.number,
+                state: "closed",
+                state_reason: "completed",
+              });
+              core.info(`Closed tracking epic #${item.number}.`);
+              epicsClosed.push(item.number);
+            }
+
+            core.setOutput("epics_closed", JSON.stringify(epicsClosed));
+
+      - name: Move closed epics to Done on project board
+        if: steps.close.outputs.epics_closed != '[]'
+        uses: actions/github-script@v7
+        env:
+          EPICS_CLOSED: ${{ steps.close.outputs.epics_closed }}
+          PROJECT_OWNER: chatvector-ai
+          PROJECT_NUMBER: "2"
+          STATUS_FIELD_NAME: Status
+          STATUS_VALUE_NAME: Done
+        with:
+          github-token: ${{ secrets.PROJECTS_TOKEN }}
+          script: |
+            const epicNumbers = JSON.parse(process.env.EPICS_CLOSED);
+            const { owner, repo } = context.repo;
+
+            const projectOwner = process.env.PROJECT_OWNER;
+            const projectNumber = Number(process.env.PROJECT_NUMBER);
+            const statusFieldName = process.env.STATUS_FIELD_NAME;
+            const statusValueName = process.env.STATUS_VALUE_NAME;
+
+            const { organization } = await github.graphql(
+              `query($owner: String!, $number: Int!) {
+                organization(login: $owner) {
+                  projectV2(number: $number) {
+                    id
+                    fields(first: 20) {
+                      nodes {
+                        ... on ProjectV2SingleSelectField {
+                          id
+                          name
+                          options { id name }
+                        }
+                      }
+                    }
+                  }
+                }
+              }`,
+              { owner: projectOwner, number: projectNumber }
+            );
+
+            const project = organization.projectV2;
+            const statusField = project.fields.nodes.find(
+              (field) => field.name === statusFieldName
+            );
+            if (!statusField) {
+              core.setFailed(`Status field "${statusFieldName}" was not found on the project.`);
+              return;
+            }
+            const statusOption = statusField.options.find(
+              (option) => option.name.toLowerCase() === statusValueName.toLowerCase()
+            );
+            if (!statusOption) {
+              core.setFailed(`Status option "${statusValueName}" was not found on the project.`);
+              return;
+            }
+
+            for (const issueNumber of epicNumbers) {
+              const { repository: issueRepo } = await github.graphql(
+                `query($owner: String!, $repo: String!, $issue: Int!) {
+                  repository(owner: $owner, name: $repo) {
+                    issue(number: $issue) {
+                      projectItems(first: 10) {
+                        nodes {
+                          id
+                          project { title }
+                        }
+                      }
+                    }
+                  }
+                }`,
+                { owner, repo, issue: issueNumber }
+              );
+
+              const projectItem = issueRepo.issue.projectItems.nodes.find(
+                (item) => item.project.title === "ChatVector-AI Development"
+              );
+              if (!projectItem) {
+                core.info(`Epic #${issueNumber} is not on ChatVector-AI Development; skipping.`);
+                continue;
+              }
+
+              await github.graphql(
+                `mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                  updateProjectV2ItemFieldValue(
+                    input: {
+                      projectId: $projectId
+                      itemId: $itemId
+                      fieldId: $fieldId
+                      value: { singleSelectOptionId: $optionId }
+                    }
+                  ) {
+                    projectV2Item { id }
+                  }
+                }`,
+                {
+                  projectId: project.id,
+                  itemId: projectItem.id,
+                  fieldId: statusField.id,
+                  optionId: statusOption.id,
+                }
+              );
+              core.info(`Set epic #${issueNumber} to "${statusValueName}".`);
+            }
