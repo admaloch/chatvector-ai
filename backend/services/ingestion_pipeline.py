@@ -971,10 +971,17 @@ class IngestionPipeline:
             job_metadata_patch=job_metadata_patch,
         )
         if config.WEBHOOK_ENABLED and status in ("completed", "failed"):
-            from services.ingestion_webhook import notify_ingestion_terminal
+            try:
+                from services.ingestion_webhook import notify_ingestion_terminal
 
-            outcome = "completed" if status == "completed" else "failed"
-            await notify_ingestion_terminal(doc_id, tenant_id, outcome=outcome)
+                outcome = "completed" if status == "completed" else "failed"
+                await notify_ingestion_terminal(doc_id, tenant_id, outcome=outcome)
+            except Exception as webhook_error:
+                logger.error(
+                    "Failed to schedule ingestion webhook for document %s: %s",
+                    doc_id,
+                    webhook_error,
+                )
 
     async def _handle_error(
         self,
@@ -1001,16 +1008,24 @@ class IngestionPipeline:
                     error=error,
                     job_metadata_patch=terminal_job_patch,
                 )
-                if config.WEBHOOK_ENABLED:
+            except Exception as status_error:
+                logger.error(
+                    f"Failed to record replacement failure for document {doc_id}: {status_error}"
+                )
+                return
+            if config.WEBHOOK_ENABLED:
+                try:
                     from services.ingestion_webhook import notify_ingestion_terminal
 
                     await notify_ingestion_terminal(
                         doc_id, tenant_id, outcome="failed"
                     )
-            except Exception as status_error:
-                logger.error(
-                    f"Failed to record replacement failure for document {doc_id}: {status_error}"
-                )
+                except Exception as webhook_error:
+                    logger.error(
+                        "Failed to schedule ingestion webhook for document %s: %s",
+                        doc_id,
+                        webhook_error,
+                    )
             return
 
         try:
@@ -1269,11 +1284,18 @@ class IngestionPipeline:
                     patch_terminal_success(),
                 )
                 if config.WEBHOOK_ENABLED:
-                    from services.ingestion_webhook import notify_ingestion_terminal
+                    try:
+                        from services.ingestion_webhook import notify_ingestion_terminal
 
-                    await notify_ingestion_terminal(
-                        doc_id, tenant_id, outcome="completed"
-                    )
+                        await notify_ingestion_terminal(
+                            doc_id, tenant_id, outcome="completed"
+                        )
+                    except Exception as webhook_error:
+                        logger.error(
+                            "Failed to schedule ingestion webhook for document %s: %s",
+                            doc_id,
+                            webhook_error,
+                        )
             else:
                 await self._update_status(doc_id=doc_id, status="storing", tenant_id=tenant_id)
                 chunk_ids = await db.store_chunks_with_embeddings(doc_id, chunk_records, tenant_id=tenant_id)
