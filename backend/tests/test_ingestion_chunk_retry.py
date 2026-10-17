@@ -52,7 +52,15 @@ async def test_process_document_background_completed_failure_then_retry_store_su
     doc_id = "doc-status-fail-retry"
     completed_attempts = 0
 
-    async def flaky_update(*, doc_id, status, tenant_id, error=None, chunks=None):
+    async def flaky_update(
+        *,
+        doc_id,
+        status,
+        tenant_id,
+        error=None,
+        chunks=None,
+        job_metadata_patch=None,
+    ):
         nonlocal completed_attempts
         if status == "completed":
             completed_attempts += 1
