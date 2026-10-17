@@ -322,7 +322,7 @@ export default function UploadModal({
           <input
             ref={inputRef}
             type="file"
-            accept=".pdf,.txt,.md,.markdown"
+            accept=".pdf,.txt,.md,.markdown,.html,.htm"
             onChange={handleChange}
             className="hidden"
           />

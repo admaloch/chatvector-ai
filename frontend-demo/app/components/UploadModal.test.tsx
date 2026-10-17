@@ -38,7 +38,7 @@ describe("UploadModal", () => {
     );
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(fileInput.accept).toBe(".pdf,.txt,.md,.markdown");
+    expect(fileInput.accept).toBe(".pdf,.txt,.md,.markdown,.html,.htm");
     expect(screen.getByText("PDF or TXT")).toBeInTheDocument();
     expect(screen.queryByText(/DOCX/i)).not.toBeInTheDocument();
   });

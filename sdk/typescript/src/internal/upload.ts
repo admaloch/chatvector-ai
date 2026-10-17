@@ -5,6 +5,8 @@ const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
   ".txt": "text/plain",
   ".md": "text/markdown",
   ".markdown": "text/markdown",
+  ".html": "text/html",
+  ".htm": "text/html",
 };
 
 /** Builds a fresh multipart body so the /ingest -> /upload fallback is safe. */

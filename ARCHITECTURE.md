@@ -430,6 +430,10 @@ rejected at startup when `allow_credentials=True`.
   extension and UTF-8 or cp1254 encoding; embedded HTML is reduced to visible
   text (no script execution); link targets are not fetched (`[label](url)` →
   `label` in extracted text)
+- HTML (`.html`/`.htm`, `text/html`) requires a matching extension and UTF-8 or
+  cp1254 encoding (or a declared `<meta charset>`); visible text only —
+  `script`/`style`/`noscript` bodies are dropped and remote resources are not
+  fetched during extraction
 
 **Input validation** — Pydantic field bounds on all chat endpoints:
 `max_length=2000` on questions, `le=20` on `match_count`, `max_length=20`
