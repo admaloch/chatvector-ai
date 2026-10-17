@@ -6,6 +6,7 @@ import {
 import {
   runBulkUploads,
   type UploadManyItem,
+  type UploadManyWorkerOptions,
 } from "../internal/bulk-upload.js";
 import { collectDirectoryUploadPaths } from "../internal/directory-upload.js";
 import type {
@@ -96,27 +97,16 @@ export class DocumentsResource {
           sessionId === undefined || sessionId === ""
             ? input
             : { ...input, sessionId };
-        return this.uploadDocument(withSession, { signal });
+        return this.uploadDocument(withSession, signalOption(signal));
       },
       async (documentId, signal, timeoutMs, pollIntervalMs) => {
         await this.waitForReady(documentId, {
-          signal,
+          ...signalOption(signal),
           ...(timeoutMs === undefined ? {} : { timeoutMs }),
           ...(pollIntervalMs === undefined ? {} : { pollIntervalMs }),
         });
       },
-      {
-        concurrency: options.concurrency,
-        failFast: options.failFast,
-        retryOnRateLimit: options.retryOnRateLimit,
-        maxRateLimitRetries: options.maxRateLimitRetries,
-        idempotencyKeyForPath: options.idempotencyKeyForPath,
-        onProgress: options.onProgress,
-        waitForReady: options.waitForReady,
-        waitForReadyTimeoutMs: options.waitForReadyTimeoutMs,
-        waitForReadyPollIntervalMs: options.waitForReadyPollIntervalMs,
-        signal: options.signal,
-      },
+      buildUploadManyWorkerOptions(options),
     );
   }
 
@@ -126,8 +116,8 @@ export class DocumentsResource {
   ): Promise<BulkUploadSummary> {
     throwIfAborted(options.signal);
     const paths = await collectDirectoryUploadPaths(directoryPath, {
-      pattern: options.pattern,
-      recursive: options.recursive,
+      ...(options.pattern === undefined ? {} : { pattern: options.pattern }),
+      ...(options.recursive === undefined ? {} : { recursive: options.recursive }),
     });
     return this.uploadMany(paths, options);
   }
@@ -314,6 +304,37 @@ function waitTimeoutError(
     `Timed out after ${timeoutMs}ms while waiting for document '${documentId}'.`,
     options,
   );
+}
+
+function buildUploadManyWorkerOptions(
+  options: UploadManyOptions,
+): UploadManyWorkerOptions {
+  return {
+    ...(options.concurrency === undefined
+      ? {}
+      : { concurrency: options.concurrency }),
+    ...(options.failFast === undefined ? {} : { failFast: options.failFast }),
+    ...(options.retryOnRateLimit === undefined
+      ? {}
+      : { retryOnRateLimit: options.retryOnRateLimit }),
+    ...(options.maxRateLimitRetries === undefined
+      ? {}
+      : { maxRateLimitRetries: options.maxRateLimitRetries }),
+    ...(options.idempotencyKeyForPath === undefined
+      ? {}
+      : { idempotencyKeyForPath: options.idempotencyKeyForPath }),
+    ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
+    ...(options.waitForReady === undefined
+      ? {}
+      : { waitForReady: options.waitForReady }),
+    ...(options.waitForReadyTimeoutMs === undefined
+      ? {}
+      : { waitForReadyTimeoutMs: options.waitForReadyTimeoutMs }),
+    ...(options.waitForReadyPollIntervalMs === undefined
+      ? {}
+      : { waitForReadyPollIntervalMs: options.waitForReadyPollIntervalMs }),
+    ...signalOption(options.signal),
+  };
 }
 
 function uploadSessionHeaders(
