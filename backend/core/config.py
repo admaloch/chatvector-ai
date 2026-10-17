@@ -295,6 +295,18 @@ class Settings:
         0.01, float(os.getenv("IDEMPOTENCY_POLL_INTERVAL_SECONDS", "0.05"))
     )
 
+    WEBHOOK_ENABLED: bool = os.getenv("WEBHOOK_ENABLED", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    WEBHOOK_URL: str | None = os.getenv("WEBHOOK_URL") or None
+    WEBHOOK_SECRET: str | None = os.getenv("WEBHOOK_SECRET") or None
+    WEBHOOK_MAX_ATTEMPTS: int = max(1, int(os.getenv("WEBHOOK_MAX_ATTEMPTS", "5")))
+    WEBHOOK_TIMEOUT_SECONDS: float = max(
+        0.1, float(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "10"))
+    )
+
 VALID_QUEUE_BACKENDS = {"memory", "redis"}
 
 
@@ -315,8 +327,24 @@ def _validate_queue_backend_for_env(app_env: str, backend: str) -> None:
         )
 
 
+def _validate_webhook_settings(settings: Settings) -> None:
+    if not settings.WEBHOOK_ENABLED:
+        return
+    missing: list[str] = []
+    if not settings.WEBHOOK_URL or not settings.WEBHOOK_URL.strip():
+        missing.append("WEBHOOK_URL")
+    if not settings.WEBHOOK_SECRET or not settings.WEBHOOK_SECRET.strip():
+        missing.append("WEBHOOK_SECRET")
+    if missing:
+        raise ValueError(
+            "WEBHOOK_ENABLED is true but required settings are missing: "
+            + ", ".join(missing)
+        )
+
+
 config = Settings()
 _validate_queue_backend_for_env(config.APP_ENV, config.QUEUE_BACKEND)
+_validate_webhook_settings(config)
 
 if config.QUERY_TRANSFORMATION_HISTORY_WINDOW > config.MAX_SESSION_HISTORY_MESSAGES:
     logger.warning(

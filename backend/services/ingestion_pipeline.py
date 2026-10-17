@@ -970,6 +970,11 @@ class IngestionPipeline:
             chunks=chunks,
             job_metadata_patch=job_metadata_patch,
         )
+        if config.WEBHOOK_ENABLED and status in ("completed", "failed"):
+            from services.ingestion_webhook import notify_ingestion_terminal
+
+            outcome = "completed" if status == "completed" else "failed"
+            await notify_ingestion_terminal(doc_id, tenant_id, outcome=outcome)
 
     async def _handle_error(
         self,
@@ -996,6 +1001,12 @@ class IngestionPipeline:
                     error=error,
                     job_metadata_patch=terminal_job_patch,
                 )
+                if config.WEBHOOK_ENABLED:
+                    from services.ingestion_webhook import notify_ingestion_terminal
+
+                    await notify_ingestion_terminal(
+                        doc_id, tenant_id, outcome="failed"
+                    )
             except Exception as status_error:
                 logger.error(
                     f"Failed to record replacement failure for document {doc_id}: {status_error}"
@@ -1257,6 +1268,12 @@ class IngestionPipeline:
                     tenant_id,
                     patch_terminal_success(),
                 )
+                if config.WEBHOOK_ENABLED:
+                    from services.ingestion_webhook import notify_ingestion_terminal
+
+                    await notify_ingestion_terminal(
+                        doc_id, tenant_id, outcome="completed"
+                    )
             else:
                 await self._update_status(doc_id=doc_id, status="storing", tenant_id=tenant_id)
                 chunk_ids = await db.store_chunks_with_embeddings(doc_id, chunk_records, tenant_id=tenant_id)

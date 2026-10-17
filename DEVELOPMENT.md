@@ -600,6 +600,36 @@ curl http://localhost:8000/queue/stats
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for full queue and pipeline details.
 
+### Ingestion completion webhooks (v1)
+
+Optional signed HTTP callbacks when ingestion reaches a terminal state. All
+configuration is environment-only (`WEBHOOK_ENABLED`, `WEBHOOK_URL`,
+`WEBHOOK_SECRET`, `WEBHOOK_MAX_ATTEMPTS`, `WEBHOOK_TIMEOUT_SECONDS` — see
+`backend/.env.example`).
+
+- Event types: `ingestion.completed`, `ingestion.failed`
+- Payload includes `event_id`, `document_id`, `tenant_id`, `status`, `timestamps`,
+  and `error_summary` on failures
+- Header `X-ChatVector-Signature`: `sha256=<hex>` HMAC-SHA256 of the raw JSON body
+  (sorted keys, compact separators) using `WEBHOOK_SECRET`
+- Delivery uses RQ queue `chatvector-webhooks` with the payload in job args (no spill
+  files). Retries are bounded by `WEBHOOK_MAX_ATTEMPTS`.
+- Consumers should dedupe on `event_id` (at-least-once delivery).
+
+**Signature test vector** (also asserted in `test_ingestion_webhook.py`):
+
+```
+Secret: test_webhook_secret
+Body (exact bytes):
+{"document_id":"doc-123","event_id":"550e8400-e29b-41d4-a716-446655440000","event_type":"ingestion.completed","status":"completed","tenant_id":"tenant-a","timestamps":{"completed_at":"2026-01-15T12:00:00Z","enqueued_at":"2026-01-15T11:59:50Z","started_at":"2026-01-15T11:59:55Z"}}
+
+Expected X-ChatVector-Signature:
+sha256=dd436d2019c2026e493fa1886dd1cb97e46df8e7fe6e343cf8bf59ed14903dcf
+```
+
+When `WEBHOOK_ENABLED=false`, the ingestion pipeline does not enqueue or deliver
+webhooks.
+
 ---
 
 ## Tests

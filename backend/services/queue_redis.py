@@ -43,6 +43,7 @@ from rq.job import Job as RQJob
 from core.config import config, redis_connection_kwargs
 from db.base import REPLACEMENT_FAILED, REPLACEMENT_IN_PROGRESS
 from utils.url_display import safe_url_display
+from services.ingestion_webhook import WEBHOOK_QUEUE_NAME
 from services.queue_base import (
     BaseIngestionQueue,
     DLQEntry,
@@ -612,7 +613,7 @@ class RedisIngestionQueue(BaseIngestionQueue):
                     config.REDIS_URL, **redis_connection_kwargs()
                 )
                 worker = ThreadSafeWorker(
-                    [RQ_QUEUE_NAME],
+                    [RQ_QUEUE_NAME, WEBHOOK_QUEUE_NAME],
                     connection=worker_conn,
                     name=_rq_worker_name(worker_id),
                 )
