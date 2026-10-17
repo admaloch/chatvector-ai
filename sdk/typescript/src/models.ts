@@ -1,3 +1,5 @@
+import type { ChatVectorAPIError } from "./errors.js";
+
 /** The retrieval boundary used by chat and batch-chat requests. */
 export type RetrievalScope = "session" | "tenant";
 
@@ -152,6 +154,38 @@ export type DocumentResponse = {
   /** `"replacement_in_progress"` after a successful `replaceDocumentId` upload. */
   statusDetail?: string;
   _raw?: Record<string, unknown>;
+};
+
+export type BulkUploadResult = {
+  path: string;
+  success: boolean;
+  document?: DocumentResponse;
+  error?: ChatVectorAPIError;
+};
+
+export type BulkUploadSummary = {
+  count: number;
+  successCount: number;
+  failureCount: number;
+  results: BulkUploadResult[];
+};
+
+export type UploadManyOptions = RequestOptions & {
+  concurrency?: number;
+  sessionId?: string;
+  failFast?: boolean;
+  retryOnRateLimit?: boolean;
+  maxRateLimitRetries?: number;
+  idempotencyKeyForPath?: (path: string) => string | undefined;
+  onProgress?: (result: BulkUploadResult, summary: BulkUploadSummary) => void;
+  waitForReady?: boolean;
+  waitForReadyTimeoutMs?: number;
+  waitForReadyPollIntervalMs?: number;
+};
+
+export type UploadDirectoryOptions = UploadManyOptions & {
+  pattern?: string;
+  recursive?: boolean;
 };
 
 export type DocumentStatus = {

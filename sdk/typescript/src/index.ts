@@ -14,6 +14,8 @@ export type {
   BatchChatRequest,
   BatchChatResponse,
   BatchChatResult,
+  BulkUploadResult,
+  BulkUploadSummary,
   ChatRequest,
   ChatResponse,
   ChatSource,
@@ -32,6 +34,8 @@ export type {
   SessionHistoryMessage,
   SessionHistoryResponse,
   SessionListResponse,
+  UploadDirectoryOptions,
   UploadInput,
+  UploadManyOptions,
   WaitForReadyOptions,
 } from "./models.js";

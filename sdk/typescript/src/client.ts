@@ -8,6 +8,7 @@ import type {
   ChatResponse,
   ChatStreamEvent,
   CreateSessionInput,
+  BulkUploadSummary,
   DocumentListResponse,
   DocumentResponse,
   DocumentStatus,
@@ -15,9 +16,12 @@ import type {
   Session,
   SessionHistoryResponse,
   SessionListResponse,
+  UploadDirectoryOptions,
   UploadInput,
+  UploadManyOptions,
   WaitForReadyOptions,
 } from "./models.js";
+import type { UploadManyItem } from "./internal/bulk-upload.js";
 import { ChatsResource } from "./resources/chats.js";
 import { DocumentsResource } from "./resources/documents.js";
 import { SessionsResource } from "./resources/sessions.js";
@@ -66,6 +70,20 @@ export class ChatVectorClient {
     options?: RequestOptions,
   ): Promise<DocumentResponse> {
     return this.documents.uploadDocument(input, options);
+  }
+
+  uploadMany(
+    items: readonly UploadManyItem[],
+    options?: UploadManyOptions,
+  ): Promise<BulkUploadSummary> {
+    return this.documents.uploadMany(items, options ?? {});
+  }
+
+  uploadDirectory(
+    directoryPath: string,
+    options?: UploadDirectoryOptions,
+  ): Promise<BulkUploadSummary> {
+    return this.documents.uploadDirectory(directoryPath, options ?? {});
   }
 
   getDocumentStatus(

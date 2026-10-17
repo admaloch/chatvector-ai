@@ -3,13 +3,21 @@ import {
   ChatVectorTimeoutError,
   isChatVectorError,
 } from "../errors.js";
+import {
+  runBulkUploads,
+  type UploadManyItem,
+} from "../internal/bulk-upload.js";
+import { collectDirectoryUploadPaths } from "../internal/directory-upload.js";
 import type {
+  BulkUploadSummary,
   DocumentListResponse,
   DocumentResponse,
   DocumentStatus,
   DocumentSummary,
   RequestOptions,
+  UploadDirectoryOptions,
   UploadInput,
+  UploadManyOptions,
   WaitForReadyOptions,
 } from "../models.js";
 import { iterDocumentStatusEvents } from "../internal/sse.js";
@@ -73,6 +81,55 @@ export class DocumentsResource {
       ...signalOption(options.signal),
     });
     return mapDocumentResponse(payload);
+  }
+
+  async uploadMany(
+    items: readonly UploadManyItem[],
+    options: UploadManyOptions = {},
+  ): Promise<BulkUploadSummary> {
+    throwIfAborted(options.signal);
+    const sessionId = options.sessionId?.trim();
+    return runBulkUploads(
+      items,
+      async (input, signal) => {
+        const withSession =
+          sessionId === undefined || sessionId === ""
+            ? input
+            : { ...input, sessionId };
+        return this.uploadDocument(withSession, { signal });
+      },
+      async (documentId, signal, timeoutMs, pollIntervalMs) => {
+        await this.waitForReady(documentId, {
+          signal,
+          ...(timeoutMs === undefined ? {} : { timeoutMs }),
+          ...(pollIntervalMs === undefined ? {} : { pollIntervalMs }),
+        });
+      },
+      {
+        concurrency: options.concurrency,
+        failFast: options.failFast,
+        retryOnRateLimit: options.retryOnRateLimit,
+        maxRateLimitRetries: options.maxRateLimitRetries,
+        idempotencyKeyForPath: options.idempotencyKeyForPath,
+        onProgress: options.onProgress,
+        waitForReady: options.waitForReady,
+        waitForReadyTimeoutMs: options.waitForReadyTimeoutMs,
+        waitForReadyPollIntervalMs: options.waitForReadyPollIntervalMs,
+        signal: options.signal,
+      },
+    );
+  }
+
+  async uploadDirectory(
+    directoryPath: string,
+    options: UploadDirectoryOptions = {},
+  ): Promise<BulkUploadSummary> {
+    throwIfAborted(options.signal);
+    const paths = await collectDirectoryUploadPaths(directoryPath, {
+      pattern: options.pattern,
+      recursive: options.recursive,
+    });
+    return this.uploadMany(paths, options);
   }
 
   async listDocuments(

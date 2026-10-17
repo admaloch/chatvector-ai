@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import mimetypes
 import time
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -45,9 +45,15 @@ from .exceptions import (
     ChatVectorAPIError,
     ChatVectorTimeoutError,
 )
+from ._bulk_upload import (
+    collect_directory_upload_paths,
+    execute_bulk_uploads_async,
+)
 from .models import (
     BatchChatQuery,
     BatchChatResponse,
+    BulkUploadResult,
+    BulkUploadSummary,
     ChatResponse,
     DocumentListResponse,
     DocumentResponse,
@@ -164,6 +170,92 @@ class AsyncChatVectorClient:
         if last_error is None:
             raise ChatVectorAPIError("Document upload failed for an unknown reason.")
         raise last_error
+
+    async def upload_many(
+        self,
+        file_paths: Sequence[str],
+        *,
+        concurrency: int = 5,
+        session_id: str | None = None,
+        fail_fast: bool = False,
+        retry_on_rate_limit: bool = False,
+        max_rate_limit_retries: int = 1,
+        idempotency_key_for: Callable[[str], str | None] | None = None,
+        on_progress: Callable[[BulkUploadResult, BulkUploadSummary], None] | None = None,
+        wait_for_ready: bool = False,
+        wait_timeout: float = 60.0,
+        wait_interval: float = 2.0,
+    ) -> BulkUploadSummary:
+        """Async variant of ``ChatVectorClient.upload_many``."""
+
+        async def upload_fn(
+            file_path: str,
+            idempotency_key: str | None,
+        ) -> DocumentResponse:
+            return await self.upload_document(
+                file_path,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+            )
+
+        wait_ready_fn = None
+        if wait_for_ready:
+
+            async def wait_ready_fn(document_id: str) -> None:
+                await self.wait_for_ready(
+                    document_id,
+                    timeout=wait_timeout,
+                    interval=wait_interval,
+                )
+
+        return await execute_bulk_uploads_async(
+            file_paths,
+            upload_fn,
+            concurrency=concurrency,
+            fail_fast=fail_fast,
+            retry_on_rate_limit=retry_on_rate_limit,
+            max_rate_limit_retries=max_rate_limit_retries,
+            idempotency_key_for=idempotency_key_for,
+            on_progress=on_progress,
+            wait_ready_fn=wait_ready_fn,
+        )
+
+    async def upload_directory(
+        self,
+        directory_path: str,
+        *,
+        pattern: str = "*",
+        recursive: bool = True,
+        concurrency: int = 5,
+        session_id: str | None = None,
+        fail_fast: bool = False,
+        retry_on_rate_limit: bool = False,
+        max_rate_limit_retries: int = 1,
+        idempotency_key_for: Callable[[str], str | None] | None = None,
+        on_progress: Callable[[BulkUploadResult, BulkUploadSummary], None] | None = None,
+        wait_for_ready: bool = False,
+        wait_timeout: float = 60.0,
+        wait_interval: float = 2.0,
+    ) -> BulkUploadSummary:
+        """Async variant of ``ChatVectorClient.upload_directory``."""
+        paths = collect_directory_upload_paths(
+            directory_path,
+            pattern=pattern,
+            recursive=recursive,
+        )
+        return await self.upload_many(
+            [str(path) for path in paths],
+            concurrency=concurrency,
+            session_id=session_id,
+            fail_fast=fail_fast,
+            retry_on_rate_limit=retry_on_rate_limit,
+            max_rate_limit_retries=max_rate_limit_retries,
+            idempotency_key_for=idempotency_key_for,
+            on_progress=on_progress,
+            wait_for_ready=wait_for_ready,
+            wait_timeout=wait_timeout,
+            wait_interval=wait_interval,
+        )
 
     async def get_status(
         self,

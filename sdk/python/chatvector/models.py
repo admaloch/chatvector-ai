@@ -753,6 +753,55 @@ class BatchChatResponse:
         }
 
 
+@dataclass(slots=True)
+class BulkUploadResult:
+    """Outcome for one file in a client-side bulk upload."""
+
+    file_path: str
+    success: bool
+    document: DocumentResponse | None = None
+    error: Any | None = None
+
+    def to_dict(self) -> JSONDict:
+        """Convert the result into a JSON-serializable dictionary."""
+        payload: JSONDict = {
+            "file_path": self.file_path,
+            "success": self.success,
+        }
+        if self.document is not None:
+            payload["document"] = self.document.to_dict()
+        if self.error is not None:
+            if isinstance(self.error, Mapping):
+                payload["error"] = dict(self.error)
+            elif hasattr(self.error, "message"):
+                payload["error"] = {
+                    "message": getattr(self.error, "message", str(self.error)),
+                    "status_code": getattr(self.error, "status_code", None),
+                }
+            else:
+                payload["error"] = str(self.error)
+        return payload
+
+
+@dataclass(slots=True)
+class BulkUploadSummary:
+    """Aggregate outcome for ``upload_many`` / ``upload_directory``."""
+
+    count: int
+    success_count: int
+    failure_count: int
+    results: list[BulkUploadResult] = field(default_factory=list)
+
+    def to_dict(self) -> JSONDict:
+        """Convert the summary into a JSON-serializable dictionary."""
+        return {
+            "count": self.count,
+            "success_count": self.success_count,
+            "failure_count": self.failure_count,
+            "results": [result.to_dict() for result in self.results],
+        }
+
+
 def _optional_float(value: Any) -> float | None:
     """Safely coerce optional numeric values to floats."""
     if value is None:
