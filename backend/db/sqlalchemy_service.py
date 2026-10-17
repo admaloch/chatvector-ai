@@ -1307,3 +1307,111 @@ class SQLAlchemyService(DatabaseService):
             logger.debug(
                 f"[PostgreSQL] Bound document {document_id} to session {session_id}"
             )
+
+    async def get_chat_message(self, message_id: str, tenant_id: str) -> dict | None:
+        tenant_id = require_tenant_id(tenant_id, method="get_chat_message")
+        from uuid import UUID
+
+        from core.models import ChatMessage
+
+        try:
+            msg_uuid = UUID(message_id)
+        except ValueError:
+            return None
+
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(ChatMessage).where(
+                    ChatMessage.id == msg_uuid,
+                    ChatMessage.tenant_id == tenant_id,
+                )
+            )
+            message = result.scalar_one_or_none()
+            if message is None:
+                return None
+            return {
+                "id": str(message.id),
+                "session_id": message.session_id,
+                "tenant_id": message.tenant_id,
+                "role": message.role,
+                "content": message.content,
+            }
+
+    def _feedback_row(self, record) -> dict:
+        from core.models import RetrievalFeedback
+
+        assert isinstance(record, RetrievalFeedback)
+        return {
+            "id": str(record.id),
+            "type": record.feedback_type,
+            "rating": record.rating,
+            "comment": record.comment,
+            "session_id": record.session_id,
+            "message_id": str(record.message_id) if record.message_id else None,
+            "document_id": str(record.document_id) if record.document_id else None,
+            "chunk_index": record.chunk_index,
+            "created_at": record.created_at.isoformat() if record.created_at else "",
+        }
+
+    async def create_retrieval_feedback(
+        self,
+        *,
+        tenant_id: str,
+        session_id: str,
+        feedback_type: str,
+        rating: int,
+        comment: str | None,
+        message_id: str | None,
+        document_id: str | None,
+        chunk_index: int | None,
+    ) -> dict:
+        tenant_id = require_tenant_id(tenant_id, method="create_retrieval_feedback")
+        from uuid import UUID
+
+        from core.models import RetrievalFeedback
+
+        async with self.async_session() as session:
+            record = RetrievalFeedback(
+                tenant_id=tenant_id,
+                session_id=session_id,
+                feedback_type=feedback_type,
+                rating=rating,
+                comment=comment,
+                message_id=UUID(message_id) if message_id else None,
+                document_id=UUID(document_id) if document_id else None,
+                chunk_index=chunk_index,
+            )
+            session.add(record)
+            await session.commit()
+            await session.refresh(record)
+            return self._feedback_row(record)
+
+    async def list_retrieval_feedback(
+        self,
+        *,
+        tenant_id: str,
+        session_id: str | None = None,
+        created_after=None,
+        created_before=None,
+        limit: int = 50,
+    ) -> list[dict]:
+        tenant_id = require_tenant_id(tenant_id, method="list_retrieval_feedback")
+        from core.models import RetrievalFeedback
+
+        async with self.async_session() as session:
+            stmt = select(RetrievalFeedback).where(
+                RetrievalFeedback.tenant_id == tenant_id
+            )
+            if session_id is not None:
+                stmt = stmt.where(RetrievalFeedback.session_id == session_id)
+            if created_after is not None:
+                stmt = stmt.where(RetrievalFeedback.created_at >= created_after)
+            if created_before is not None:
+                stmt = stmt.where(RetrievalFeedback.created_at <= created_before)
+            stmt = stmt.order_by(
+                RetrievalFeedback.created_at.desc(),
+                RetrievalFeedback.id.desc(),
+            ).limit(limit)
+
+            result = await session.execute(stmt)
+            return [self._feedback_row(row) for row in result.scalars().all()]

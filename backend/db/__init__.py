@@ -613,6 +613,67 @@ async def add_session_document(session_id: str, document_id: str) -> None:
     )
 
 
+async def get_chat_message(message_id: str, tenant_id: str) -> dict | None:
+    tenant_id = require_tenant_id(tenant_id, method="get_chat_message")
+    service = get_db_service()
+    return await service.get_chat_message(message_id, tenant_id=tenant_id)
+
+
+async def create_retrieval_feedback(
+    *,
+    tenant_id: str,
+    session_id: str,
+    feedback_type: str,
+    rating: int,
+    comment: str | None,
+    message_id: str | None,
+    document_id: str | None,
+    chunk_index: int | None,
+) -> dict:
+    tenant_id = require_tenant_id(tenant_id, method="create_retrieval_feedback")
+    service = get_db_service()
+    return await service.create_retrieval_feedback(
+        tenant_id=tenant_id,
+        session_id=session_id,
+        feedback_type=feedback_type,
+        rating=rating,
+        comment=comment,
+        message_id=message_id,
+        document_id=document_id,
+        chunk_index=chunk_index,
+    )
+
+
+async def list_retrieval_feedback(
+    *,
+    tenant_id: str,
+    session_id: str | None = None,
+    created_after=None,
+    created_before=None,
+    limit: int = 50,
+) -> list[dict]:
+    tenant_id = require_tenant_id(tenant_id, method="list_retrieval_feedback")
+    service = get_db_service()
+
+    async def _list():
+        return await service.list_retrieval_feedback(
+            tenant_id=tenant_id,
+            session_id=session_id,
+            created_after=created_after,
+            created_before=created_before,
+            limit=limit,
+        )
+
+    return await retry_async(
+        _list,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=0.5,
+        backoff=2.0,
+        timeout=get_default_db_timeout_sec(),
+        func_name=f"{service.__class__.__name__}.list_retrieval_feedback",
+    )
+
+
 __all__ = [
     "get_db_service",
     "create_document",
@@ -643,6 +704,9 @@ __all__ = [
     "list_session_records",
     "delete_session_record",
     "add_session_document",
+    "get_chat_message",
+    "create_retrieval_feedback",
+    "list_retrieval_feedback",
     "ChunkMatch",
     "ChunkRecord",
     "db_service",

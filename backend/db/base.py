@@ -312,3 +312,37 @@ class DatabaseService(ABC):
     async def add_session_document(self, session_id: str, document_id: str) -> None:
         """Bind a document to a session (idempotent)."""
         pass
+
+    @abstractmethod
+    async def get_chat_message(self, message_id: str, tenant_id: str) -> Optional[dict]:
+        """Fetch a chat message scoped to tenant_id."""
+        pass
+
+    @abstractmethod
+    async def create_retrieval_feedback(
+        self,
+        *,
+        tenant_id: str,
+        session_id: str,
+        feedback_type: str,
+        rating: int,
+        comment: Optional[str],
+        message_id: Optional[str],
+        document_id: Optional[str],
+        chunk_index: Optional[int],
+    ) -> dict:
+        """Persist a feedback row and return the stored record."""
+        pass
+
+    @abstractmethod
+    async def list_retrieval_feedback(
+        self,
+        *,
+        tenant_id: str,
+        session_id: Optional[str] = None,
+        created_after=None,
+        created_before=None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """List feedback rows for a tenant with optional filters."""
+        pass

@@ -119,3 +119,18 @@ class SessionDocument(Base):
         nullable=False,
     )
     document_id = Column(String(255), primary_key=True, nullable=False)
+
+
+class RetrievalFeedback(Base):
+    __tablename__ = "retrieval_feedback"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String(255), nullable=False, index=True)
+    session_id = Column(String(255), nullable=False, index=True)
+    feedback_type = Column(String(50), nullable=False)
+    rating = Column(Integer, nullable=False)
+    comment = Column(String, nullable=True)
+    message_id = Column(UUID(as_uuid=True), ForeignKey("chat_messages.id"), nullable=True)
+    document_id = Column(UUID(as_uuid=True), nullable=True)
+    chunk_index = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
