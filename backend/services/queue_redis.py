@@ -135,9 +135,22 @@ async def _async_execute_job(
     async with worker_db_context():
         _redis_conn = redis_lib.Redis.from_url(config.REDIS_URL, **redis_connection_kwargs())
         storage = get_artifact_storage()
-
+        rate_limiter = get_process_embedding_rate_limiter()
+        pipeline = IngestionPipeline()
         try:
             file_bytes = storage.get(artifact_uri)
+            await pipeline.process_document_background(
+                doc_id=doc_id,
+                file_name=file_name,
+                content_type=content_type,
+                file_bytes=file_bytes,
+                tenant_id=tenant_id,
+                rate_limiter=rate_limiter,
+                replace=replace,
+                metadata=metadata,
+                attempt=attempt,
+            )
+            await _cleanup_artifact(artifact_uri, doc_id, tenant_id)
         except ArtifactMissingError:
             logger.error("Artifact missing for doc %s", doc_id)
             error_payload = _job_payload_missing_error()
@@ -201,23 +214,6 @@ async def _async_execute_job(
                 tenant_id=tenant_id,
             ), conn=_redis_conn)
             return
-
-        rate_limiter = get_process_embedding_rate_limiter()
-
-        pipeline = IngestionPipeline()
-        try:
-            await pipeline.process_document_background(
-                doc_id=doc_id,
-                file_name=file_name,
-                content_type=content_type,
-                file_bytes=file_bytes,
-                tenant_id=tenant_id,
-                rate_limiter=rate_limiter,
-                replace=replace,
-                metadata=metadata,
-                attempt=attempt,
-            )
-            await _cleanup_artifact(artifact_uri, doc_id, tenant_id)
         except Exception as exc:
             if isinstance(exc, UploadPipelineError) and 400 <= exc.status_code < 500:
                 logger.error(
@@ -526,21 +522,32 @@ class RedisIngestionQueue(BaseIngestionQueue):
                 f"Ingestion queue is at capacity ({config.QUEUE_MAX_SIZE})"
             )
 
-        artifact_uri = get_artifact_storage().put(job.doc_id, job.file_bytes)
+        storage = get_artifact_storage()
+        artifact_uri = storage.put(job.doc_id, job.file_bytes)
 
-        self._rq_queue.enqueue(
-            _execute_job,
-            job.doc_id,
-            job.file_name,
-            job.content_type,
-            artifact_uri,
-            job.attempt,
-            job.tenant_id,
-            job.replace,
-            job.metadata,
-            job_id=f"chatvector:{job.doc_id}:{job.attempt}",
-            job_timeout=600,
-        )
+        try:
+            self._rq_queue.enqueue(
+                _execute_job,
+                job.doc_id,
+                job.file_name,
+                job.content_type,
+                artifact_uri,
+                job.attempt,
+                job.tenant_id,
+                job.replace,
+                job.metadata,
+                job_id=f"chatvector:{job.doc_id}:{job.attempt}",
+                job_timeout=600,
+            )
+        except Exception:
+            try:
+                storage.delete(artifact_uri)
+            except Exception:
+                logger.warning(
+                    "Could not roll back artifact %s after enqueue failure",
+                    artifact_uri,
+                )
+            raise
 
         position = self.queue_position(job.doc_id)
         return (position if position is not None else 1), artifact_uri

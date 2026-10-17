@@ -92,6 +92,36 @@ async def test_worker_completes_from_s3_without_local_disk(s3_storage, tmp_path,
 
 
 @pytest.mark.asyncio
+async def test_transient_s3_get_error_does_not_look_like_missing(s3_storage, monkeypatch):
+    from services.queue_redis import _async_execute_job
+
+    uri = s3_storage.put("doc-timeout", b"bytes")
+    s3_storage.get = MagicMock(side_effect=RuntimeError("timeout talking to S3"))
+    monkeypatch.setattr("services.queue_redis.config.QUEUE_JOB_MAX_RETRIES", 0)
+    update_status = AsyncMock()
+
+    with (
+        patch("db.worker_db_context", _fake_worker_db_context),
+        patch("db.update_document_status", update_status),
+        patch("services.queue_redis.get_artifact_storage", return_value=s3_storage),
+        patch("services.queue_redis._push_dlq_entry"),
+        patch("services.queue_redis.redis_lib.Redis.from_url", return_value=MagicMock()),
+    ):
+        await _async_execute_job(
+            "doc-timeout",
+            "t.txt",
+            "text/plain",
+            uri,
+            0,
+            tenant_id="tenant-s3",
+        )
+
+    if update_status.await_count:
+        error = update_status.await_args.kwargs.get("error") or {}
+        assert error.get("code") != "job_payload_missing"
+
+
+@pytest.mark.asyncio
 async def test_missing_s3_artifact_is_structured_failure(s3_storage):
     from services.queue_redis import _async_execute_job
 

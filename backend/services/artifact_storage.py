@@ -148,11 +148,8 @@ class S3ArtifactStorage(ArtifactStorage):
         except Exception as exc:
             if _is_s3_not_found(exc):
                 raise ArtifactMissingError(uri) from exc
-            raise ArtifactUnreadableError(uri, str(exc)) from exc
-        try:
-            return response["Body"].read()
-        except Exception as exc:
-            raise ArtifactUnreadableError(uri, str(exc)) from exc
+            raise
+        return response["Body"].read()
 
     def delete(self, uri: str) -> None:
         bucket, key = _parse_s3_uri(uri)

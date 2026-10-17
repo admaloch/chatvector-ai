@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -124,6 +125,12 @@ def test_s3_missing_artifact_raises(s3_storage):
 
 def test_s3_delete_missing_is_noop(s3_storage):
     s3_storage.delete("s3://chatvector-artifacts/chatvector/artifacts/missing")
+
+
+def test_s3_transient_get_error_is_not_missing(s3_storage):
+    s3_storage.client.get_object = MagicMock(side_effect=RuntimeError("timeout talking to S3"))
+    with pytest.raises(RuntimeError, match="timeout talking to S3"):
+        s3_storage.get("s3://chatvector-artifacts/chatvector/artifacts/doc-s3")
 
 
 def test_s3_without_ttl_is_not_marked():
