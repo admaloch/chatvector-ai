@@ -238,10 +238,8 @@ function mapRetrievalDebug(
   if (isRecord(value.timing_ms)) {
     result.timingMs = value.timing_ms as Record<string, number>;
   }
-  if (value.effective_config !== undefined) {
-    result.effectiveConfig = isRecord(value.effective_config)
-      ? value.effective_config
-      : value.effective_config;
+  if (isRecord(value.effective_config)) {
+    result.effectiveConfig = value.effective_config;
   }
   return result;
 }
