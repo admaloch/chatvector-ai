@@ -164,6 +164,14 @@ class Settings:
         "yes",
     )
     RERANKER_PROVIDER: str = os.getenv("RERANKER_PROVIDER", "similarity").strip().lower()
+    # Hosted reranker (Cohere). The key is process-env only, never request-supplied.
+    COHERE_API_KEY: str | None = os.getenv("COHERE_API_KEY") or None
+    COHERE_RERANK_MODEL: str = os.getenv("COHERE_RERANK_MODEL", "rerank-v3.5").strip()
+    COHERE_RERANK_URL: str = os.getenv(
+        "COHERE_RERANK_URL", "https://api.cohere.com/v2/rerank"
+    ).strip()
+    RERANKER_TIMEOUT_SEC: float = max(0.1, float(os.getenv("RERANKER_TIMEOUT_SEC", "5")))
+    RERANKER_MAX_CANDIDATES: int = max(1, int(os.getenv("RERANKER_MAX_CANDIDATES", "50")))
     HYBRID_RETRIEVAL_ENABLED: bool = os.getenv(
         "HYBRID_RETRIEVAL_ENABLED", "false"
     ).lower() in ("1", "true", "yes")

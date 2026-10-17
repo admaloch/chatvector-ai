@@ -29,7 +29,7 @@ router = APIRouter()
 
 RetrievalScopeParam = Literal["session", "tenant"]
 QueryTransformationStrategyParam = Literal["rewrite", "expand", "stepback", "none"]
-RerankerProviderParam = Literal["similarity"]
+RerankerProviderParam = Literal["similarity", "cohere"]
 DebugRetrievalQuery = Annotated[bool, Query()]
 
 

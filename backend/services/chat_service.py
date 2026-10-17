@@ -20,7 +20,7 @@ from services.retrieval_config import (
 from services.retrieval_service import (
     filter_doc_ids_for_tenant,
     parse_retrieval_scope,
-    rerank_chunks_if_enabled,
+    rerank_chunks_with_debug,
     resolve_scoped_doc_ids,
 )
 from services.session_service import get_session
@@ -265,9 +265,12 @@ async def _finalize_retrieved_chunks(
     *,
     reranking_enabled: bool | None = None,
     reranker_provider: str | None = None,
-) -> list:
-    """Apply optional reranking before context assembly."""
-    return await rerank_chunks_if_enabled(
+) -> tuple[list, dict | None]:
+    """Apply optional reranking before context assembly.
+
+    Returns the chunks and the reranker debug block (``None`` when reranking did not run).
+    """
+    return await rerank_chunks_with_debug(
         question,
         chunks,
         top_k=match_count,
@@ -287,10 +290,13 @@ class RetrievalResult:
     timing_ms: dict[str, int]
     transform_result: QueryTransformResult
     effective_config: EffectiveRetrievalConfig
+    reranker_debug: dict | None = None
 
     def to_debug_dict(self) -> dict:
         payload = self.transform_result.to_retrieval_debug()
         payload["effective_config"] = self.effective_config.to_debug_dict()
+        if self.reranker_debug is not None:
+            payload["reranker"] = dict(self.reranker_debug)
         payload["effective_retrieval_query"] = self.primary_query
         payload["timing_ms"] = dict(self.timing_ms)
         return payload
@@ -419,7 +425,7 @@ async def retrieve_for_documents(
     search_ms = int((time.perf_counter() - search_started) * 1000)
 
     rerank_started = time.perf_counter()
-    matching_chunks = await _finalize_retrieved_chunks(
+    matching_chunks, reranker_debug = await _finalize_retrieved_chunks(
         primary_query,
         all_chunks,
         effective_retrieval_config.match_count,
@@ -453,6 +459,7 @@ async def retrieve_for_documents(
         },
         transform_result=transform_result,
         effective_config=effective_retrieval_config,
+        reranker_debug=reranker_debug,
     )
 
 

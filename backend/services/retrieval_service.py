@@ -13,7 +13,7 @@ from db.base import (
     SCORE_TYPE_VECTOR,
     ChunkMatch,
 )
-from services.reranker import rerank_chunks_if_enabled
+from services.reranker import rerank_chunks_if_enabled, rerank_chunks_with_debug
 
 # Standard RRF constant (Cormack et al.)
 RRF_K_DEFAULT = 60
@@ -214,5 +214,6 @@ __all__ = [
     "reciprocal_rank_fusion",
     "reciprocal_rank_fusion_scores",
     "rerank_chunks_if_enabled",
+    "rerank_chunks_with_debug",
     "resolve_scoped_doc_ids",
 ]
