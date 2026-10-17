@@ -434,6 +434,12 @@ rejected at startup when `allow_credentials=True`.
   cp1254 encoding (or a declared `<meta charset>`); visible text only —
   `script`/`style`/`noscript` bodies are dropped and remote resources are not
   fetched during extraction
+- DOCX (`.docx`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`)
+  requires a matching extension and ZIP/OOXML layout with `word/document.xml`;
+  extraction uses safe ZIP/XML parsing with entry-count, uncompressed-size, and
+  compression-ratio limits (configurable via `DOCX_MAX_*` env vars). Paragraphs,
+  headings, and table cell text are extracted in document order; embedded media
+  is omitted (no OCR). Encrypted packages are rejected with structured failure.
 
 **Input validation** — Pydantic field bounds on all chat endpoints:
 `max_length=2000` on questions, `le=20` on `match_count`, `max_length=20`

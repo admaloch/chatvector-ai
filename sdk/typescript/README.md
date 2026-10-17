@@ -137,9 +137,11 @@ One-shot Node streams are intentionally not accepted because the SDK may need
 to replay the body for the `/ingest` to `/upload` compatibility fallback.
 
 Supported upload types match the API allowlist: `application/pdf`, `text/plain`,
-Markdown (`text/markdown` / `text/x-markdown` for `.md` files), and HTML
-(`text/html` for `.html` / `.htm` files). The SDK
-infers MIME types from common extensions when `contentType` is omitted.
+Markdown (`text/markdown` / `text/x-markdown` for `.md` files), HTML
+(`text/html` for `.html` / `.htm` files), and DOCX
+(`application/vnd.openxmlformats-officedocument.wordprocessingml.document` for
+`.docx` files). The SDK infers MIME types from common extensions when
+`contentType` is omitted.
 
 ## Retrieval and history configuration
 

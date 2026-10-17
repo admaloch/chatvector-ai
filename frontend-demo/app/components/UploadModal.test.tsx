@@ -38,9 +38,8 @@ describe("UploadModal", () => {
     );
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(fileInput.accept).toBe(".pdf,.txt,.md,.markdown,.html,.htm");
+    expect(fileInput.accept).toBe(".pdf,.txt,.md,.markdown,.html,.htm,.docx");
     expect(screen.getByText("PDF or TXT")).toBeInTheDocument();
-    expect(screen.queryByText(/DOCX/i)).not.toBeInTheDocument();
   });
 
   it("shows validation error when upload fails", async () => {

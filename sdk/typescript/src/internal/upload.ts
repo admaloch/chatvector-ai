@@ -7,6 +7,7 @@ const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
   ".markdown": "text/markdown",
   ".html": "text/html",
   ".htm": "text/html",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
 /** Builds a fresh multipart body so the /ingest -> /upload fallback is safe. */

@@ -109,6 +109,10 @@ describe("uploadDocument", () => {
       data: new Uint8Array([60]),
       fileName: "page.HTML",
     });
+    const docx = await createUploadFormData({
+      data: new Uint8Array([80, 75]),
+      fileName: "report.DOCX",
+    });
     const unknown = await createUploadFormData({
       data: new Uint8Array([1]),
       fileName: "data.unknown",
@@ -116,6 +120,9 @@ describe("uploadDocument", () => {
     expect((text.get("file") as File).type).toBe("text/plain");
     expect((markdown.get("file") as File).type).toBe("text/markdown");
     expect((html.get("file") as File).type).toBe("text/html");
+    expect((docx.get("file") as File).type).toBe(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
     expect((unknown.get("file") as File).type).toBe(
       "application/octet-stream",
     );
