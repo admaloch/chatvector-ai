@@ -255,6 +255,14 @@ An optional transformation layer sits between the user's question and
 vector search. Controlled via `QUERY_TRANSFORMATION_ENABLED` and
 `QUERY_TRANSFORMATION_STRATEGY`.
 
+Follow-up resolution is separate from those strategies. With
+`HISTORY_AWARE_RETRIEVAL_DEFAULT=true` (the default), a deterministic gate
+may rewrite a dependent follow-up into a standalone retrieval query even
+when rewrite / expand / step-back are off. Already-standalone questions and
+explicit topic switches skip that extra LLM call. Setting the default to
+`false` restores the previous coupling: resolution runs only when query
+transformation is enabled, and then for every non-empty history window.
+
 | Strategy | Description |
 | --- | --- |
 | `rewrite` | LLM rephrases the question for better retrieval |

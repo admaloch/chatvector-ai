@@ -59,6 +59,23 @@ Create keys with `python -m backend.cli create-tenant-key`. See [Getting Started
 
 A strategy other than `none` enables transformation for that request even when `QUERY_TRANSFORMATION_ENABLED=false`. `query_transformation_enabled=false` disables it even if a strategy is set. `query_transformation_enabled=true` with strategy `none` does not run rewrite, expand, or step-back. Those strategies are never turned on by omission alone.
 
+## History overrides
+
+The same three endpoints accept an optional `history` object. It does not enable rewrite, expand, or step-back. Omitting it keeps the process defaults.
+
+| Field | Meaning |
+|-------|---------|
+| `retrieval_history_window` | Recent messages used to decide and run standalone resolution. Integer 0–100. Default `QUERY_TRANSFORMATION_HISTORY_WINDOW` (6). |
+| `generation_history_window` | Recent messages injected into the answer context. Integer 0–100. Default `GENERATION_HISTORY_WINDOW` (10). |
+| `history_aware_retrieval` | When `true`, run the need-resolution gate. When explicitly `false`, never resolve history for that request. Default `HISTORY_AWARE_RETRIEVAL_DEFAULT` (true). |
+| `max_generation_history_chars` | Optional cap on generation-history characters, applied before `MAX_CONTEXT_CHARS` drops chunks. |
+
+An extra resolution LLM call happens only when `history_aware_retrieval` is effectively true, the retrieval window is non-empty, transform history is not skipped, and the gate decides the question depends on prior turns. The gate skips the call when the window is empty, the question is already a full standalone query (no unresolved pronouns or elliptical follow-ups such as "what about …" or "and the …"), or an explicit topic-switch cue is present without those references. Cues include "new topic", "switching topics", "change of subject", "different question", "unrelated question", "forget the previous", "ignore the previous", and "starting over". Ambiguous questions, including a topic cue that still contains a pronoun, still resolve.
+
+`HISTORY_AWARE_RETRIEVAL_DEFAULT=false` with the field omitted restores Phase 3: resolution runs only when `QUERY_TRANSFORMATION_ENABLED=true`, and then for every non-empty window, without the gate. A failed resolution call falls back to the original question and does not fail the chat.
+
+Compare-style batch items (one `doc_id`) still skip generation history and turn persistence. They also skip transform history unless `skip_history_transform` is explicitly false. A normal multi-document batch item with a session uses the history settings above.
+
 ### Effective retrieval query
 
 After history resolution and transformation, one primary retrieval query is the first string in the final query list.

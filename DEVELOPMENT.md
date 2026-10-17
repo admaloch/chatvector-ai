@@ -683,10 +683,16 @@ It does not apply to shared embedding, retrieval, or non-batch chat paths.
 - **Transform / standalone resolution** — session history is not passed into
   `transform_query` unless the item sets `skip_history_transform` to false.
 
-`/chat` and `/chat/stream` still use session history for transform and generation.
-Per-Request History Configuration and Stronger Session Defaults owns broader
-history defaults. History-Aware Follow-Up Query Transformation Traces covers
-the transform trace itself. This split is only the compare-style batch rule.
+`/chat` and `/chat/stream` use session history for gated retrieval resolution
+and for generation. With `HISTORY_AWARE_RETRIEVAL_DEFAULT=true`, an extra
+resolution LLM call is made only when the need-resolution gate says the
+follow-up depends on prior turns — not on every session turn. Rewrite,
+expand, and step-back stay off unless query transformation is enabled.
+`HISTORY_AWARE_RETRIEVAL_DEFAULT=false` restores the older rule: resolution
+runs only when `QUERY_TRANSFORMATION_ENABLED=true`, and then on every
+non-empty history window. History-Aware Follow-Up Query Transformation
+Traces covers the debug field names. This split is only the compare-style
+batch rule.
 
 ### Audit checklist
 
@@ -1400,6 +1406,14 @@ question was transformed before embedding and search:
 
 - `original_query` — the raw user question
 - `history_resolved_query` — standalone rewrite after session history resolution (when it differs)
+- `history_considered` — retrieval-window messages actually considered, each `{role, content_preview}`
+- `history_resolution_applied` — true only when the resolution LLM ran and returned text
+- `history_resolution_skipped_reason` — why the gate skipped the LLM (`empty_history`, `standalone_question`, `topic_switch`, `disabled`, `compare_skip`)
+- `history_resolution_fallback_reason` — `llm_failure` when resolution was attempted and the original question was kept
+- `history_resolution_latency_ms` — time spent in the resolution LLM call, when it ran
+- `history_window` — `{retrieval, generation}` message counts actually used
+- `history_truncation` — messages dropped by the windows, generation character trimming, preview trimming, and the resolved `max_context_chars`
+- `history_config_applied` — present when the request sent a `history` object
 - `transformed_queries` — final query list embedded and searched
 - `transformation_strategy` — active strategy (`rewrite`, `expand`, or `stepback`) when a strategy ran
 - `effective_retrieval_query` — primary retrieval string (first transformed query), used for keyword search and reranking
@@ -1419,7 +1433,11 @@ and `/chat/batch` (per result item). Normal clients are unaffected when the
 flag is omitted.
 
 Query transformation itself is controlled by `QUERY_TRANSFORMATION_ENABLED` and
-`QUERY_TRANSFORMATION_STRATEGY` — see `backend/.env.example`.
+`QUERY_TRANSFORMATION_STRATEGY` — see `backend/.env.example`. History-aware
+retrieval is separate: the default path spends an extra LLM call only on
+follow-ups the gate selects, not on every session turn. Set
+`HISTORY_AWARE_RETRIEVAL_DEFAULT=false` to resolve history only when query
+transformation is enabled.
 
 ---
 
