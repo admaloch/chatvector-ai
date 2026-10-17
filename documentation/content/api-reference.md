@@ -81,7 +81,7 @@ Existing databases need migration `backend/db/init/014_document_replacement.sql`
 | `scope` | `session` or `tenant`. Same merge rule as `match_count`. |
 | `hybrid_enabled` | Override `HYBRID_RETRIEVAL_ENABLED` for this request. |
 | `reranking_enabled` | Override `ENABLE_RERANKING` for this request. |
-| `reranker_provider` | Override `RERANKER_PROVIDER` when reranking runs. v1 accepts `similarity`. |
+| `reranker_provider` | Override `RERANKER_PROVIDER` when reranking runs. Accepts `similarity` (in-process) or `cohere` (hosted; needs `COHERE_API_KEY` on the server). A hosted provider failure falls back to retrieval order. |
 | `query_transformation_enabled` | Explicitly enable or disable query transformation. |
 | `query_transformation_strategy` | `rewrite`, `expand`, `stepback`, or `none`. |
 | `skip_history_transform` | When `false` on a compare-style batch item, session history is passed into query transformation. |
@@ -126,6 +126,7 @@ After history resolution and transformation, one primary retrieval query is the 
 - Hybrid keyword / full-text search uses the primary query, not the raw user question, when transformation or history resolution changed the text.
 - Hybrid fusion uses this request's `hybrid_enabled` value.
 - Reranking scores candidates against the primary query.
+- With `debug_retrieval=true`, `retrieval_debug.reranker` reports `provider`, `model`, `latency_ms`, `candidates_sent`, and `fallback_reason` when reranking ran.
 
 `RETRIEVAL_MAX_CONCURRENCY`, embedding model selection, provider API keys, and queue settings stay process-level. `MAX_CONTEXT_CHARS` is not request-configurable; debug and eval snapshots still record the resolved process value.
 

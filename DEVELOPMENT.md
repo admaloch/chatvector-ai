@@ -536,6 +536,27 @@ When reranking is enabled (`ENABLE_RERANKING=true`), final citations use
 `score_type: "reranked"`. When hybrid retrieval is active, citations use
 `hybrid_rrf` unless reranking runs afterward.
 
+##### Hosted reranker (Cohere)
+
+`RERANKER_PROVIDER=cohere` (or a per-request `reranker_provider: "cohere"` together
+with `reranking_enabled: true`) sends the retrieved chunks to the Cohere rerank API.
+`ENABLE_RERANKING` stays `false` by default; a request can turn reranking on for
+itself without changing the process setting. The interface (`RerankerProvider`)
+allows a second hosted vendor later.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `COHERE_API_KEY` | unset | Vendor key. Process env only; request bodies cannot supply it. |
+| `COHERE_RERANK_MODEL` | `rerank-v3.5` | Cohere rerank model. |
+| `COHERE_RERANK_URL` | `https://api.cohere.com/v2/rerank` | Rerank endpoint. |
+| `RERANKER_TIMEOUT_SEC` | `5` | Hard overall timeout per vendor call. |
+| `RERANKER_MAX_CANDIDATES` | `50` | Max chunks sent per request; extra candidates keep retrieval order after the reranked ones. |
+
+If the vendor times out, returns an error, returns an invalid body, or the key is
+missing, chat still returns `200` using the pre-rerank retrieval order (truncated to
+`match_count`). The reason is logged and, with `debug_retrieval=true`, reported as
+`retrieval_debug.reranker.fallback_reason`.
+
 #### Component score fields (retrieval inspector)
 
 Each `sources[]` item may also include optional component scores when the
@@ -1420,6 +1441,7 @@ question was transformed before embedding and search:
 - `transformation_strategy` — active strategy (`rewrite`, `expand`, or `stepback`) when a strategy ran
 - `effective_retrieval_query` — primary retrieval string (first transformed query), used for keyword search and reranking
 - `effective_config` — resolved retrieval settings with `value` and `source` (`request` or `env`) for each field, plus the process `max_context_chars` annex
+- `reranker` — present only when reranking ran: `provider`, `model` (hosted providers), `latency_ms`, `candidates_sent`, and `fallback_reason` when the provider failed and the pre-rerank order was kept
 - `timing_ms` — transform, embed, search, rerank, context, and total milliseconds
 
 Pass the flag as a JSON body field or query parameter:

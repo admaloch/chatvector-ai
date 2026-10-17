@@ -510,7 +510,7 @@ still retried after TTL expires. Each result includes `cached` and
 
 - **Scopes** — `session` (default: documents bound to the session) or `tenant` (all tenant documents)
 - **Hybrid retrieval** — pgvector cosine similarity + PostgreSQL full-text search, merged via Reciprocal Rank Fusion (RRF); toggle with `HYBRID_RETRIEVAL_ENABLED`
-- **Reranking** — deterministic similarity + lexical-overlap baseline reranker after fusion
+- **Reranking** — deterministic similarity + lexical-overlap baseline reranker after fusion, or an optional hosted Cohere reranker (`RERANKER_PROVIDER=cohere`) with timeout, candidate cap, and fallback to retrieval order
 - **Query transformations** — optional rewrite, expand, and stepback steps using session history context
 - **Citation metadata** — each source includes collapsed `score` and `score_type` (`vector`, `hybrid_rrf`, or `reranked`), plus optional per-component fields when hybrid retrieval or reranking ran: `vector_score`, `full_text_score`, `rrf_score`, `reranker_score`, and `rerank_order`
 

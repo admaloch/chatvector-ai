@@ -7,7 +7,7 @@ export type QueryTransformationStrategy =
   | "stepback"
   | "none";
 
-export type RerankerProvider = "similarity";
+export type RerankerProvider = "similarity" | "cohere";
 
 /** Per-request retrieval overrides (nested ``retrieval`` on chat bodies). */
 export type RetrievalConfig = {

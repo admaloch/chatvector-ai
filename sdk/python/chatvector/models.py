@@ -10,7 +10,7 @@ JSONMapping = Mapping[str, Any]
 
 RetrievalScope = Literal["session", "tenant"]
 QueryTransformationStrategy = Literal["rewrite", "expand", "stepback", "none"]
-RerankerProvider = Literal["similarity"]
+RerankerProvider = Literal["similarity", "cohere"]
 
 MATCH_COUNT_MIN = 1
 MATCH_COUNT_MAX = 20
