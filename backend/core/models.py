@@ -58,6 +58,8 @@ class Document(Base):
         default=dict,
         server_default=text("'{}'::jsonb"),
     )
+    # Internal worker-fetch pointer (migration 016); not part of public status.
+    artifact_uri = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

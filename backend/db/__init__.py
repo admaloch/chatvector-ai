@@ -292,6 +292,29 @@ async def set_document_status_detail(
     )
 
 
+async def set_document_artifact_uri(
+    doc_id: str,
+    tenant_id: str,
+    artifact_uri: str | None,
+) -> None:
+    tenant_id = require_tenant_id(tenant_id, method="set_document_artifact_uri")
+    service = get_db_service()
+
+    async def _set():
+        await service.set_document_artifact_uri(
+            doc_id, tenant_id=tenant_id, artifact_uri=artifact_uri
+        )
+
+    await retry_async(
+        _set,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=0.5,
+        backoff=2.0,
+        timeout=get_default_db_timeout_sec(),
+        func_name=f"{service.__class__.__name__}.set_document_artifact_uri",
+    )
+
+
 async def merge_document_job_metadata(
     doc_id: str,
     tenant_id: str,
@@ -604,6 +627,7 @@ __all__ = [
     "get_document_status",
     "begin_document_replacement",
     "set_document_status_detail",
+    "set_document_artifact_uri",
     "merge_document_job_metadata",
     "replace_document_content",
     "delete_document_chunks",

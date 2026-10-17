@@ -70,6 +70,7 @@ def _document_row_to_dict(document: Document) -> dict:
         "status": document.status,
         "chunks": document.chunks,
         "error": document.error,
+        "artifact_uri": document.artifact_uri,
         "created_at": str(document.created_at) if document.created_at else None,
         "updated_at": str(document.updated_at) if document.updated_at else None,
     }
@@ -407,6 +408,37 @@ class SQLAlchemyService(DatabaseService):
 
             await session.commit()
             logger.debug(f"[PostgreSQL] Updated status for {doc_id} -> {status}")
+
+    async def set_document_artifact_uri(
+        self,
+        doc_id: str,
+        tenant_id: str,
+        artifact_uri: Optional[str],
+    ) -> None:
+        tenant_id = require_tenant_id(tenant_id, method="set_document_artifact_uri")
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(Document).where(
+                    Document.id == doc_id,
+                    Document.tenant_id == tenant_id,
+                )
+            )
+            document = result.scalar_one_or_none()
+            if not document:
+                logger.warning(
+                    "[PostgreSQL] set_document_artifact_uri: document %s not found for tenant %s",
+                    doc_id,
+                    tenant_id,
+                )
+                return
+
+            document.artifact_uri = artifact_uri
+            document.updated_at = datetime.utcnow()
+            await session.commit()
+            logger.debug(
+                "[PostgreSQL] Set artifact_uri for %s",
+                doc_id,
+            )
 
     async def merge_document_job_metadata(
         self,

@@ -139,6 +139,16 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
+    async def set_document_artifact_uri(
+        self,
+        doc_id: str,
+        tenant_id: str,
+        artifact_uri: Optional[str],
+    ) -> None:
+        """Record or clear ``documents.artifact_uri`` for worker fetch."""
+        pass
+
+    @abstractmethod
     async def get_document_status(self, doc_id: str, tenant_id: str) -> Optional[dict]:
         """Get document upload status payload for a tenant-owned document."""
         pass
