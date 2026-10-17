@@ -133,6 +133,24 @@ await client.uploadDocument({
 });
 ```
 
+To re-ingest an existing completed or failed document in place, pass
+`replaceDocumentId`. The document keeps its ID and its prior content stays
+retrievable until the new content is ready:
+
+```ts
+const accepted = await client.uploadDocument({
+  path: "./handbook-v2.pdf",
+  replaceDocumentId: documentId,
+});
+console.log(accepted.status, accepted.statusDetail); // completed replacement_in_progress
+
+await client.waitForReady(documentId); // throws document_failed if the replacement failed
+```
+
+While a replacement runs, `status` stays `completed` and `statusDetail` is
+`replacement_in_progress` (`replacement_failed` after a failed attempt). A
+second replacement while one is running returns a `409` `ChatVectorAPIError`.
+
 One-shot Node streams are intentionally not accepted because the SDK may need
 to replay the body for the `/ingest` to `/upload` compatibility fallback.
 

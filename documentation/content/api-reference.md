@@ -46,6 +46,31 @@ Create keys with `python -m backend.cli create-tenant-key`. See [Getting Started
 
 `GET /documents` and `GET /documents/{document_id}/status` return the stored object as `metadata`. Size is bounded by `DOCUMENT_METADATA_MAX_KEYS` (default 20) and `DOCUMENT_METADATA_MAX_BYTES` (default 4096). Retrieval can be narrowed by metadata with `metadata_filter` (see [Retrieval overrides](#retrieval-overrides)).
 
+## Replacing a document
+
+`POST /upload` accepts an optional multipart form field `replace_document_id` (a UUID). Instead of creating a new document, the upload re-ingests the file into that existing document, which keeps its `document_id`. Chat sessions bound to the document keep working after the swap. Omitting the field creates a new `document_id` as before.
+
+Replacement is staged:
+
+- While the new file is being processed, the document stays `completed` and its **prior content remains retrievable**. `GET /documents/{document_id}/status`, the status stream, and `GET /documents` report `status_detail: "replacement_in_progress"` (the upload response includes it too). Retrieval and chat never see a mix of old and new chunks from the cutover itself.
+- On success the old chunks are swapped for the new ones in one transaction. `file_name` and `metadata` are updated to the new upload's values, and `status_detail` is cleared. Clients should wait for `status_detail` to clear, not for `status == "completed"`, which is already true.
+- On failure the prior content is left untouched, `status` is not changed to `failed`, and the document reports `status_detail: "replacement_failed"` with an `error` object. A later replacement can be attempted.
+
+Eligible documents are tenant-owned documents in `completed` or `failed` state with no replacement already running.
+
+| Status | `code` | Meaning |
+|--------|--------|---------|
+| `404` | `document_not_found` | No such document for this tenant |
+| `409` | `replacement_in_progress` | A replacement is already running for this document |
+| `409` | `document_processing` | The document is still in its initial ingestion |
+| `422` | `invalid_replace_document_id` | `replace_document_id` is not a valid UUID |
+
+`DELETE /documents/{document_id}` returns `409` with `document_replacing` while a replacement is running.
+
+Not included: version history, `document_key` upsert, bulk replace, and content-hash dedup. Hybrid retrieval issues two statements per request, so a single request that straddles the exact commit instant of a cutover could in principle mix old and new chunks. Each statement and the cutover itself are atomic.
+
+Existing databases need migration `backend/db/init/014_document_replacement.sql` (adds `documents.status_detail`) applied with `psql -f`.
+
 ## Retrieval overrides
 
 `POST /chat`, `POST /chat/stream`, and `POST /chat/batch` accept optional retrieval overrides. Set them as top-level fields or inside a `retrieval` object. For each field, an explicit top-level value wins over the `retrieval` object, which wins over the process environment. Omitting them leaves Phase 3 behavior: the effective config is the process default.

@@ -248,6 +248,24 @@ Each event is a typed `DocumentStatus` snapshot. Backend `error` events are
 converted into structured SDK exceptions. Stop iterating early to cancel the
 stream; the SDK closes the underlying HTTP response automatically.
 
+## Replacing a Document
+
+Pass `replace_document_id` to re-ingest a completed or failed document in
+place. The document keeps its ID, its prior content stays retrievable until the
+new content is ready, and bound sessions keep working.
+
+```python
+upload = client.upload_document("handbook-v2.pdf", replace_document_id=document_id)
+print(upload.status, upload.status_detail)  # completed replacement_in_progress
+
+client.wait_for_ready(document_id)  # waits for the swap; raises if the replacement failed
+```
+
+During a replacement `status` stays `completed` and `status_detail` is
+`replacement_in_progress` (or `replacement_failed` afterwards), so check
+`status_detail` rather than `status` when watching progress. A replacement that
+is already running returns a `409` `ChatVectorAPIError`.
+
 ## Batch Chat
 
 Run multiple queries in one request. Each query can target a different document.
