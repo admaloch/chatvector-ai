@@ -3,8 +3,8 @@ Redis-Backed Durable Ingestion Queue
 ======================================
 
 Uses RQ (Redis Queue) as a persistent job store so that queued uploads survive
-server restarts.  File bytes are spilled to ``QUEUE_SPILL_DIR`` rather than
-stored in Redis to keep message sizes small.
+server restarts.  File bytes go through ``ArtifactStorage`` (local spill dir by
+default, S3-compatible when ``ARTIFACT_STORAGE=s3``) rather than Redis.
 
 Worker threads
 --------------
@@ -18,8 +18,9 @@ limits embedding HTTP batches across all RQ worker threads in this API process.
 
 Topology
 --------
-Phase 3 supports one API process/container.  Running multiple API processes or
-containers is not a supported topology; see DEPLOYMENT.md.
+Local artifact storage (``ARTIFACT_STORAGE=local``, the default) still requires
+API and workers to share ``QUEUE_SPILL_DIR``. Set ``ARTIFACT_STORAGE=s3`` so
+workers on other hosts can fetch upload bytes from the recorded artifact URI.
 """
 
 import asyncio
@@ -43,6 +44,11 @@ from rq.job import Job as RQJob
 from core.config import config, redis_connection_kwargs
 from db.base import REPLACEMENT_FAILED, REPLACEMENT_IN_PROGRESS
 from utils.url_display import safe_url_display
+from services.artifact_storage import (
+    ArtifactMissingError,
+    ArtifactUnreadableError,
+    get_artifact_storage,
+)
 from services.ingestion_webhook import WEBHOOK_QUEUE_NAME
 from services.queue_base import (
     BaseIngestionQueue,
@@ -94,7 +100,7 @@ def _execute_job(
     doc_id: str,
     file_name: str,
     content_type: str,
-    temp_file_path: str,
+    artifact_uri: str,
     attempt: int,
     tenant_id: Optional[str] = None,
     replace: bool = False,
@@ -106,7 +112,7 @@ def _execute_job(
     """
     import asyncio
     asyncio.run(_async_execute_job(
-        doc_id, file_name, content_type, temp_file_path, attempt, tenant_id,
+        doc_id, file_name, content_type, artifact_uri, attempt, tenant_id,
         replace, metadata,
     ))
 
@@ -115,7 +121,7 @@ async def _async_execute_job(
     doc_id: str,
     file_name: str,
     content_type: str,
-    temp_file_path: str,
+    artifact_uri: str,
     attempt: int,
     tenant_id: Optional[str] = None,
     replace: bool = False,
@@ -128,10 +134,12 @@ async def _async_execute_job(
 
     async with worker_db_context():
         _redis_conn = redis_lib.Redis.from_url(config.REDIS_URL, **redis_connection_kwargs())
-        temp_path = Path(temp_file_path)
+        storage = get_artifact_storage()
 
-        if not temp_path.exists():
-            logger.error("Temp file missing for doc %s", doc_id)
+        try:
+            file_bytes = storage.get(artifact_uri)
+        except ArtifactMissingError:
+            logger.error("Artifact missing for doc %s", doc_id)
             error_payload = _job_payload_missing_error()
             try:
                 if replace:
@@ -159,11 +167,8 @@ async def _async_execute_job(
                 tenant_id=tenant_id,
             ), conn=_redis_conn)
             return
-
-        try:
-            file_bytes = temp_path.read_bytes()
-        except OSError as exc:
-            error_msg = f"Cannot read upload payload for doc {doc_id}: {exc}"
+        except ArtifactUnreadableError as exc:
+            error_msg = f"Cannot read upload payload for doc {doc_id}: {exc.reason}"
             logger.error(error_msg)
             unreadable_error = {
                 "code": "job_payload_unreadable",
@@ -212,7 +217,7 @@ async def _async_execute_job(
                 metadata=metadata,
                 attempt=attempt,
             )
-            _cleanup_temp_file(temp_path)
+            await _cleanup_artifact(artifact_uri, doc_id, tenant_id)
         except Exception as exc:
             if isinstance(exc, UploadPipelineError) and 400 <= exc.status_code < 500:
                 logger.error(
@@ -220,7 +225,7 @@ async def _async_execute_job(
                     doc_id, file_name, exc.status_code, exc,
                     exc_info=True,
                 )
-                _cleanup_temp_file(temp_path)
+                await _cleanup_artifact(artifact_uri, doc_id, tenant_id)
                 _push_dlq_entry(DLQEntry(
                     doc_id=doc_id,
                     file_name=file_name,
@@ -237,7 +242,7 @@ async def _async_execute_job(
                     doc_id, file_name, exc,
                     exc_info=True,
                 )
-                _cleanup_temp_file(temp_path)
+                await _cleanup_artifact(artifact_uri, doc_id, tenant_id)
                 _push_dlq_entry(DLQEntry(
                     doc_id=doc_id,
                     file_name=file_name,
@@ -319,7 +324,7 @@ async def _async_execute_job(
                     return
                 rq_queue.enqueue(
                     _execute_job,
-                    doc_id, file_name, content_type, temp_file_path, next_attempt, tenant_id,
+                    doc_id, file_name, content_type, artifact_uri, next_attempt, tenant_id,
                     replace, metadata,
                     job_id=f"chatvector:{doc_id}:{next_attempt}",
                     job_timeout=600,
@@ -330,7 +335,7 @@ async def _async_execute_job(
                     doc_id, file_name, config.QUEUE_JOB_MAX_RETRIES, exc,
                     exc_info=True,
                 )
-                _cleanup_temp_file(temp_path)
+                await _cleanup_artifact(artifact_uri, doc_id, tenant_id)
                 _push_dlq_entry(DLQEntry(
                     doc_id=doc_id,
                     file_name=file_name,
@@ -341,11 +346,22 @@ async def _async_execute_job(
                 ), conn=_redis_conn)
 
 
-def _cleanup_temp_file(path: Path) -> None:
+async def _cleanup_artifact(
+    artifact_uri: str,
+    doc_id: str,
+    tenant_id: Optional[str],
+) -> None:
     try:
-        path.unlink(missing_ok=True)
-    except OSError:
-        logger.warning("Could not remove temp file %s", path)
+        get_artifact_storage().delete(artifact_uri)
+    except Exception:
+        logger.warning("Could not remove artifact %s", artifact_uri)
+    if not tenant_id:
+        return
+    try:
+        import db as db_module
+        await db_module.set_document_artifact_uri(doc_id, tenant_id, None)
+    except Exception:
+        logger.exception("Failed to clear artifact_uri for %s", doc_id)
 
 
 def _push_dlq_entry(
@@ -438,8 +454,8 @@ class ThreadSafeWorker(SimpleWorker):
 
 class RedisIngestionQueue(BaseIngestionQueue):
     """
-    RQ-backed ingestion queue.  File bytes are spilled to ``QUEUE_SPILL_DIR``
-    and only metadata flows through Redis.
+    RQ-backed ingestion queue.  File bytes are stored via ``ArtifactStorage``
+    and only metadata (including the artifact URI) flows through Redis.
     """
 
     def __init__(self) -> None:
@@ -503,22 +519,21 @@ class RedisIngestionQueue(BaseIngestionQueue):
     # ------------------------------------------------------------------
 
     def _sync_enqueue(self, job: QueueJob) -> int:
-        """Blocking RQ enqueue + temp-file write (runs off the event loop)."""
+        """Blocking RQ enqueue + artifact write (runs off the event loop)."""
         current_size = len(self._rq_queue)
         if current_size >= config.QUEUE_MAX_SIZE:
             raise QueueFull(
                 f"Ingestion queue is at capacity ({config.QUEUE_MAX_SIZE})"
             )
 
-        temp_file_path = spill_dir() / job.doc_id
-        temp_file_path.write_bytes(job.file_bytes)
+        artifact_uri = get_artifact_storage().put(job.doc_id, job.file_bytes)
 
         self._rq_queue.enqueue(
             _execute_job,
             job.doc_id,
             job.file_name,
             job.content_type,
-            str(temp_file_path),
+            artifact_uri,
             job.attempt,
             job.tenant_id,
             job.replace,
@@ -528,10 +543,20 @@ class RedisIngestionQueue(BaseIngestionQueue):
         )
 
         position = self.queue_position(job.doc_id)
-        return position if position is not None else 1
+        return (position if position is not None else 1), artifact_uri
 
     async def enqueue(self, job: QueueJob) -> int:
-        position = await asyncio.to_thread(self._sync_enqueue, job)
+        position, artifact_uri = await asyncio.to_thread(self._sync_enqueue, job)
+        if job.tenant_id:
+            try:
+                import db as db_module
+                await db_module.set_document_artifact_uri(
+                    job.doc_id, job.tenant_id, artifact_uri
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to persist artifact_uri for document %s", job.doc_id
+                )
         logger.info(
             "Enqueued document %s (file=%r, position=%d) [redis]",
             job.doc_id, job.file_name, position,

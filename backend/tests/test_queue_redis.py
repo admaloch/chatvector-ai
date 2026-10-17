@@ -36,6 +36,7 @@ pytestmark = [
     pytest.mark.skipif(not REDIS_AVAILABLE, reason="Redis not reachable"),
 ]
 
+from services.artifact_storage import reset_artifact_storage
 from services.queue_base import DLQEntry, QueueFull, QueueJob
 from services.queue_redis import (
     DLQ_REDIS_KEY,
@@ -76,7 +77,9 @@ def _clean_spill_dir(monkeypatch, tmp_path):
     """Ensure the spill directory is clean."""
     spill = tmp_path / "spill"
     monkeypatch.setattr("services.queue_redis.config.QUEUE_SPILL_DIR", str(spill))
+    reset_artifact_storage()
     yield
+    reset_artifact_storage()
     if spill.exists():
         for f in spill.iterdir():
             if f.is_file():
