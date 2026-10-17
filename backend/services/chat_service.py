@@ -433,6 +433,11 @@ async def retrieve_for_documents(
                 all_chunks.append(chunk)
     search_ms = int((time.perf_counter() - search_started) * 1000)
 
+    if config.ENABLE_GRAPH_RETRIEVAL:
+        from services.graph_retrieval import expand_chunks_if_enabled
+
+        all_chunks = expand_chunks_if_enabled(all_chunks)
+
     rerank_started = time.perf_counter()
     matching_chunks, reranker_debug = await _finalize_retrieved_chunks(
         primary_query,

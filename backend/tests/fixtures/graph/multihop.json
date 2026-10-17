@@ -1,0 +1,30 @@
+{
+  "name": "multihop-annual-refund",
+  "entities": [
+    {"id": "annual-plan", "name": "annual plan"},
+    {"id": "refund-policy", "name": "refund policy"}
+  ],
+  "relations": [
+    {"source": "annual-plan", "target": "refund-policy", "type": "has_policy"}
+  ],
+  "chunks": [
+    {
+      "id": "graph-doc-01:0",
+      "document_id": "graph-doc-01",
+      "chunk_index": 0,
+      "file_name": "billing.txt",
+      "chunk_text": "The annual plan is billed once per year and includes all product tiers."
+    },
+    {
+      "id": "graph-doc-01:1",
+      "document_id": "graph-doc-01",
+      "chunk_index": 1,
+      "file_name": "billing.txt",
+      "chunk_text": "Refunds for the annual plan are prorated after the first 30 days."
+    }
+  ],
+  "mentions": [
+    {"entity_id": "annual-plan", "document_id": "graph-doc-01", "chunk_index": 0},
+    {"entity_id": "refund-policy", "document_id": "graph-doc-01", "chunk_index": 1}
+  ]
+}

@@ -199,3 +199,23 @@ Implemented in `backend/services/graph_retrieval.py`:
 - Replace pgvector as default.
 - Production GraphRAG as a Phase 4 completion requirement.
 - Agent frameworks or graph UI products.
+
+## 8. Eval note (spike result)
+
+Fixture: `backend/tests/fixtures/graph/multihop.json`. Query intent:
+"refund policy for annual plans." Seed chunk 0 mentions **annual plan** only;
+chunk 1 holds the **refund** answer and is linked by a `has_policy` relation.
+
+| Arm | recall@5 | MRR |
+| --- | --- | --- |
+| Vector seed only | 0.0 | 0.0 |
+| Seed + 1-hop graph expansion | 1.0 | 0.5 |
+
+**Spike go:** keep the prototype behind `ENABLE_GRAPH_RETRIEVAL` — expansion
+recovers a multi-hop chunk the seed set missed, with no new runtime
+dependency.
+
+**Production default no-go:** this is a hand-labeled two-node fixture, not a
+corpus eval. Do not set `ENABLE_GRAPH_RETRIEVAL=true` in shipped defaults.
+See §5. The comparison is encoded in
+`backend/tests/test_graph_retrieval.py::test_multihop_eval_note_graph_lifts_recall`.
