@@ -74,12 +74,16 @@ async def worker_db_context():
             logger.warning("Failed to dispose worker DB engine")
 
 
-async def create_document(filename: str, tenant_id: str) -> str:
+async def create_document(
+    filename: str, tenant_id: str, metadata: dict | None = None
+) -> str:
     tenant_id = require_tenant_id(tenant_id, method="create_document")
     service = get_db_service()
 
     async def _create():
-        return await service.create_document(filename, tenant_id=tenant_id)
+        return await service.create_document(
+            filename, tenant_id=tenant_id, metadata=metadata
+        )
 
     return await retry_async(
         _create,

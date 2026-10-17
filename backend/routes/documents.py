@@ -46,6 +46,7 @@ async def get_document_status(request: Request, document_id: UUID, auth: AuthCon
         "document_id": str(document_id),
         "status": status_payload.get("status"),
         "chunks": status_payload.get("chunks"),
+        "metadata": status_payload.get("metadata") or {},
         "created_at": status_payload.get("created_at"),
         "updated_at": status_payload.get("updated_at"),
     }
@@ -91,6 +92,7 @@ async def get_document_status_stream(request: Request, document_id: UUID, auth: 
                 "document_id": str(document_id),
                 "status": status_payload.get("status"),
                 "chunks": status_payload.get("chunks"),
+                "metadata": status_payload.get("metadata") or {},
                 "created_at": status_payload.get("created_at"),
                 "updated_at": status_payload.get("updated_at"),
             }

@@ -70,6 +70,7 @@ def _document_status_payload(document: Document) -> dict:
         "status": document.status,
         "chunks": document.chunks,
         "error": document.error,
+        "metadata": document.doc_metadata or {},
         "created_at": str(document.created_at) if document.created_at else None,
         "updated_at": str(document.updated_at) if document.updated_at else None,
     }
@@ -223,7 +224,9 @@ class SQLAlchemyService(DatabaseService):
         )
         return result.scalar_one_or_none() is not None
 
-    async def create_document(self, filename: str, tenant_id: str) -> str:
+    async def create_document(
+        self, filename: str, tenant_id: str, metadata: Optional[dict] = None
+    ) -> str:
         tenant_id = require_tenant_id(tenant_id, method="create_document")
         async with self.async_session() as session:
             doc_id = str(uuid.uuid4())
@@ -233,6 +236,7 @@ class SQLAlchemyService(DatabaseService):
                 tenant_id=tenant_id,
                 status="uploaded",
                 chunks={"total": 0, "processed": 0},
+                doc_metadata=metadata or {},
             )
             session.add(document)
             await session.commit()
@@ -731,6 +735,7 @@ class SQLAlchemyService(DatabaseService):
                     "document_id": str(document.id),
                     "file_name": document.file_name,
                     "status": document.status,
+                    "metadata": document.doc_metadata or {},
                     "created_at": str(document.created_at) if document.created_at else None,
                     "updated_at": str(document.updated_at) if document.updated_at else None,
                 }

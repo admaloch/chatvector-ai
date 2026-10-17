@@ -56,8 +56,13 @@ class DatabaseService(ABC):
     # ── Tenant-scoped document operations ──────────────────────────────────────
 
     @abstractmethod
-    async def create_document(self, filename: str, tenant_id: str) -> str:
-        """Create a document record owned by tenant_id and return document ID."""
+    async def create_document(
+        self, filename: str, tenant_id: str, metadata: Optional[dict] = None
+    ) -> str:
+        """Create a document record owned by tenant_id and return document ID.
+
+        ``metadata`` is validated scalar JSON supplied at upload; ``None`` stores ``{}``.
+        """
         pass
 
     @abstractmethod

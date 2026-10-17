@@ -1,12 +1,14 @@
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from core.auth import AuthContext, require_auth, require_current_tenant
 from core.config import config
 from middleware.rate_limit import limiter
 
 import db
+from services.document_metadata import parse_document_metadata
 from services.ingestion_pipeline import IngestionPipeline, UploadPipelineError, _sanitize_filename
 from services.queue_service import QueueFull, QueueJob, ingestion_queue
 from services.session_service import get_or_create_session, register_session_document
@@ -37,9 +39,17 @@ def _http_error(
 
 @router.post("/upload", status_code=202)
 @limiter.limit(config.RATE_LIMIT_UPLOAD)
-async def upload(request: Request, file: UploadFile = File(...), auth: AuthContext = Depends(require_auth)):
+async def upload(
+    request: Request,
+    file: UploadFile = File(...),
+    metadata: Annotated[str | None, Form()] = None,
+    auth: AuthContext = Depends(require_auth),
+):
     """
     Accept a file upload, validate it, and enqueue it for background processing.
+
+    The optional ``metadata`` form field is a JSON object of string, number, or
+    boolean values stored on the document; invalid metadata is rejected with 422.
 
     Returns immediately (< 500 ms) with the document ID and queue position so
     the client can poll /documents/{document_id}/status for progress.
@@ -53,9 +63,12 @@ async def upload(request: Request, file: UploadFile = File(...), auth: AuthConte
 
         # Validate synchronously before touching the DB
         ingestion_pipeline.validate_file(file, file_bytes)
+        document_metadata = parse_document_metadata(metadata)
 
         # Persist the document record so the status endpoint works immediately
-        doc_id = await db.create_document(safe_filename, tenant_id=tenant_id)
+        doc_id = await db.create_document(
+            safe_filename, tenant_id=tenant_id, metadata=document_metadata
+        )
         register_tenant_document(tenant_id, doc_id)
         await db.update_document_status(doc_id=doc_id, status="queued", tenant_id=tenant_id)
 

@@ -139,6 +139,9 @@ class Settings:
 
     MAX_UPLOAD_SIZE_MB: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
     MAX_UPLOAD_SIZE_BYTES: int = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    # Bounds for the optional `metadata` multipart field on POST /upload.
+    DOCUMENT_METADATA_MAX_KEYS: int = max(1, int(os.getenv("DOCUMENT_METADATA_MAX_KEYS", "20")))
+    DOCUMENT_METADATA_MAX_BYTES: int = max(2, int(os.getenv("DOCUMENT_METADATA_MAX_BYTES", "4096")))
     DOCX_MAX_UNCOMPRESSED_MB: int = int(
         os.getenv("DOCX_MAX_UNCOMPRESSED_MB", str(max(50, MAX_UPLOAD_SIZE_MB * 10)))
     )
