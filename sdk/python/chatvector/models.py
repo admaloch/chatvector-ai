@@ -270,6 +270,7 @@ class DocumentStatus:
     error: JSONDict | None = None
     queue_position: int | None = None
     status_detail: str | None = None
+    job: JSONDict | None = None
     raw: JSONDict = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -278,6 +279,7 @@ class DocumentStatus:
         raw = dict(payload)
         chunks = payload.get("chunks")
         error = payload.get("error")
+        job = payload.get("job")
         return cls(
             document_id=str(payload.get("document_id", "")),
             status=str(payload.get("status", "")),
@@ -287,6 +289,7 @@ class DocumentStatus:
             error=dict(error) if isinstance(error, Mapping) else None,
             queue_position=_optional_int(payload.get("queue_position")),
             status_detail=_optional_str(payload.get("status_detail")),
+            job=dict(job) if isinstance(job, Mapping) else None,
             raw=raw,
         )
 
@@ -308,6 +311,8 @@ class DocumentStatus:
             payload["queue_position"] = self.queue_position
         if self.status_detail is not None:
             payload["status_detail"] = self.status_detail
+        if self.job is not None:
+            payload["job"] = dict(self.job)
         return payload
 
 

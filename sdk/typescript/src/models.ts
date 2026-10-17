@@ -201,6 +201,8 @@ export type DocumentStatus = {
    * content stays retrievable) or `"replacement_failed"` after a failed attempt.
    */
   statusDetail?: string;
+  /** Optional ingestion timing, attempt count, and failure classification. */
+  job?: Record<string, unknown> | null;
   _raw?: Record<string, unknown>;
 };
 

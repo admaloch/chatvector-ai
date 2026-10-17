@@ -466,6 +466,12 @@ function mapDocumentStatusPayload(
   if (typeof payload.queue_position === "number") {
     result.queuePosition = payload.queue_position;
   }
+  if (typeof payload.status_detail === "string") {
+    result.statusDetail = payload.status_detail;
+  }
+  if (payload.job === null || isRecord(payload.job)) {
+    result.job = payload.job;
+  }
   return result;
 }
 
