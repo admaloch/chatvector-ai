@@ -175,6 +175,15 @@ def test_invalid_strategy_and_reranker_raise():
         resolve_retrieval_config({"reranker_provider": "external"}, env)
 
 
+def test_cohere_reranker_provider_is_accepted_as_request_override():
+    effective = resolve_retrieval_config(
+        {"reranking_enabled": True, "reranker_provider": " Cohere "}, _env()
+    )
+    assert effective.reranker_provider == "cohere"
+    assert effective.reranking_enabled is True
+    assert effective.sources["reranker_provider"] == "request"
+
+
 def test_resolve_does_not_mutate_process_defaults():
     env = _env(hybrid_enabled=False)
     before = env.hybrid_enabled

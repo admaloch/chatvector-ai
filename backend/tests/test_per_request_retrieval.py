@@ -3,6 +3,7 @@
 import asyncio
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from core.auth import AuthContext
@@ -427,3 +428,191 @@ async def test_stream_and_batch_honor_request_hybrid_flag(pinned_phase3_env, pas
 
     assert True in seen
     assert False in seen
+
+
+def _cohere_response(results: list[dict]) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={"results": results},
+        request=httpx.Request("POST", "https://api.cohere.test/v2/rerank"),
+    )
+
+
+@pytest.fixture
+def cohere_env(monkeypatch):
+    from services.reranker import _reset_reranker_provider
+
+    _reset_reranker_provider()
+    monkeypatch.setattr(config, "COHERE_API_KEY", "test-cohere-key")
+    monkeypatch.setattr(config, "COHERE_RERANK_MODEL", "rerank-test")
+    monkeypatch.setattr(config, "COHERE_RERANK_URL", "https://api.cohere.test/v2/rerank")
+    monkeypatch.setattr(config, "RERANKER_TIMEOUT_SEC", 2.0)
+    monkeypatch.setattr(config, "RERANKER_MAX_CANDIDATES", 50)
+    yield
+    _reset_reranker_provider()
+
+
+_COHERE_FIELDS = {"reranking_enabled": True, "reranker_provider": "cohere"}
+
+
+@pytest.mark.asyncio
+async def test_hosted_reranker_changes_citation_order_vs_similarity(
+    pinned_phase3_env, passthrough_docs, cohere_env
+):
+    chunks = [
+        _chunk("lexical", "beta query terms appear here", index=0),
+        _chunk("semantic", "an answer without the literal words", index=1),
+    ]
+    find_similar = AsyncMock(return_value=list(chunks))
+    embed_patch, find_patch, answer_patch = _chat_patches(find_similar)
+    vendor = [
+        {"index": 1, "relevance_score": 0.97},
+        {"index": 0, "relevance_score": 0.12},
+    ]
+    with (
+        embed_patch,
+        find_patch,
+        answer_patch,
+        patch.object(httpx.AsyncClient, "post", new=AsyncMock(return_value=_cohere_response(vendor))),
+    ):
+        similarity = await answer_question_for_document(
+            question="beta query",
+            doc_id="doc-1",
+            auth=TEST_AUTH,
+            retrieval_fields={"reranking_enabled": True, "reranker_provider": "similarity"},
+        )
+        hosted = await answer_question_for_document(
+            question="beta query",
+            doc_id="doc-1",
+            auth=TEST_AUTH,
+            retrieval_fields=dict(_COHERE_FIELDS),
+        )
+
+    assert [s["chunk_index"] for s in similarity["sources"]] == [0, 1]
+    assert [s["chunk_index"] for s in hosted["sources"]] == [1, 0]
+    assert [s["rerank_order"] for s in hosted["sources"]] == [1, 2]
+    assert hosted["sources"][0]["score_type"] == "reranked"
+    assert config.ENABLE_RERANKING is False
+
+
+@pytest.mark.asyncio
+async def test_hosted_reranker_debug_block_when_debug_on(
+    pinned_phase3_env, passthrough_docs, cohere_env
+):
+    chunks = [_chunk("a", "first", index=0), _chunk("b", "second", index=1)]
+    find_similar = AsyncMock(return_value=list(chunks))
+    embed_patch, find_patch, answer_patch = _chat_patches(find_similar)
+    vendor = [
+        {"index": 1, "relevance_score": 0.9},
+        {"index": 0, "relevance_score": 0.1},
+    ]
+    with (
+        embed_patch,
+        find_patch,
+        answer_patch,
+        patch.object(httpx.AsyncClient, "post", new=AsyncMock(return_value=_cohere_response(vendor))),
+    ):
+        debug_on = await answer_question_for_document(
+            question="q",
+            doc_id="doc-1",
+            auth=TEST_AUTH,
+            debug_retrieval=True,
+            retrieval_fields=dict(_COHERE_FIELDS),
+        )
+        debug_off = await answer_question_for_document(
+            question="q",
+            doc_id="doc-1",
+            auth=TEST_AUTH,
+            retrieval_fields=dict(_COHERE_FIELDS),
+        )
+
+    block = debug_on["retrieval_debug"]["reranker"]
+    assert block["provider"] == "cohere"
+    assert block["model"] == "rerank-test"
+    assert block["candidates_sent"] == 2
+    assert isinstance(block["latency_ms"], int)
+    assert "fallback_reason" not in block
+    assert "retrieval_debug" not in debug_off
+
+
+@pytest.mark.asyncio
+async def test_hosted_reranker_failure_keeps_chat_200_with_fallback_reason(
+    pinned_phase3_env, passthrough_docs, cohere_env
+):
+    chunks = [_chunk("a", "first", index=0), _chunk("b", "second", index=1)]
+    find_similar = AsyncMock(return_value=list(chunks))
+    embed_patch, find_patch, answer_patch = _chat_patches(find_similar)
+    with (
+        embed_patch,
+        find_patch,
+        answer_patch,
+        patch.object(httpx.AsyncClient, "post", new=AsyncMock(side_effect=httpx.ReadTimeout("slow"))),
+    ):
+        result = await answer_question_for_document(
+            question="q",
+            doc_id="doc-1",
+            auth=TEST_AUTH,
+            debug_retrieval=True,
+            retrieval_fields=dict(_COHERE_FIELDS),
+        )
+        quiet = await answer_question_for_document(
+            question="q",
+            doc_id="doc-1",
+            auth=TEST_AUTH,
+            retrieval_fields=dict(_COHERE_FIELDS),
+        )
+
+    assert "error" not in result
+    assert result["answer"] == "ans"
+    assert [s["chunk_index"] for s in result["sources"]] == [0, 1]
+    assert all(s.get("rerank_order") is None for s in result["sources"])
+    assert result["retrieval_debug"]["reranker"]["fallback_reason"] == "timeout"
+    assert quiet["answer"] == "ans"
+    assert "retrieval_debug" not in quiet
+
+
+@pytest.mark.asyncio
+async def test_reranker_debug_block_absent_when_reranking_not_run(
+    pinned_phase3_env, passthrough_docs
+):
+    find_similar = AsyncMock(return_value=_baseline_chunks())
+    embed_patch, find_patch, answer_patch = _chat_patches(find_similar)
+    with embed_patch, find_patch, answer_patch:
+        result = await answer_question_for_document(
+            question="q",
+            doc_id="doc-1",
+            auth=TEST_AUTH,
+            debug_retrieval=True,
+        )
+    assert "reranker" not in result["retrieval_debug"]
+
+
+def test_request_body_accepts_cohere_provider_but_no_vendor_key_field():
+    from pydantic import ValidationError
+
+    from routes.chat import _RETRIEVAL_FIELD_NAMES, ChatRequest, RetrievalOverrides
+
+    request = ChatRequest(
+        question="q",
+        doc_id=_DOC_ID,
+        reranking_enabled=True,
+        reranker_provider="cohere",
+        reranker_api_key="sk-from-body",
+        cohere_api_key="sk-from-body",
+        retrieval={"reranker_api_key": "sk-from-body"},
+    )
+    assert request.reranker_provider == "cohere"
+    dumped = request.model_dump()
+    assert "sk-from-body" not in str(dumped)
+    assert not hasattr(request, "reranker_api_key")
+    assert not hasattr(request, "cohere_api_key")
+    assert not any("key" in name for name in _RETRIEVAL_FIELD_NAMES)
+    assert not any("key" in name for name in RetrievalOverrides.model_fields)
+    with pytest.raises(ValidationError):
+        ChatRequest(question="q", doc_id=_DOC_ID, reranker_provider="jina")
+
+    effective = resolve_retrieval_config(
+        {"reranking_enabled": True, "reranker_provider": "cohere", "reranker_api_key": "sk-from-body"}
+    )
+    assert effective.reranker_provider == "cohere"
+    assert "sk-from-body" not in str(effective.to_debug_dict())
