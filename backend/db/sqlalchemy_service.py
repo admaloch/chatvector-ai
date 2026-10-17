@@ -83,9 +83,18 @@ def _document_status_payload(document: Document) -> dict:
         "chunks": document.chunks,
         "error": document.error,
         "metadata": document.doc_metadata or {},
+        "job_metadata": document.job_metadata or {},
         "created_at": str(document.created_at) if document.created_at else None,
         "updated_at": str(document.updated_at) if document.updated_at else None,
     }
+
+
+def _apply_job_metadata_patch(document: Document, patch: dict | None) -> None:
+    if not patch:
+        return
+    from services.ingestion_job_metadata import merge_job_metadata
+
+    document.job_metadata = merge_job_metadata(document.job_metadata, patch)
 
 
 class SQLAlchemyService(DatabaseService):
@@ -367,6 +376,7 @@ class SQLAlchemyService(DatabaseService):
         *,
         error: dict | None = None,
         chunks: dict | None = None,
+        job_metadata_patch: dict | None = None,
     ) -> None:
         tenant_id = require_tenant_id(tenant_id, method="update_document_status")
         async with self.async_session() as session:
@@ -392,10 +402,38 @@ class SQLAlchemyService(DatabaseService):
                 document.error = None
             if chunks is not None:
                 document.chunks = chunks
+            _apply_job_metadata_patch(document, job_metadata_patch)
             document.updated_at = datetime.utcnow()
 
             await session.commit()
             logger.debug(f"[PostgreSQL] Updated status for {doc_id} -> {status}")
+
+    async def merge_document_job_metadata(
+        self,
+        doc_id: str,
+        tenant_id: str,
+        patch: dict,
+    ) -> None:
+        tenant_id = require_tenant_id(tenant_id, method="merge_document_job_metadata")
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(Document).where(
+                    Document.id == doc_id,
+                    Document.tenant_id == tenant_id,
+                )
+            )
+            document = result.scalar_one_or_none()
+            if not document:
+                logger.warning(
+                    "[PostgreSQL] merge_document_job_metadata: document %s not found for tenant %s",
+                    doc_id,
+                    tenant_id,
+                )
+                return
+
+            _apply_job_metadata_patch(document, patch)
+            document.updated_at = datetime.utcnow()
+            await session.commit()
 
     async def get_document_status(self, doc_id: str, tenant_id: str) -> dict | None:
         tenant_id = require_tenant_id(tenant_id, method="get_document_status")
@@ -449,6 +487,7 @@ class SQLAlchemyService(DatabaseService):
         tenant_id: str,
         *,
         error: dict | None = None,
+        job_metadata_patch: dict | None = None,
     ) -> None:
         tenant_id = require_tenant_id(tenant_id, method="set_document_status_detail")
         async with self.async_session() as session:
@@ -469,6 +508,7 @@ class SQLAlchemyService(DatabaseService):
 
             document.status_detail = status_detail
             document.error = error
+            _apply_job_metadata_patch(document, job_metadata_patch)
             document.updated_at = datetime.utcnow()
             await session.commit()
             logger.debug(f"[PostgreSQL] Set status_detail for {doc_id} -> {status_detail}")

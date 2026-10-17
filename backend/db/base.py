@@ -123,8 +123,19 @@ class DatabaseService(ABC):
         *,
         error: Optional[dict] = None,
         chunks: Optional[dict] = None,
+        job_metadata_patch: Optional[dict] = None,
     ) -> None:
         """Update upload status/progress metadata for a tenant-owned document."""
+        pass
+
+    @abstractmethod
+    async def merge_document_job_metadata(
+        self,
+        doc_id: str,
+        tenant_id: str,
+        patch: dict,
+    ) -> None:
+        """Merge keys into documents.job_metadata without changing status."""
         pass
 
     @abstractmethod
@@ -151,6 +162,7 @@ class DatabaseService(ABC):
         tenant_id: str,
         *,
         error: Optional[dict] = None,
+        job_metadata_patch: Optional[dict] = None,
     ) -> None:
         """Set ``status_detail`` and ``error`` without changing ``status`` or chunks."""
         pass

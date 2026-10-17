@@ -202,6 +202,7 @@ async def update_document_status(
     *,
     error: dict | None = None,
     chunks: dict | None = None,
+    job_metadata_patch: dict | None = None,
 ) -> None:
     tenant_id = require_tenant_id(tenant_id, method="update_document_status")
     service = get_db_service()
@@ -213,6 +214,7 @@ async def update_document_status(
             tenant_id=tenant_id,
             error=error,
             chunks=chunks,
+            job_metadata_patch=job_metadata_patch,
         )
 
     await retry_async(
@@ -266,13 +268,18 @@ async def set_document_status_detail(
     tenant_id: str,
     *,
     error: dict | None = None,
+    job_metadata_patch: dict | None = None,
 ) -> None:
     tenant_id = require_tenant_id(tenant_id, method="set_document_status_detail")
     service = get_db_service()
 
     async def _set():
         await service.set_document_status_detail(
-            doc_id, status_detail, tenant_id=tenant_id, error=error
+            doc_id,
+            status_detail,
+            tenant_id=tenant_id,
+            error=error,
+            job_metadata_patch=job_metadata_patch,
         )
 
     await retry_async(
@@ -282,6 +289,29 @@ async def set_document_status_detail(
         backoff=2.0,
         timeout=get_default_db_timeout_sec(),
         func_name=f"{service.__class__.__name__}.set_document_status_detail",
+    )
+
+
+async def merge_document_job_metadata(
+    doc_id: str,
+    tenant_id: str,
+    patch: dict,
+) -> None:
+    tenant_id = require_tenant_id(tenant_id, method="merge_document_job_metadata")
+    service = get_db_service()
+
+    async def _merge():
+        await service.merge_document_job_metadata(
+            doc_id, tenant_id=tenant_id, patch=patch
+        )
+
+    await retry_async(
+        _merge,
+        max_retries=DEFAULT_MAX_RETRIES,
+        base_delay=0.5,
+        backoff=2.0,
+        timeout=get_default_db_timeout_sec(),
+        func_name=f"{service.__class__.__name__}.merge_document_job_metadata",
     )
 
 
@@ -574,6 +604,7 @@ __all__ = [
     "get_document_status",
     "begin_document_replacement",
     "set_document_status_detail",
+    "merge_document_job_metadata",
     "replace_document_content",
     "delete_document_chunks",
     "delete_document",

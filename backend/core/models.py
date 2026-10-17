@@ -52,6 +52,12 @@ class Document(Base):
         default=dict,
         server_default=text("'{}'::jsonb"),
     )
+    job_metadata = Column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
