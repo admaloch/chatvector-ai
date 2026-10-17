@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from typing import Any, Mapping
 from urllib.parse import quote
 
@@ -14,7 +15,14 @@ from .exceptions import (
     ChatVectorRateLimitError,
     ChatVectorTimeoutError,
 )
-from .models import BatchChatQuery
+from .models import (
+    BatchChatQuery,
+    HistoryConfig,
+    RetrievalConfig,
+    RetrievalScope,
+    _merge_nested_request_config,
+    validate_match_count,
+)
 
 JSONDict = dict[str, Any]
 JSONMapping = Mapping[str, Any]
@@ -158,6 +166,57 @@ def retry_after_seconds(response: httpx.Response) -> float:
         return max(0.0, float(retry_after))
     except ValueError:
         return 0.0
+
+
+def build_chat_payload(
+    *,
+    question: str,
+    doc_id: str,
+    match_count: int = 5,
+    session_id: str | None = None,
+    scope: RetrievalScope | None = None,
+    debug_retrieval: bool = False,
+    retrieval: RetrievalConfig | None = None,
+    history: HistoryConfig | None = None,
+) -> JSONDict:
+    """Build the JSON body for chat and streaming chat requests."""
+    validate_match_count(match_count)
+    payload: JSONDict = {
+        "question": question,
+        "doc_id": doc_id,
+        "match_count": match_count,
+    }
+    if session_id is not None:
+        payload["session_id"] = session_id
+    if scope is not None:
+        payload["scope"] = scope
+    if debug_retrieval:
+        payload["debug_retrieval"] = True
+    _merge_nested_request_config(payload, retrieval=retrieval, history=history)
+    return payload
+
+
+def build_batch_chat_payload(
+    *,
+    queries: Sequence[BatchChatQuery | JSONMapping],
+    session_id: str | None = None,
+    scope: RetrievalScope | None = None,
+    debug_retrieval: bool = False,
+    retrieval: RetrievalConfig | None = None,
+    history: HistoryConfig | None = None,
+) -> JSONDict:
+    """Build the JSON body for batch chat requests."""
+    payload: JSONDict = {
+        "queries": [serialize_batch_query(query) for query in queries],
+    }
+    if session_id is not None:
+        payload["session_id"] = session_id
+    if scope is not None:
+        payload["scope"] = scope
+    if debug_retrieval:
+        payload["debug_retrieval"] = True
+    _merge_nested_request_config(payload, retrieval=retrieval, history=history)
+    return payload
 
 
 def serialize_batch_query(query: BatchChatQuery | JSONMapping) -> JSONDict:

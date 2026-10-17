@@ -1,6 +1,36 @@
 /** The retrieval boundary used by chat and batch-chat requests. */
 export type RetrievalScope = "session" | "tenant";
 
+export type QueryTransformationStrategy =
+  | "rewrite"
+  | "expand"
+  | "stepback"
+  | "none";
+
+export type RerankerProvider = "similarity";
+
+/** Per-request retrieval overrides (nested ``retrieval`` on chat bodies). */
+export type RetrievalConfig = {
+  matchCount?: number;
+  scope?: RetrievalScope;
+  hybridEnabled?: boolean;
+  rerankingEnabled?: boolean;
+  rerankerProvider?: RerankerProvider;
+  queryTransformationEnabled?: boolean;
+  queryTransformationStrategy?: QueryTransformationStrategy;
+  skipHistoryTransform?: boolean;
+  /** Reserved for Named Retrieval Configuration Presets when backend ships it. */
+  preset?: string;
+};
+
+/** Per-request history overrides (nested ``history`` on chat bodies). */
+export type HistoryConfig = {
+  retrievalHistoryWindow?: number;
+  generationHistoryWindow?: number;
+  historyAwareRetrieval?: boolean;
+  maxGenerationHistoryChars?: number;
+};
+
 export type RequestOptions = {
   signal?: AbortSignal;
 };
@@ -37,6 +67,8 @@ export type ChatRequest = {
   sessionId?: string;
   scope?: RetrievalScope;
   debugRetrieval?: boolean;
+  retrieval?: RetrievalConfig;
+  history?: HistoryConfig;
 };
 
 export type BatchChatQuery = {
@@ -45,6 +77,8 @@ export type BatchChatQuery = {
   matchCount?: number;
   sessionId?: string;
   scope?: RetrievalScope;
+  retrieval?: RetrievalConfig;
+  history?: HistoryConfig;
 };
 
 export type BatchChatRequest = {
@@ -52,6 +86,8 @@ export type BatchChatRequest = {
   sessionId?: string;
   scope?: RetrievalScope;
   debugRetrieval?: boolean;
+  retrieval?: RetrievalConfig;
+  history?: HistoryConfig;
 };
 
 export type ChatSource = {

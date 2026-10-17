@@ -136,6 +136,46 @@ await client.uploadDocument({
 One-shot Node streams are intentionally not accepted because the SDK may need
 to replay the body for the `/ingest` to `/upload` compatibility fallback.
 
+## Retrieval and history configuration
+
+Optional `retrieval` and `history` objects on `chat()`, `streamChat()`, and
+`batchChat()` serialize to nested snake_case JSON. Undefined properties are
+omitted (never sent as `null`).
+
+```ts
+const answer = await client.chat({
+  question: "Summarize recent context",
+  docId: uploaded.documentId,
+  retrieval: {
+    matchCount: 8,
+    hybridEnabled: true,
+    queryTransformationStrategy: "expand",
+  },
+  history: {
+    retrievalHistoryWindow: 4,
+    historyAwareRetrieval: false,
+  },
+});
+```
+
+| TypeScript property | JSON key |
+| --- | --- |
+| `matchCount` | `match_count` |
+| `scope` | `scope` |
+| `hybridEnabled` | `hybrid_enabled` |
+| `rerankingEnabled` | `reranking_enabled` |
+| `rerankerProvider` | `reranker_provider` |
+| `queryTransformationEnabled` | `query_transformation_enabled` |
+| `queryTransformationStrategy` | `query_transformation_strategy` |
+| `skipHistoryTransform` | `skip_history_transform` |
+| `preset` | `preset` (when backend presets ship) |
+| `retrievalHistoryWindow` | `retrieval_history_window` |
+| `generationHistoryWindow` | `generation_history_window` |
+| `historyAwareRetrieval` | `history_aware_retrieval` |
+| `maxGenerationHistoryChars` | `max_generation_history_chars` |
+
+`matchCount` values outside 1–20 raise a `RangeError` before the HTTP request.
+
 ## Cancellation
 
 Every network-facing method accepts `{ signal?: AbortSignal }`.

@@ -150,6 +150,51 @@ If `session_id` is omitted, the backend preserves its automatic session-creation
 behavior. Retrieval scope defaults to `"session"`; use `"tenant"` to search across
 all documents for the authenticated tenant.
 
+## Retrieval and history configuration
+
+Pass optional ``RetrievalConfig`` and ``HistoryConfig`` objects on ``chat()``,
+``stream_chat()``, and ``batch_chat()``. They serialize to nested ``retrieval`` and
+``history`` JSON objects using the same snake_case keys as the backend API. Unset
+fields are omitted (not sent as JSON ``null``).
+
+```python
+from chatvector import ChatVectorClient, HistoryConfig, RetrievalConfig
+
+with ChatVectorClient(base_url="http://localhost:8000") as client:
+    retrieval = RetrievalConfig(
+        match_count=8,
+        hybrid_enabled=True,
+        query_transformation_strategy="expand",
+    )
+    history = HistoryConfig(retrieval_history_window=4, history_aware_retrieval=False)
+
+    answer = client.chat(
+        "Summarize recent context",
+        "doc-1",
+        retrieval=retrieval,
+        history=history,
+    )
+```
+
+| Python field | JSON key |
+| --- | --- |
+| ``match_count`` | ``match_count`` |
+| ``scope`` | ``scope`` |
+| ``hybrid_enabled`` | ``hybrid_enabled`` |
+| ``reranking_enabled`` | ``reranking_enabled`` |
+| ``reranker_provider`` | ``reranker_provider`` |
+| ``query_transformation_enabled`` | ``query_transformation_enabled`` |
+| ``query_transformation_strategy`` | ``query_transformation_strategy`` |
+| ``skip_history_transform`` | ``skip_history_transform`` |
+| ``preset`` | ``preset`` (when backend presets ship) |
+| ``retrieval_history_window`` | ``retrieval_history_window`` |
+| ``generation_history_window`` | ``generation_history_window`` |
+| ``history_aware_retrieval`` | ``history_aware_retrieval`` |
+| ``max_generation_history_chars`` | ``max_generation_history_chars`` |
+
+The SDK rejects ``match_count`` outside 1–20 before sending a request. Other
+validation remains on the backend (422 responses surface through existing SDK errors).
+
 ## Streaming Chat
 
 Stream token-by-token answers over Server-Sent Events without manually parsing SSE.

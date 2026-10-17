@@ -15,6 +15,8 @@ from ._common import (
     JSONDict,
     JSONMapping,
     RETRYABLE_STATUS_CODES,
+    build_batch_chat_payload,
+    build_chat_payload,
     build_client_headers,
     cap_duration_to_deadline,
     default_error_message,
@@ -50,6 +52,8 @@ from .models import (
     DocumentListResponse,
     DocumentResponse,
     DocumentStatus,
+    HistoryConfig,
+    RetrievalConfig,
     RetrievalScope,
     Session,
     SessionHistoryResponse,
@@ -210,19 +214,20 @@ class AsyncChatVectorClient:
         session_id: str | None = None,
         scope: RetrievalScope | None = None,
         debug_retrieval: bool = False,
+        retrieval: RetrievalConfig | None = None,
+        history: HistoryConfig | None = None,
     ) -> ChatResponse:
         """Ask a question against a single document."""
-        payload: JSONDict = {
-            "question": question,
-            "doc_id": doc_id,
-            "match_count": match_count,
-        }
-        if session_id is not None:
-            payload["session_id"] = session_id
-        if scope is not None:
-            payload["scope"] = scope
-        if debug_retrieval:
-            payload["debug_retrieval"] = True
+        payload = build_chat_payload(
+            question=question,
+            doc_id=doc_id,
+            match_count=match_count,
+            session_id=session_id,
+            scope=scope,
+            debug_retrieval=debug_retrieval,
+            retrieval=retrieval,
+            history=history,
+        )
         response_payload = await self._request_json("POST", "chat", json=payload)
         return ChatResponse.from_dict(response_payload)
 
@@ -234,20 +239,21 @@ class AsyncChatVectorClient:
         session_id: str | None = None,
         scope: RetrievalScope | None = None,
         debug_retrieval: bool = False,
+        retrieval: RetrievalConfig | None = None,
+        history: HistoryConfig | None = None,
         timeout: float | httpx.Timeout | None = None,
     ) -> AsyncIterator[StreamChatEvent]:
         """Stream a chat answer as typed Server-Sent Events."""
-        payload: JSONDict = {
-            "question": question,
-            "doc_id": doc_id,
-            "match_count": match_count,
-        }
-        if session_id is not None:
-            payload["session_id"] = session_id
-        if scope is not None:
-            payload["scope"] = scope
-        if debug_retrieval:
-            payload["debug_retrieval"] = True
+        payload = build_chat_payload(
+            question=question,
+            doc_id=doc_id,
+            match_count=match_count,
+            session_id=session_id,
+            scope=scope,
+            debug_retrieval=debug_retrieval,
+            retrieval=retrieval,
+            history=history,
+        )
 
         request_kwargs: JSONDict = {"json": payload}
         if timeout is not None:
@@ -288,6 +294,8 @@ class AsyncChatVectorClient:
         session_id: str | None = None,
         scope: RetrievalScope | None = None,
         debug_retrieval: bool = False,
+        retrieval: RetrievalConfig | None = None,
+        history: HistoryConfig | None = None,
     ) -> BatchChatResponse:
         """Run multiple chat queries in a single API call.
 
@@ -295,15 +303,14 @@ class AsyncChatVectorClient:
         history is not injected and successful turns are not persisted, even when
         ``session_id`` is set.
         """
-        payload: JSONDict = {
-            "queries": [self._serialize_batch_query(query) for query in queries],
-        }
-        if session_id is not None:
-            payload["session_id"] = session_id
-        if scope is not None:
-            payload["scope"] = scope
-        if debug_retrieval:
-            payload["debug_retrieval"] = True
+        payload = build_batch_chat_payload(
+            queries=queries,
+            session_id=session_id,
+            scope=scope,
+            debug_retrieval=debug_retrieval,
+            retrieval=retrieval,
+            history=history,
+        )
         response_payload = await self._request_json("POST", "chat/batch", json=payload)
         return BatchChatResponse.from_dict(response_payload)
 

@@ -9,6 +9,85 @@ JSONDict = dict[str, Any]
 JSONMapping = Mapping[str, Any]
 
 RetrievalScope = Literal["session", "tenant"]
+QueryTransformationStrategy = Literal["rewrite", "expand", "stepback", "none"]
+RerankerProvider = Literal["similarity"]
+
+MATCH_COUNT_MIN = 1
+MATCH_COUNT_MAX = 20
+
+
+@dataclass(slots=True)
+class RetrievalConfig:
+    """Per-request retrieval overrides sent as a nested ``retrieval`` object."""
+
+    match_count: int | None = None
+    scope: RetrievalScope | None = None
+    hybrid_enabled: bool | None = None
+    reranking_enabled: bool | None = None
+    reranker_provider: RerankerProvider | None = None
+    query_transformation_enabled: bool | None = None
+    query_transformation_strategy: QueryTransformationStrategy | None = None
+    skip_history_transform: bool | None = None
+    preset: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.match_count is not None:
+            validate_match_count(self.match_count)
+
+    def to_dict(self) -> JSONDict:
+        """Serialize set fields to backend JSON keys; omit unset values."""
+        payload: JSONDict = {}
+        if self.match_count is not None:
+            payload["match_count"] = self.match_count
+        if self.scope is not None:
+            payload["scope"] = self.scope
+        if self.hybrid_enabled is not None:
+            payload["hybrid_enabled"] = self.hybrid_enabled
+        if self.reranking_enabled is not None:
+            payload["reranking_enabled"] = self.reranking_enabled
+        if self.reranker_provider is not None:
+            payload["reranker_provider"] = self.reranker_provider
+        if self.query_transformation_enabled is not None:
+            payload["query_transformation_enabled"] = self.query_transformation_enabled
+        if self.query_transformation_strategy is not None:
+            payload["query_transformation_strategy"] = self.query_transformation_strategy
+        if self.skip_history_transform is not None:
+            payload["skip_history_transform"] = self.skip_history_transform
+        if self.preset is not None:
+            payload["preset"] = self.preset
+        return payload
+
+
+@dataclass(slots=True)
+class HistoryConfig:
+    """Per-request history overrides sent as a nested ``history`` object."""
+
+    retrieval_history_window: int | None = None
+    generation_history_window: int | None = None
+    history_aware_retrieval: bool | None = None
+    max_generation_history_chars: int | None = None
+
+    def to_dict(self) -> JSONDict:
+        """Serialize set fields to backend JSON keys; omit unset values."""
+        payload: JSONDict = {}
+        if self.retrieval_history_window is not None:
+            payload["retrieval_history_window"] = self.retrieval_history_window
+        if self.generation_history_window is not None:
+            payload["generation_history_window"] = self.generation_history_window
+        if self.history_aware_retrieval is not None:
+            payload["history_aware_retrieval"] = self.history_aware_retrieval
+        if self.max_generation_history_chars is not None:
+            payload["max_generation_history_chars"] = self.max_generation_history_chars
+        return payload
+
+
+def validate_match_count(value: int) -> None:
+    """Reject match counts outside the backend-supported range before a request."""
+    if value < MATCH_COUNT_MIN or value > MATCH_COUNT_MAX:
+        raise ValueError(
+            f"Invalid match_count={value}. Expected an integer from "
+            f"{MATCH_COUNT_MIN} to {MATCH_COUNT_MAX}."
+        )
 
 _COMPONENT_SCORE_FIELDS = (
     "vector_score",
@@ -543,6 +622,11 @@ class BatchChatQuery:
     match_count: int = 5
     session_id: str | None = None
     scope: RetrievalScope | None = None
+    retrieval: RetrievalConfig | None = None
+    history: HistoryConfig | None = None
+
+    def __post_init__(self) -> None:
+        validate_match_count(self.match_count)
 
     def to_dict(self) -> JSONDict:
         """Convert the batch query into the API request payload."""
@@ -555,6 +639,7 @@ class BatchChatQuery:
             payload["session_id"] = self.session_id
         if self.scope is not None:
             payload["scope"] = self.scope
+        _merge_nested_request_config(payload, retrieval=self.retrieval, history=self.history)
         return payload
 
 
@@ -701,3 +786,20 @@ def _parse_retrieval_debug(value: Any) -> RetrievalDebugMetadata | None:
     if not isinstance(value, Mapping):
         return None
     return RetrievalDebugMetadata.from_dict(value)
+
+
+def _merge_nested_request_config(
+    payload: JSONDict,
+    *,
+    retrieval: RetrievalConfig | None,
+    history: HistoryConfig | None,
+) -> None:
+    """Attach nested retrieval/history objects when at least one field is set."""
+    if retrieval is not None:
+        nested = retrieval.to_dict()
+        if nested:
+            payload["retrieval"] = nested
+    if history is not None:
+        nested = history.to_dict()
+        if nested:
+            payload["history"] = nested

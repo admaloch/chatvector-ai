@@ -24,6 +24,8 @@ export type {
   DocumentStatus,
   DocumentSummary,
   RequestOptions,
+  HistoryConfig,
+  RetrievalConfig,
   RetrievalDebugMetadata,
   RetrievalScope,
   Session,
