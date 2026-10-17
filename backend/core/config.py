@@ -278,6 +278,23 @@ class Settings:
         "EMBEDDING_CACHE_INCLUDE_TENANT", "false"
     ).lower() in ("1", "true", "yes")
 
+    # Mutating-route idempotency (Idempotency-Key header → Redis TTL store).
+    IDEMPOTENCY_KEY_PREFIX: str = os.getenv(
+        "IDEMPOTENCY_KEY_PREFIX", "chatvector:idempotency"
+    )
+    IDEMPOTENCY_TTL_SECONDS: int = max(
+        60, int(os.getenv("IDEMPOTENCY_TTL_SECONDS", "86400"))
+    )
+    IDEMPOTENCY_KEY_MAX_LENGTH: int = max(
+        1, int(os.getenv("IDEMPOTENCY_KEY_MAX_LENGTH", "255"))
+    )
+    IDEMPOTENCY_WAIT_TIMEOUT_SECONDS: float = max(
+        0.5, float(os.getenv("IDEMPOTENCY_WAIT_TIMEOUT_SECONDS", "30"))
+    )
+    IDEMPOTENCY_POLL_INTERVAL_SECONDS: float = max(
+        0.01, float(os.getenv("IDEMPOTENCY_POLL_INTERVAL_SECONDS", "0.05"))
+    )
+
 VALID_QUEUE_BACKENDS = {"memory", "redis"}
 
 

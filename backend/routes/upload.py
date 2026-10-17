@@ -14,6 +14,13 @@ from services.document_metadata import parse_document_metadata
 from services.ingestion_pipeline import IngestionPipeline, UploadPipelineError, _sanitize_filename
 from services.queue_service import QueueFull, QueueJob, ingestion_queue
 from services.session_service import get_or_create_session, register_session_document
+from services.idempotency import (
+    ROUTE_UPLOAD,
+    begin_idempotency,
+    complete_idempotent_http_exception,
+    parse_idempotency_key,
+    upload_request_fingerprint,
+)
 from services.tenant_registry import register_tenant_document
 
 logger = logging.getLogger(__name__)
@@ -81,6 +88,7 @@ async def upload(
     doc_id: str | None = None
     replacing = False
     tenant_id = require_current_tenant(auth)
+    idempotency_lease = None
 
     try:
         safe_filename = _sanitize_filename(file.filename)
@@ -90,6 +98,22 @@ async def upload(
         ingestion_pipeline.validate_file(file, file_bytes)
         document_metadata = parse_document_metadata(metadata)
         replace_id = _parse_replace_document_id(replace_document_id)
+
+        fingerprint = upload_request_fingerprint(
+            file_bytes=file_bytes,
+            filename=safe_filename,
+            content_type=file.content_type,
+            replace_document_id=replace_id,
+        )
+        idempotency_key = parse_idempotency_key(request)
+        idempotency_lease, replay = await begin_idempotency(
+            tenant_id=tenant_id,
+            route=ROUTE_UPLOAD,
+            idempotency_key=idempotency_key,
+            fingerprint=fingerprint,
+        )
+        if replay is not None:
+            return replay
 
         if replace_id is None:
             # Persist the document record so the status endpoint works immediately
@@ -191,7 +215,7 @@ async def upload(
             # `status` stays whatever it was (completed keeps serving retrieval);
             # `status_detail` tells the client a replacement is underway.
             current = await db.get_document_status(doc_id, tenant_id=tenant_id) or {}
-            return {
+            response_body = {
                 "message": "Accepted",
                 "document_id": doc_id,
                 "status": current.get("status", "completed"),
@@ -199,16 +223,22 @@ async def upload(
                 "queue_position": queue_position,
                 "status_endpoint": f"/documents/{doc_id}/status",
             }
+            await idempotency_lease.complete(202, response_body)
+            return response_body
 
-        return {
+        response_body = {
             "message": "Accepted",
             "document_id": doc_id,
             "status": "queued",
             "queue_position": queue_position,
             "status_endpoint": f"/documents/{doc_id}/status",
         }
+        await idempotency_lease.complete(202, response_body)
+        return response_body
 
-    except HTTPException:
+    except HTTPException as exc:
+        if idempotency_lease is not None and idempotency_lease.active:
+            await complete_idempotent_http_exception(idempotency_lease, exc)
         raise
 
     except UploadPipelineError as e:
@@ -217,15 +247,20 @@ async def upload(
         logger.warning(
             f"Upload validation failed at stage={e.stage}: {e.message}"
         )
-        raise _http_error(
+        http_exc = _http_error(
             status_code=e.status_code,
             code=e.code,
             stage=e.stage,
             message=e.message,
             document_id=getattr(e, "document_id", None),
         )
+        if idempotency_lease is not None and idempotency_lease.active:
+            await complete_idempotent_http_exception(idempotency_lease, http_exc)
+        raise http_exc
 
     except Exception as e:
+        if idempotency_lease is not None and idempotency_lease.active:
+            await idempotency_lease.abort()
         if doc_id and replacing:
             # Never mark a replaced document `failed`: its prior content must
             # stay retrievable. Record the failed attempt in status_detail.

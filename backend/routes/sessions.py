@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 import db
@@ -9,6 +9,13 @@ from core.auth import AuthContext, require_auth, require_current_tenant
 from core.config import config
 from core.session import Session
 from services import session_service
+from services.idempotency import (
+    ROUTE_SESSION_CREATE,
+    begin_idempotency,
+    complete_idempotent_http_exception,
+    parse_idempotency_key,
+    session_create_fingerprint,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -55,16 +62,43 @@ def _format_session(session: Session) -> SessionResponse:
 
 @router.post("/sessions", status_code=201, response_model=SessionResponse)
 async def create_session(
-    payload: SessionCreateRequest, auth: AuthContext = Depends(require_auth)
+    request: Request,
+    payload: SessionCreateRequest,
+    auth: AuthContext = Depends(require_auth),
 ):
     tenant_id = require_current_tenant(auth)
+    idempotency_lease = None
     try:
+        fingerprint = session_create_fingerprint(session_id=payload.session_id)
+        idempotency_key = parse_idempotency_key(request)
+        idempotency_lease, replay = await begin_idempotency(
+            tenant_id=tenant_id,
+            route=ROUTE_SESSION_CREATE,
+            idempotency_key=idempotency_key,
+            fingerprint=fingerprint,
+        )
+        if replay is not None:
+            return replay
+
         session = await session_service.create_session(
             session_id=payload.session_id, tenant_id=tenant_id
         )
+        response_body = _format_session(session).model_dump()
+        await idempotency_lease.complete(201, response_body)
         return _format_session(session)
+    except HTTPException as exc:
+        if idempotency_lease is not None and idempotency_lease.active:
+            await complete_idempotent_http_exception(idempotency_lease, exc)
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        http_exc = HTTPException(status_code=409, detail=str(e))
+        if idempotency_lease is not None and idempotency_lease.active:
+            await complete_idempotent_http_exception(idempotency_lease, http_exc)
+        raise http_exc from e
+    except Exception:
+        if idempotency_lease is not None and idempotency_lease.active:
+            await idempotency_lease.abort()
+        raise
 
 
 @router.get("/sessions", response_model=SessionListResponse)
