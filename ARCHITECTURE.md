@@ -218,11 +218,16 @@ the supported single-process API topology only.
 >
 > **Production topology:** Phase 3 supports **one API process/container**
 > (`uvicorn --workers 1`). Redis/RQ worker threads provide ingestion concurrency
-> within that process. Running multiple API processes or containers is not
-> currently supported. Redis does not by itself make API instances horizontally
+> within that process. Redis does not by itself make API instances horizontally
 > scalable. Concurrency settings such as `QUEUE_WORKER_COUNT`,
 > `RETRIEVAL_MAX_CONCURRENCY`, DB pool sizes, and `QUEUE_EMBEDDING_RPS` are
 > process-scoped.
+>
+> **Upload artifacts:** Redis jobs carry an `artifact_uri` (`documents.artifact_uri`)
+> instead of file bytes. `ARTIFACT_STORAGE=local` (default) writes `QUEUE_SPILL_DIR`
+> and still needs a shared disk. `ARTIFACT_STORAGE=s3` stores objects in S3/MinIO
+> so a worker without the API host's disk can fetch the payload. Artifacts are
+> deleted after successful ingest or a terminal failure; S3 objects are also TTL-marked.
 
 ---
 

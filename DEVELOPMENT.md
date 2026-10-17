@@ -582,7 +582,13 @@ same field — they are not interchangeable across fields or with `score`.
 QUEUE_WORKER_COUNT=3      # concurrent background workers (1–5)
 QUEUE_MAX_SIZE=100        # max pending jobs; uploads beyond this return 503
 QUEUE_EMBEDDING_RPS=2.0   # max embedding HTTP batches/sec per API process (burst = same value)
-QUEUE_SPILL_DIR=/tmp/chatvector  # local spill dir for Redis queue file bytes (one API container)
+QUEUE_SPILL_DIR=/tmp/chatvector  # local ArtifactStorage root for Redis uploads
+ARTIFACT_STORAGE=local           # local (default) or s3 for split API/worker hosts
+ARTIFACT_TTL_SECONDS=86400       # S3 expiry mark; artifacts are also deleted after terminal ingest
+# ARTIFACT_S3_BUCKET=            # required when ARTIFACT_STORAGE=s3
+# ARTIFACT_S3_ENDPOINT_URL=      # MinIO or other S3-compatible endpoint
+# ARTIFACT_S3_ACCESS_KEY=        # or AWS_ACCESS_KEY_ID
+# ARTIFACT_S3_SECRET_KEY=        # or AWS_SECRET_ACCESS_KEY
 QUEUE_DLQ_MAX_ENTRIES=1000  # max dead-letter records retained
 QUEUE_JOB_MAX_RETRIES=3   # retries before a job moves to DLQ
 QUEUE_RETRY_BASE_DELAY=2.0 # base seconds for retry backoff
