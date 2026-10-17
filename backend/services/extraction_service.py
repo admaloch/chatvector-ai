@@ -1,7 +1,8 @@
 import asyncio
 import io
 import logging
-from dataclasses import dataclass
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 
 from fastapi import UploadFile
 from pypdf import PdfReader
@@ -64,17 +65,40 @@ class PageBoundary:
     end_offset: int
 
 
-def _extract_text_with_metadata_sync(
-    content_type: str | None,
-    filename: str,
-    contents: bytes,
-) -> tuple[str, list[PageBoundary]]:
-    """
-    Synchronous PDF/TXT parsing body.
+@dataclass
+class ExtractedDocument:
+    """Extractor output: raw text plus provenance, before cleaning and chunking."""
 
-    Raises ValueError for unsupported file types or unreadable payloads.
+    text: str
+    page_boundaries: list[PageBoundary] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
+class DocumentExtractionError(ValueError):
+    """Raised when an extractor cannot produce text from the supplied bytes."""
+
+
+class UnsupportedDocumentTypeError(DocumentExtractionError):
+    """Raised when no extractor is registered for the requested content type."""
+
+
+class DocumentExtractor(ABC):
     """
-    if content_type == "application/pdf":
+    Common interface for document extraction implementations.
+
+    Implementations must be stateless so a single class can serve concurrent
+    ingestion jobs; ``extract`` is synchronous and runs in a worker thread.
+    """
+
+    @abstractmethod
+    def extract(self, contents: bytes, *, filename: str = "") -> ExtractedDocument:
+        """Return the extracted text and provenance, or raise DocumentExtractionError."""
+
+
+class PdfExtractor(DocumentExtractor):
+    """PDF extraction via pypdf with per-page boundaries on the raw text."""
+
+    def extract(self, contents: bytes, *, filename: str = "") -> ExtractedDocument:
         try:
             parts: list[str] = []
             page_boundaries: list[PageBoundary] = []
@@ -95,21 +119,77 @@ def _extract_text_with_metadata_sync(
 
             full_text = "".join(parts)
             logger.info(f"Total extracted text length: {len(full_text)}")
-            return full_text, page_boundaries
+            return ExtractedDocument(text=full_text, page_boundaries=page_boundaries)
         except Exception as e:
             logger.error(f"Failed to parse PDF file {filename}: {e}")
-            raise ValueError("Failed to parse PDF content.")
+            raise DocumentExtractionError("Failed to parse PDF content.") from e
 
-    if content_type == "text/plain":
+
+class PlainTextExtractor(DocumentExtractor):
+    """Plain-text extraction (utf-8, cp1254 fallback) with no page boundaries."""
+
+    def extract(self, contents: bytes, *, filename: str = "") -> ExtractedDocument:
         try:
             file_text = contents.decode("utf-8")
         except UnicodeDecodeError:
-            file_text = contents.decode("cp1254")  # Turkish Windows fallback
+            try:
+                file_text = contents.decode("cp1254")  # Turkish Windows fallback
+            except UnicodeDecodeError as e:
+                logger.error(f"Failed to decode text file {filename}: {e}")
+                raise DocumentExtractionError("Failed to decode text content.") from e
         logger.info(f"Extracted {len(file_text)} characters from TXT file")
-        return file_text, []
+        return ExtractedDocument(text=file_text)
 
-    logger.error(f"Unsupported file type: {content_type}")
-    raise ValueError(f"Unsupported file type: {content_type}")
+
+# Registry keyed by normalized MIME type. Registering a new extractor class here
+# (or via register_document_extractor) is the only change a new format needs.
+_EXTRACTOR_REGISTRY: dict[str, type[DocumentExtractor]] = {
+    "application/pdf": PdfExtractor,
+    "text/plain": PlainTextExtractor,
+}
+
+
+def _normalize_content_type(content_type: str | None) -> str:
+    """Lowercase a MIME type and drop parameters such as ``; charset=utf-8``."""
+    return (content_type or "").split(";", 1)[0].strip().lower()
+
+
+def register_document_extractor(
+    content_type: str,
+    extractor_cls: type[DocumentExtractor],
+) -> None:
+    """Map a MIME type to an extractor class, replacing any existing mapping."""
+    _EXTRACTOR_REGISTRY[_normalize_content_type(content_type)] = extractor_cls
+
+
+def build_document_extractor(
+    content_type: str | None,
+    filename: str = "",
+) -> DocumentExtractor:
+    """Resolve a content type to a fresh extractor instance."""
+    extractor_cls = _EXTRACTOR_REGISTRY.get(_normalize_content_type(content_type))
+    if extractor_cls is None:
+        logger.error(f"Unsupported file type: {content_type} ({filename})")
+        raise UnsupportedDocumentTypeError(f"Unsupported file type: {content_type}")
+    return extractor_cls()
+
+
+def _extract_text_with_metadata_sync(
+    content_type: str | None,
+    filename: str,
+    contents: bytes,
+) -> tuple[str, list[PageBoundary]]:
+    """
+    Synchronous extraction body: select an extractor and run it.
+
+    Raises DocumentExtractionError (a ValueError) for unsupported file types or
+    unreadable payloads.
+    """
+    extractor = build_document_extractor(content_type, filename=filename)
+    document = extractor.extract(contents, filename=filename)
+    for warning in document.warnings:
+        logger.warning(f"Extraction warning for {filename}: {warning}")
+    return document.text, document.page_boundaries
 
 
 async def extract_text_from_file(file: UploadFile, contents: bytes | None = None) -> str:
