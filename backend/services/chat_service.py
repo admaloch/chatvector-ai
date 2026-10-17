@@ -10,6 +10,7 @@ from core.config import config
 from core.session import SessionContext
 from db import find_similar_chunks
 from services.context_service import build_context_from_chunks
+from services.history_config import prepare_turn_history
 from services.query_service import QueryTransformResult, transform_query
 from services.retrieval_config import (
     EffectiveRetrievalConfig,
@@ -313,6 +314,8 @@ async def retrieve_for_documents(
     max_context_chars: int | None = None,
     transform_result: QueryTransformResult | None = None,
     query_embeddings: list[list[float]] | None = None,
+    resolution_policy=None,
+    history_observation=None,
 ) -> RetrievalResult:
     """Run retrieval for one query. Does not call answer generation.
 
@@ -333,7 +336,11 @@ async def retrieve_for_documents(
         if transformation_is_request_scoped(effective_retrieval_config):
             transform_kwargs["effective_config"] = effective_retrieval_config
         transform_result = await transform_query(
-            query, history=history_arg, **transform_kwargs
+            query,
+            history=history_arg,
+            resolution_policy=resolution_policy,
+            history_observation=history_observation,
+            **transform_kwargs,
         )
     transform_ms = int((time.perf_counter() - transform_started) * 1000)
 
@@ -489,6 +496,8 @@ def validate_and_normalize_batch_queries(queries: list[dict]) -> list[dict]:
         }
         if "retrieval_fields" in query:
             normalized["retrieval_fields"] = query.get("retrieval_fields") or {}
+        if "history_fields" in query:
+            normalized["history_fields"] = query.get("history_fields") or {}
         normalized_queries.append(normalized)
 
     return normalized_queries
@@ -610,6 +619,7 @@ async def answer_question_for_document(
     scope: Optional[str] = None,
     debug_retrieval: bool = False,
     retrieval_fields: dict | None = None,
+    history_fields: dict | None = None,
 ) -> dict:
     """
     Orchestrate the chat flow for a single question/document pair.
@@ -657,13 +667,17 @@ async def answer_question_for_document(
         except Exception as e:
             logger.error(f"Failed to load chat history for session {session_id}: {e}", exc_info=True)
 
-    transformation_history = (
-        history[-config.QUERY_TRANSFORMATION_HISTORY_WINDOW :] if history else None
+    plan = prepare_turn_history(
+        history,
+        history_fields,
+        skip_history_transform=False,
+        apply_generation_history=True,
+        global_query_transformation_enabled=bool(config.QUERY_TRANSFORMATION_ENABLED),
     )
     if history:
         if not session_context:
             session_context = SessionContext()
-        session_context.chat_history = history
+        session_context.chat_history = plan.generation_history
 
     retrieval = await retrieve_for_documents(
         question,
@@ -671,8 +685,10 @@ async def answer_question_for_document(
         tenant_id,
         effective,
         session_id=session_id,
-        history_for_transform=transformation_history,
+        history_for_transform=plan.transform_history,
         session_context=session_context,
+        resolution_policy=plan.policy,
+        history_observation=plan.observation,
     )
     matching_chunks = retrieval.chunks
     context = retrieval.context
@@ -734,6 +750,7 @@ async def answer_question_stream_for_document(
     scope: Optional[str] = None,
     debug_retrieval: bool = False,
     retrieval_fields: dict | None = None,
+    history_fields: dict | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Orchestrate the chat flow for a single question/document pair, yielding
@@ -776,13 +793,17 @@ async def answer_question_stream_for_document(
             except Exception as e:
                 logger.error(f"Failed to load chat history for session {session_id}: {e}", exc_info=True)
 
-        transformation_history = (
-            history[-config.QUERY_TRANSFORMATION_HISTORY_WINDOW :] if history else None
+        plan = prepare_turn_history(
+            history,
+            history_fields,
+            skip_history_transform=False,
+            apply_generation_history=True,
+            global_query_transformation_enabled=bool(config.QUERY_TRANSFORMATION_ENABLED),
         )
         if history:
             if not session_context:
                 session_context = SessionContext()
-            session_context.chat_history = history
+            session_context.chat_history = plan.generation_history
 
         retrieval = await retrieve_for_documents(
             question,
@@ -790,8 +811,10 @@ async def answer_question_stream_for_document(
             tenant_id,
             effective,
             session_id=session_id,
-            history_for_transform=transformation_history,
+            history_for_transform=plan.transform_history,
             session_context=session_context,
+            resolution_policy=plan.policy,
+            history_observation=plan.observation,
         )
         matching_chunks = retrieval.chunks
         sources = _build_sources(matching_chunks)
@@ -916,11 +939,17 @@ async def answer_questions_for_documents_batch(
         question: str,
         history: list[dict] | None,
         effective_config: EffectiveRetrievalConfig | None = None,
+        resolution_policy=None,
+        history_observation=None,
     ):
         async with batch_llm_semaphore:
             transform_kwargs = {}
             if effective_config is not None:
                 transform_kwargs["effective_config"] = effective_config
+            if resolution_policy is not None:
+                transform_kwargs["resolution_policy"] = resolution_policy
+            if history_observation is not None:
+                transform_kwargs["history_observation"] = history_observation
             return await transform_query(question, history=history, **transform_kwargs)
 
     async def _batch_generate(question: str, context: str):
@@ -953,22 +982,32 @@ async def answer_questions_for_documents_batch(
             *[_load_batch_history(q.get("session_id")) for q in normalized_queries]
         )
     )
+    history_plans = [
+        prepare_turn_history(
+            loaded,
+            query.get("history_fields"),
+            skip_history_transform=effective.skip_history_transform,
+            apply_generation_history=not _is_compare_style_batch_query(query["doc_ids"]),
+            global_query_transformation_enabled=bool(config.QUERY_TRANSFORMATION_ENABLED),
+        )
+        for query, loaded, effective in zip(
+            normalized_queries, per_query_histories, effective_configs
+        )
+    ]
 
     transform_results = await asyncio.gather(
         *[
             _batch_transform(
                 q["question"],
-                history=(
-                    None
-                    if effective.skip_history_transform
-                    else (h[-config.QUERY_TRANSFORMATION_HISTORY_WINDOW :] if h else None)
-                ),
+                history=plan.transform_history,
                 effective_config=(
                     effective if transformation_is_request_scoped(effective) else None
                 ),
+                resolution_policy=plan.policy,
+                history_observation=plan.observation,
             )
-            for q, h, effective in zip(
-                normalized_queries, per_query_histories, effective_configs
+            for q, plan, effective in zip(
+                normalized_queries, history_plans, effective_configs
             )
         ]
     )
@@ -1024,7 +1063,7 @@ async def answer_questions_for_documents_batch(
     async def _process_query(
         query: dict,
         query_embeddings: list[list[float]],
-        preloaded_history: list[dict],
+        generation_history: list[dict],
         transform_result: QueryTransformResult,
         effective: EffectiveRetrievalConfig,
     ) -> dict:
@@ -1053,10 +1092,10 @@ async def answer_questions_for_documents_batch(
 
             is_compare_style = _is_compare_style_batch_query(query["doc_ids"])
             query_session_context = session_context
-            if preloaded_history and not is_compare_style:
+            if generation_history and not is_compare_style:
                 from copy import deepcopy
                 query_session_context = deepcopy(session_context) if session_context else SessionContext()
-                query_session_context.chat_history = preloaded_history
+                query_session_context.chat_history = generation_history
 
             retrieval = await retrieve_for_documents(
                 query["question"],
@@ -1140,11 +1179,11 @@ async def answer_questions_for_documents_batch(
 
     return await asyncio.gather(
         *[
-            _process_query(query, embeddings, history, transform_result, effective)
-            for query, embeddings, history, transform_result, effective in zip(
+            _process_query(query, embeddings, plan.generation_history, transform_result, effective)
+            for query, embeddings, plan, transform_result, effective in zip(
                 normalized_queries,
                 per_query_embeddings,
-                per_query_histories,
+                history_plans,
                 transform_results,
                 effective_configs,
             )

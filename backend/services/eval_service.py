@@ -13,10 +13,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from core.config import config
 from db.base import ChunkMatch
 from services import eval_metrics
 from services.chat_service import retrieve_for_documents
 from services.eval_config import EffectiveRetrievalConfig, ResolvedEnvironmentSnapshot
+from services.history_config import prepare_turn_history
 from services.eval_fixtures import EvalDataset, dataset_hash
 
 EVAL_TOOL_VERSION = "0.1.0"
@@ -113,14 +115,31 @@ async def _run_arm(
 
     request_config = effective.to_request_config()
     for q in dataset.queries:
+        # Rows opt into session simulation. Otherwise history stays out of
+        # transform even when the process default would resolve follow-ups.
+        history_kwargs: dict = {"skip_history_transform": effective.skip_history_transform}
+        if q.simulate_session:
+            plan = prepare_turn_history(
+                q.session_history,
+                None,
+                skip_history_transform=False,
+                apply_generation_history=False,
+                global_query_transformation_enabled=bool(config.QUERY_TRANSFORMATION_ENABLED),
+            )
+            history_kwargs = {
+                "skip_history_transform": False,
+                "history_for_transform": plan.transform_history,
+                "resolution_policy": plan.policy,
+                "history_observation": plan.observation,
+            }
         retrieval = await retrieve_for_documents(
             q.query,
             q.doc_ids,
             tenant_id,
             request_config,
-            skip_history_transform=effective.skip_history_transform,
             use_embedding_cache=effective.allow_embedding_cache,
             max_context_chars=effective.max_context_chars,
+            **history_kwargs,
         )
         candidates = retrieval.chunks
         context_preview = retrieval.context

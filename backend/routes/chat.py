@@ -18,6 +18,7 @@ from services.chat_service import (
     merge_batch_results,
     prepare_batch_chat_items,
 )
+from services.history_config import HISTORY_FIELD_NAMES, merge_history_fields
 from services.retrieval_config import merge_retrieval_field_layers
 from services.session_service import get_or_create_session, register_session_document
 from services.tenant_registry import register_tenant_document
@@ -58,6 +59,32 @@ class RetrievalOverrides(BaseModel):
     query_transformation_enabled: Optional[bool] = None
     query_transformation_strategy: Optional[QueryTransformationStrategyParam] = None
     skip_history_transform: Optional[bool] = None
+
+
+class HistoryOverrides(BaseModel):
+    """Optional per-request history controls, separate from retrieval config.
+
+    Omitted fields keep the process defaults (``HISTORY_AWARE_RETRIEVAL_DEFAULT``,
+    ``QUERY_TRANSFORMATION_HISTORY_WINDOW``, ``GENERATION_HISTORY_WINDOW``).
+    ``history_aware_retrieval`` does not enable rewrite, expand, or step-back.
+    """
+
+    retrieval_history_window: Optional[int] = Field(default=None, ge=0, le=100)
+    generation_history_window: Optional[int] = Field(default=None, ge=0, le=100)
+    history_aware_retrieval: Optional[bool] = None
+    max_generation_history_chars: Optional[int] = Field(default=None, ge=1, le=1_000_000)
+
+
+def history_fields_from_model(model: BaseModel) -> dict:
+    """Collect an explicitly set nested ``history`` object."""
+    history_model = getattr(model, "history", None)
+    if history_model is None or "history" not in model.model_fields_set:
+        return {}
+    fields: dict = {}
+    for name in HISTORY_FIELD_NAMES:
+        if name in history_model.model_fields_set and getattr(history_model, name) is not None:
+            fields[name] = getattr(history_model, name)
+    return fields
 
 
 def retrieval_fields_from_model(model: BaseModel) -> dict:
@@ -158,6 +185,7 @@ class ChatBatchItem(BaseModel):
     query_transformation_strategy: Optional[QueryTransformationStrategyParam] = None
     skip_history_transform: Optional[bool] = None
     retrieval: Optional[RetrievalOverrides] = None
+    history: Optional[HistoryOverrides] = None
 
 
 class ChatBatchRequest(BaseModel):
@@ -172,6 +200,7 @@ class ChatBatchRequest(BaseModel):
     query_transformation_strategy: Optional[QueryTransformationStrategyParam] = None
     skip_history_transform: Optional[bool] = None
     retrieval: Optional[RetrievalOverrides] = None
+    history: Optional[HistoryOverrides] = None
 
 
 class ChatResponse(BaseModel):
@@ -202,6 +231,7 @@ class ChatRequest(BaseModel):
     query_transformation_strategy: Optional[QueryTransformationStrategyParam] = None
     skip_history_transform: Optional[bool] = None
     retrieval: Optional[RetrievalOverrides] = None
+    history: Optional[HistoryOverrides] = None
 
 
 def _resolve_debug_retrieval(*, query_param: bool, request_field: bool) -> bool:
@@ -241,6 +271,7 @@ async def chat(
             request_field=payload.debug_retrieval,
         ),
         retrieval_fields=retrieval_fields_from_model(payload),
+        history_fields=history_fields_from_model(payload),
     )
 
 
@@ -304,6 +335,7 @@ async def chat_stream(
                 request_field=payload.debug_retrieval,
             ),
             retrieval_fields=retrieval_fields_from_model(payload),
+            history_fields=history_fields_from_model(payload),
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -327,6 +359,7 @@ async def chat_batch(
 
     try:
         batch_fields = retrieval_fields_from_model(payload)
+        batch_history = history_fields_from_model(payload)
         raw_queries = []
         for q in payload.queries:
             q_dict = q.model_dump(mode="json")
@@ -335,6 +368,10 @@ async def chat_batch(
             q_dict["retrieval_fields"] = merge_retrieval_field_layers(
                 retrieval_fields_from_model(q),
                 batch_fields,
+            )
+            q_dict["history_fields"] = merge_history_fields(
+                history_fields_from_model(q),
+                batch_history,
             )
             raw_queries.append(q_dict)
 

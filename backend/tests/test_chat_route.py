@@ -47,6 +47,7 @@ def test_chat_route_delegates_to_chat_service():
         scope="session",
         debug_retrieval=False,
         retrieval_fields={},
+        history_fields={},
     )
 
 def test_chat_batch_route_delegates_to_chat_service():

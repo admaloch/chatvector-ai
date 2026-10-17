@@ -519,7 +519,7 @@ async def test_stream_history_loaded_and_bounded_before_transform():
     full_history = [{"role": "user", "content": f"msg{i}"} for i in range(10)]
     captured: dict = {}
 
-    async def fake_transform(question: str, history=None) -> QueryTransformResult:
+    async def fake_transform(question: str, history=None, **kwargs) -> QueryTransformResult:
         captured["history"] = history
         return _mock_transform_result(question)
 
@@ -880,7 +880,7 @@ async def test_history_loaded_before_transform_query_for_single_chat():
 
     captured: dict = {}
 
-    async def fake_transform(question: str, history=None) -> QueryTransformResult:
+    async def fake_transform(question: str, history=None, **kwargs) -> QueryTransformResult:
         captured["history"] = history
         return _mock_transform_result(question)
 
@@ -912,7 +912,7 @@ async def test_history_bounded_to_window_for_single_chat():
 
     captured: dict = {}
 
-    async def fake_transform(question: str, history=None) -> QueryTransformResult:
+    async def fake_transform(question: str, history=None, **kwargs) -> QueryTransformResult:
         captured["history"] = history
         return _mock_transform_result(question)
 
@@ -941,7 +941,7 @@ async def test_no_history_passed_to_transform_when_no_session_id():
     """Without a session_id, transform_query must receive no history (one-shot behavior)."""
     captured: dict = {}
 
-    async def fake_transform(question: str, history=None) -> QueryTransformResult:
+    async def fake_transform(question: str, history=None, **kwargs) -> QueryTransformResult:
         captured["history"] = history
         return _mock_transform_result(question)
 
@@ -1014,7 +1014,7 @@ async def test_batch_history_bounded_to_window():
 
     captured_per_question: dict[str, list | None] = {}
 
-    async def fake_transform(question: str, history=None) -> QueryTransformResult:
+    async def fake_transform(question: str, history=None, **kwargs) -> QueryTransformResult:
         captured_per_question[question] = history
         return _mock_transform_result(question)
 
@@ -1046,7 +1046,7 @@ async def test_batch_no_history_for_queries_without_session_id():
     """Batch queries without session_id must receive None history for transformation."""
     captured: dict[str, list | None] = {}
 
-    async def fake_transform(question: str, history=None) -> QueryTransformResult:
+    async def fake_transform(question: str, history=None, **kwargs) -> QueryTransformResult:
         captured[question] = history
         return _mock_transform_result(question)
 

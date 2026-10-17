@@ -20,6 +20,8 @@ class EvalQuery:
     relevant_doc_ids: list[str] = field(default_factory=list)
     relevant_chunks: list[tuple[str, int]] = field(default_factory=list)
     metadata_filter: dict | None = None  # reserved, unused by this issue
+    simulate_session: bool = False
+    session_history: list[dict] = field(default_factory=list)
 
     def relevant_keys(self) -> set[str | tuple[str, int]]:
         keys: set[str | tuple[str, int]] = set(self.relevant_doc_ids)
@@ -57,6 +59,8 @@ def load_dataset(path: str | Path) -> EvalDataset:
                 relevant_doc_ids=relevant_doc_ids,
                 relevant_chunks=relevant_chunks,
                 metadata_filter=row.get("metadata_filter"),
+                simulate_session=bool(row.get("simulate_session", False)),
+                session_history=list(row.get("session_history") or []),
             )
         )
 

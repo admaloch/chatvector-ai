@@ -163,6 +163,13 @@ class Settings:
     )
     MAX_SESSION_HISTORY_MESSAGES: int = max(1, int(os.getenv("MAX_SESSION_HISTORY_MESSAGES", "20")))
     QUERY_TRANSFORMATION_HISTORY_WINDOW: int = max(1, int(os.getenv("QUERY_TRANSFORMATION_HISTORY_WINDOW", "6")))
+    # Phase 4 default: gated standalone resolution runs even when query
+    # transformation strategies are off. Set false to restore Phase 3 coupling
+    # (resolve only when QUERY_TRANSFORMATION_ENABLED is true, and then always).
+    HISTORY_AWARE_RETRIEVAL_DEFAULT: bool = os.getenv(
+        "HISTORY_AWARE_RETRIEVAL_DEFAULT", "true"
+    ).lower() in ("1", "true", "yes")
+    GENERATION_HISTORY_WINDOW: int = max(0, int(os.getenv("GENERATION_HISTORY_WINDOW", "10")))
     SQLALCHEMY_POOL_SIZE: int = max(1, int(os.getenv("SQLALCHEMY_POOL_SIZE", "5")))
     SQLALCHEMY_MAX_OVERFLOW: int = max(0, int(os.getenv("SQLALCHEMY_MAX_OVERFLOW", "10")))
     SQLALCHEMY_POOL_TIMEOUT_SEC: int = max(1, int(os.getenv("SQLALCHEMY_POOL_TIMEOUT_SEC", "30")))
@@ -278,6 +285,16 @@ if config.QUERY_TRANSFORMATION_HISTORY_WINDOW > config.MAX_SESSION_HISTORY_MESSA
         "The effective window will be capped at %d messages loaded from the session. "
         "Lower QUERY_TRANSFORMATION_HISTORY_WINDOW or raise MAX_SESSION_HISTORY_MESSAGES.",
         config.QUERY_TRANSFORMATION_HISTORY_WINDOW,
+        config.MAX_SESSION_HISTORY_MESSAGES,
+        config.MAX_SESSION_HISTORY_MESSAGES,
+    )
+
+if config.GENERATION_HISTORY_WINDOW > config.MAX_SESSION_HISTORY_MESSAGES:
+    logger.warning(
+        "GENERATION_HISTORY_WINDOW=%d exceeds MAX_SESSION_HISTORY_MESSAGES=%d. "
+        "The effective window will be capped at %d messages loaded from the session. "
+        "Lower GENERATION_HISTORY_WINDOW or raise MAX_SESSION_HISTORY_MESSAGES.",
+        config.GENERATION_HISTORY_WINDOW,
         config.MAX_SESSION_HISTORY_MESSAGES,
         config.MAX_SESSION_HISTORY_MESSAGES,
     )
