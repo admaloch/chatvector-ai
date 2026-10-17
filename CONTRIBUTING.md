@@ -113,3 +113,14 @@ This document focuses on contribution rules and expectations.
 3. Verify existing functionality still works
 4. Check your code runs without errors
 5. Update documentation if needed
+
+---
+
+## Using AI assistants
+
+Many contributors use AI coding assistants. That is fine — treat their output as a draft you own:
+
+- Run the project test suite before opening a PR (see [DEVELOPMENT.md](DEVELOPMENT.md) for setup and commands).
+- Do not paste secrets, credentials, or private data into external tools.
+- When your work closes an issue, include `Closes #N` in the PR description when applicable.
+- Review generated changes yourself: stay within the issue scope, match project conventions, and watch for security issues.
