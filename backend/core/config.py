@@ -175,6 +175,9 @@ class Settings:
     HYBRID_RETRIEVAL_ENABLED: bool = os.getenv(
         "HYBRID_RETRIEVAL_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
+    # Optional process-local named retrieval presets (see retrieval_presets.py).
+    RETRIEVAL_PRESETS_PATH: str | None = os.getenv("RETRIEVAL_PRESETS_PATH") or None
+    RETRIEVAL_PRESETS: str | None = os.getenv("RETRIEVAL_PRESETS") or None
     CHAT_BATCH_MAX_ITEMS: int = max(1, int(os.getenv("CHAT_BATCH_MAX_ITEMS", "20")))
     CHAT_MAX_DOC_IDS_PER_QUERY: int = max(1, int(os.getenv("CHAT_MAX_DOC_IDS_PER_QUERY", "10")))
     CHAT_BATCH_LLM_CONCURRENCY: int = max(

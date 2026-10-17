@@ -1,0 +1,7 @@
+{
+  "eval_hybrid": {
+    "hybrid_enabled": true,
+    "reranking_enabled": true,
+    "reranker_provider": "similarity"
+  }
+}

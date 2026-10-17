@@ -35,6 +35,11 @@ from core.provider_validation import (
     validate_provider_configuration_from_env,
 )
 from services.queue_service import ingestion_queue
+from services.retrieval_presets import (
+    RetrievalPresetNotFoundError,
+    RetrievalPresetsLoadError,
+    load_retrieval_presets,
+)
 
 import logging
 
@@ -108,6 +113,11 @@ async def lifespan(app: FastAPI):
             config.LLM_PROVIDER,
             config.EMBEDDING_PROVIDER,
         )
+        try:
+            load_retrieval_presets()
+        except RetrievalPresetsLoadError as exc:
+            logger.error("%s Startup aborted.", exc)
+            raise RuntimeError(str(exc)) from exc
 
     try:
         applied_migrations = await _read_migration_ledger_with_retry()
@@ -243,6 +253,26 @@ async def request_validation_exception_handler(
 
 
 app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
+
+
+async def retrieval_preset_not_found_handler(
+    _request: Request, exc: RetrievalPresetNotFoundError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": {
+                "code": "preset_not_found",
+                "message": str(exc),
+                "preset": exc.preset,
+            }
+        },
+    )
+
+
+app.add_exception_handler(
+    RetrievalPresetNotFoundError, retrieval_preset_not_found_handler
+)
 
 
 @app.exception_handler(Exception)

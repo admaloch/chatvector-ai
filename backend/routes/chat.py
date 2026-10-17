@@ -72,6 +72,11 @@ class RetrievalOverrides(BaseModel):
     query_transformation_strategy: Optional[QueryTransformationStrategyParam] = None
     skip_history_transform: Optional[bool] = None
     metadata_filter: MetadataFilterParam = None
+    preset: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        description="Named retrieval preset loaded at process startup.",
+    )
 
 
 class HistoryOverrides(BaseModel):
@@ -112,6 +117,11 @@ def retrieval_fields_from_model(model: BaseModel) -> dict:
         for name in _RETRIEVAL_FIELD_NAMES:
             if name in retrieval_model.model_fields_set and getattr(retrieval_model, name) is not None:
                 nested[name] = getattr(retrieval_model, name)
+        if (
+            "preset" in retrieval_model.model_fields_set
+            and getattr(retrieval_model, "preset", None) is not None
+        ):
+            nested["preset"] = getattr(retrieval_model, "preset")
         if nested:
             fields["retrieval"] = nested
     return fields

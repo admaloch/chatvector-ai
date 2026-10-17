@@ -17,6 +17,7 @@ from services.retrieval_config import (
     resolve_retrieval_config,
     transformation_is_request_scoped,
 )
+from services.retrieval_presets import extract_preset_name, lookup_retrieval_preset
 from services.retrieval_service import (
     filter_doc_ids_for_tenant,
     parse_retrieval_scope,
@@ -295,6 +296,7 @@ class RetrievalResult:
     def to_debug_dict(self) -> dict:
         payload = self.transform_result.to_retrieval_debug()
         payload["effective_config"] = self.effective_config.to_debug_dict()
+        payload["resolved_preset"] = self.effective_config.resolved_preset
         if self.reranker_debug is not None:
             payload["reranker"] = dict(self.reranker_debug)
         payload["effective_retrieval_query"] = self.primary_query
@@ -314,7 +316,13 @@ def _resolve_effective_retrieval(
             fields["scope"] = scope
     else:
         fields = retrieval_fields
-    return resolve_retrieval_config(fields)
+    preset_name = extract_preset_name(fields)
+    preset_fields = lookup_retrieval_preset(preset_name) if preset_name else None
+    return resolve_retrieval_config(
+        fields,
+        preset_fields=preset_fields,
+        resolved_preset=preset_name,
+    )
 
 
 def _apply_compare_history_policy(
@@ -330,9 +338,10 @@ def _apply_compare_history_policy(
 
 def _rerank_overrides(effective: EffectiveRetrievalConfig) -> dict:
     overrides: dict = {}
-    if effective.sources.get("reranking_enabled") == "request":
+    request_scoped = {"request", "preset"}
+    if effective.sources.get("reranking_enabled") in request_scoped:
         overrides["reranking_enabled"] = effective.reranking_enabled
-    if effective.sources.get("reranker_provider") == "request":
+    if effective.sources.get("reranker_provider") in request_scoped:
         overrides["reranker_provider"] = effective.reranker_provider
         overrides.setdefault("reranking_enabled", effective.reranking_enabled)
     return overrides
@@ -401,7 +410,7 @@ async def retrieve_for_documents(
 
     hybrid_enabled = (
         effective_retrieval_config.hybrid_enabled
-        if effective_retrieval_config.sources.get("hybrid_enabled") == "request"
+        if effective_retrieval_config.sources.get("hybrid_enabled") in {"request", "preset"}
         else None
     )
     search_started = time.perf_counter()

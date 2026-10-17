@@ -21,6 +21,7 @@ from services.chat_service import (
 )
 from services.query_service import QueryTransformResult
 from services.retrieval_config import RetrievalProcessDefaults, resolve_retrieval_config
+from services.retrieval_presets import reset_retrieval_presets_for_tests, set_retrieval_presets_for_tests
 
 _DOC_ID = "00000000-0000-0000-0000-000000000001"
 
@@ -616,3 +617,105 @@ def test_request_body_accepts_cohere_provider_but_no_vendor_key_field():
     )
     assert effective.reranker_provider == "cohere"
     assert "sk-from-body" not in str(effective.to_debug_dict())
+
+
+@pytest.fixture
+def eval_hybrid_preset():
+    reset_retrieval_presets_for_tests()
+    set_retrieval_presets_for_tests(
+        {
+            "eval_hybrid": {
+                "hybrid_enabled": True,
+                "reranking_enabled": True,
+                "reranker_provider": "similarity",
+            }
+        }
+    )
+    yield
+    reset_retrieval_presets_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_eval_hybrid_preset_enables_hybrid_and_rerank(
+    pinned_phase3_env, passthrough_docs, eval_hybrid_preset
+):
+    vector_chunks = _baseline_chunks()
+    hybrid_chunks = [
+        _chunk("hybrid-hit", "keyword hit", index=0, score_type=SCORE_TYPE_HYBRID_RRF)
+    ]
+
+    async def fake_find(**kwargs):
+        if kwargs.get("hybrid_enabled"):
+            return hybrid_chunks
+        return vector_chunks
+
+    find_similar = AsyncMock(side_effect=fake_find)
+    embed_patch, find_patch, answer_patch = _chat_patches(find_similar)
+    with embed_patch, find_patch, answer_patch:
+        result = await answer_question_for_document(
+            question="fixed question",
+            doc_id="doc-1",
+            auth=TEST_AUTH,
+            retrieval_fields={"retrieval": {"preset": "eval_hybrid"}},
+        )
+
+    assert any(call.kwargs.get("hybrid_enabled") for call in find_similar.await_args_list)
+    assert result["sources"][0]["chunk_index"] == 0
+    assert result["sources"][0].get("rerank_order") == 1
+
+
+@pytest.mark.asyncio
+async def test_request_override_beats_eval_hybrid_preset(
+    pinned_phase3_env, passthrough_docs, eval_hybrid_preset
+):
+    find_similar = AsyncMock(return_value=_baseline_chunks())
+    embed_patch, find_patch, answer_patch = _chat_patches(find_similar)
+    with embed_patch, find_patch, answer_patch:
+        result = await answer_question_for_document(
+            question="fixed question",
+            doc_id="doc-1",
+            auth=TEST_AUTH,
+            debug_retrieval=True,
+            retrieval_fields={
+                "retrieval": {
+                    "preset": "eval_hybrid",
+                    "hybrid_enabled": False,
+                }
+            },
+        )
+
+    debug = result["retrieval_debug"]
+    assert debug["resolved_preset"] == "eval_hybrid"
+    assert debug["effective_config"]["hybrid_enabled"] == {"value": False, "source": "request"}
+    assert debug["effective_config"]["reranking_enabled"]["source"] == "preset"
+    assert not any(call.kwargs.get("hybrid_enabled") for call in find_similar.await_args_list)
+
+
+@pytest.mark.asyncio
+async def test_omitted_preset_keeps_phase3_behavior_matrix(
+    pinned_phase3_env, passthrough_docs, eval_hybrid_preset
+):
+    """Preset map is loaded but omitted on the request; behavior matches Phase 3 baseline."""
+    retrieved_ids: list[str] = []
+
+    def recording_sources(chunks):
+        retrieved_ids.extend(chunk.id for chunk in chunks)
+        return _build_sources(chunks)
+
+    find_similar = AsyncMock(return_value=_baseline_chunks())
+    embed_patch, find_patch, answer_patch = _chat_patches(find_similar)
+    with (
+        embed_patch,
+        find_patch,
+        answer_patch,
+        patch("services.chat_service._build_sources", new=recording_sources),
+    ):
+        await answer_question_for_document(
+            question="fixed question",
+            doc_id="doc-1",
+            auth=TEST_AUTH,
+            retrieval_fields={},
+        )
+
+    assert retrieved_ids == list(PHASE3_ORDER)
+    assert all("hybrid_enabled" not in call.kwargs for call in find_similar.await_args_list)
