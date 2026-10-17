@@ -16,15 +16,10 @@ jobs:
       issues: read
 
     steps:
-      - name: Move linked issues to In review
+      - name: List linked issues
+        id: linked
         uses: actions/github-script@v7
-        env:
-          PROJECT_OWNER: chatvector-ai
-          PROJECT_NUMBER: "2"
-          STATUS_FIELD_NAME: Status
-          STATUS_VALUE_NAME: In review
         with:
-          github-token: ${{ secrets.PROJECTS_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const prNumber = context.payload.pull_request.number;
@@ -47,10 +42,29 @@ jobs:
                 (node) => node.number
               );
 
+            core.setOutput("count", String(linkedIssues.length));
+            core.setOutput("issues", JSON.stringify(linkedIssues));
+
             if (linkedIssues.length === 0) {
-              core.info("No linked issues found on PR; nothing to update.");
-              return;
+              core.info(
+                "No linked issues on this PR (no Closes/Fixes keywords); skipping project board update."
+              );
             }
+
+      - name: Move linked issues to In review
+        if: steps.linked.outputs.count != '0'
+        uses: actions/github-script@v7
+        env:
+          LINKED_ISSUES: ${{ steps.linked.outputs.issues }}
+          PROJECT_OWNER: chatvector-ai
+          PROJECT_NUMBER: "2"
+          STATUS_FIELD_NAME: Status
+          STATUS_VALUE_NAME: In review
+        with:
+          github-token: ${{ secrets.PROJECTS_TOKEN }}
+          script: |
+            const linkedIssues = JSON.parse(process.env.LINKED_ISSUES);
+            const { owner, repo } = context.repo;
 
             const projectOwner = process.env.PROJECT_OWNER;
             const projectNumber = Number(process.env.PROJECT_NUMBER);
@@ -157,15 +171,10 @@ jobs:
       issues: read
 
     steps:
-      - name: Move linked issues to Done
+      - name: List linked issues
+        id: linked
         uses: actions/github-script@v7
-        env:
-          PROJECT_OWNER: chatvector-ai
-          PROJECT_NUMBER: "2"
-          STATUS_FIELD_NAME: Status
-          STATUS_VALUE_NAME: Done
         with:
-          github-token: ${{ secrets.PROJECTS_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const prNumber = context.payload.pull_request.number;
@@ -188,10 +197,29 @@ jobs:
                 (node) => node.number
               );
 
+            core.setOutput("count", String(linkedIssues.length));
+            core.setOutput("issues", JSON.stringify(linkedIssues));
+
             if (linkedIssues.length === 0) {
-              core.info("No linked issues found on PR; nothing to update.");
-              return;
+              core.info(
+                "No linked issues on this PR (no Closes/Fixes keywords); skipping project board update."
+              );
             }
+
+      - name: Move linked issues to Done
+        if: steps.linked.outputs.count != '0'
+        uses: actions/github-script@v7
+        env:
+          LINKED_ISSUES: ${{ steps.linked.outputs.issues }}
+          PROJECT_OWNER: chatvector-ai
+          PROJECT_NUMBER: "2"
+          STATUS_FIELD_NAME: Status
+          STATUS_VALUE_NAME: Done
+        with:
+          github-token: ${{ secrets.PROJECTS_TOKEN }}
+          script: |
+            const linkedIssues = JSON.parse(process.env.LINKED_ISSUES);
+            const { owner, repo } = context.repo;
 
             const projectOwner = process.env.PROJECT_OWNER;
             const projectNumber = Number(process.env.PROJECT_NUMBER);
