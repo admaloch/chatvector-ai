@@ -45,10 +45,7 @@ export class ChatsResource {
     if (request.debugRetrieval === true) {
       body.debug_retrieval = true;
     }
-    applyRequestConfigFields(body, {
-      retrieval: request.retrieval,
-      history: request.history,
-    });
+    applyRequestConfigFields(body, request.retrieval, request.history);
 
     const payload = await this.http.requestJson("POST", "/chat", {
       json: body,
@@ -74,10 +71,7 @@ export class ChatsResource {
     if (request.debugRetrieval === true) {
       body.debug_retrieval = true;
     }
-    applyRequestConfigFields(body, {
-      retrieval: request.retrieval,
-      history: request.history,
-    });
+    applyRequestConfigFields(body, request.retrieval, request.history);
 
     const payload = await this.http.requestJson("POST", "/chat/batch", {
       json: body,
@@ -112,10 +106,7 @@ export class ChatsResource {
     if (request.debugRetrieval === true) {
       body.debug_retrieval = true;
     }
-    applyRequestConfigFields(body, {
-      retrieval: request.retrieval,
-      history: request.history,
-    });
+    applyRequestConfigFields(body, request.retrieval, request.history);
 
     const response = await this.http.openStream("POST", "/chat/stream", {
       json: body,
@@ -157,10 +148,7 @@ function serializeBatchQuery(query: BatchChatQuery): Record<string, unknown> {
   }
   addOptional(payload, "session_id", query.sessionId);
   addOptional(payload, "scope", query.scope);
-  applyRequestConfigFields(payload, {
-    retrieval: query.retrieval,
-    history: query.history,
-  });
+  applyRequestConfigFields(payload, query.retrieval, query.history);
   return payload;
 }
 

@@ -67,19 +67,17 @@ export function serializeHistoryConfig(
 
 export function applyRequestConfigFields(
   body: Record<string, unknown>,
-  config: {
-    retrieval?: RetrievalConfig;
-    history?: HistoryConfig;
-  },
+  retrieval?: RetrievalConfig,
+  history?: HistoryConfig,
 ): void {
-  if (config.retrieval !== undefined) {
-    const nested = serializeRetrievalConfig(config.retrieval);
+  if (retrieval !== undefined) {
+    const nested = serializeRetrievalConfig(retrieval);
     if (nested !== undefined) {
       body.retrieval = nested;
     }
   }
-  if (config.history !== undefined) {
-    const nested = serializeHistoryConfig(config.history);
+  if (history !== undefined) {
+    const nested = serializeHistoryConfig(history);
     if (nested !== undefined) {
       body.history = nested;
     }
