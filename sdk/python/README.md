@@ -266,6 +266,35 @@ During a replacement `status` stays `completed` and `status_detail` is
 `status_detail` rather than `status` when watching progress. A replacement that
 is already running returns a `409` `ChatVectorAPIError`.
 
+## Bulk document upload
+
+Upload many files client-side with bounded concurrency (default 5). Each file
+uses the existing ``POST /upload`` / ``POST /ingest`` flow; there is no server
+batch endpoint in v1.
+
+```python
+from chatvector import ChatVectorClient
+
+with ChatVectorClient(base_url="http://localhost:8000", api_key="cv_live_...") as client:
+    summary = client.upload_many(
+        ["a.pdf", "b.pdf", "c.pdf"],
+        concurrency=3,
+        on_progress=lambda result, agg: print(result.file_path, result.success, agg.success_count),
+    )
+    print(summary.success_count, summary.failure_count)
+
+    folder_summary = client.upload_directory("./docs", pattern="*.pdf")
+```
+
+Failures are recorded per file; remaining uploads continue unless ``fail_fast=True``.
+Optional ``retry_on_rate_limit=True`` enables bounded sleeps on HTTP 429 only when
+you opt in (mutating uploads are not retried by default).
+
+The default server upload rate limit is typically **20 uploads per hour** per
+tenant. Large batches should expect **HTTP 429** (and occasional **503**
+``queue_full`` when the processing queue is saturated) rather than uninterrupted
+success.
+
 ## Batch Chat
 
 Run multiple queries in one request. Each query can target a different document.

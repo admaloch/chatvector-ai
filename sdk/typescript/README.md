@@ -287,10 +287,40 @@ The package compiles to ES2022, ships TypeScript declarations, and uses native
 Node `fetch`, `FormData`, `Blob`, `AbortController`, and filesystem APIs. It
 has no runtime dependencies.
 
+## Bulk document upload
+
+Upload many files client-side with bounded concurrency (default 5). Each file
+uses the existing `POST /upload` / `POST /ingest` flow; there is no server batch
+endpoint in v1.
+
+```ts
+const summary = await client.uploadMany(
+  ["a.pdf", "b.pdf", "c.pdf"],
+  {
+    concurrency: 3,
+    onProgress: (result, agg) =>
+      console.log(result.path, result.success, agg.successCount),
+  },
+);
+
+const folderSummary = await client.uploadDirectory("./docs", { pattern: "*.pdf" });
+```
+
+Per-file failures are returned in `summary.results`; remaining uploads continue
+unless `failFast: true`. Set `retryOnRateLimit: true` only when you want bounded
+429 backoff (mutating uploads are not retried by default).
+
+The default server upload rate limit is typically **20 uploads per hour** per
+tenant. Large batches should expect **HTTP 429** (and occasional **503**
+`queue_full` when the processing queue is full), not hundreds of uninterrupted
+uploads under default limits.
+
 ## API surface
 
 ```ts
 client.uploadDocument(input, options?);
+client.uploadMany(items, options?);
+client.uploadDirectory(directoryPath, options?);
 client.getDocumentStatus(documentId, options?);
 client.waitForReady(documentId, options?);
 
