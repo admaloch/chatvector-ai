@@ -12,7 +12,11 @@ import logging
 from pathlib import Path
 from typing import Any, Mapping
 
-from services.retrieval_config import _OVERRIDE_FIELDS
+from services.retrieval_config import (
+    InvalidRetrievalConfigError,
+    _OVERRIDE_FIELDS,
+    resolve_retrieval_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +56,12 @@ def _validate_preset_body(name: str, body: Any) -> dict[str, Any]:
             f"Preset {name!r} contains unknown field(s): {', '.join(unknown)}. "
             f"Allowed keys: {allowed}."
         )
-    return {key: body[key] for key in body if body[key] is not None}
+    cleaned = {key: body[key] for key in body if body[key] is not None}
+    try:
+        resolve_retrieval_config(cleaned)
+    except InvalidRetrievalConfigError as exc:
+        raise RetrievalPresetsLoadError(f"Preset {name!r} has invalid values: {exc}") from exc
+    return cleaned
 
 
 def _parse_presets_document(raw: Any, *, source: str) -> dict[str, dict[str, Any]]:

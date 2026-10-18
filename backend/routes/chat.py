@@ -21,7 +21,8 @@ from services.chat_service import (
 )
 from services.history_config import HISTORY_FIELD_NAMES, merge_history_fields
 from services.metadata_filter import validate_metadata_filter
-from services.retrieval_config import merge_retrieval_field_layers
+from services.retrieval_config import InvalidRetrievalConfigError, merge_retrieval_field_layers
+from services.retrieval_presets import RetrievalPresetNotFoundError
 from services.session_service import get_or_create_session, register_session_document
 from services.tenant_registry import register_tenant_document
 
@@ -433,6 +434,10 @@ async def chat_batch(
             service_results = []
 
         results = merge_batch_results(slot_results, service_indices, service_results)
+    except InvalidRetrievalConfigError:
+        raise
+    except RetrievalPresetNotFoundError:
+        raise
     except ValueError as e:
         raise HTTPException(
             status_code=422,

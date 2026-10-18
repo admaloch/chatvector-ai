@@ -36,6 +36,7 @@ from core.provider_validation import (
     validate_provider_configuration_from_env,
 )
 from services.queue_service import ingestion_queue
+from services.retrieval_config import InvalidRetrievalConfigError
 from services.retrieval_presets import (
     RetrievalPresetNotFoundError,
     RetrievalPresetsLoadError,
@@ -291,6 +292,23 @@ async def retrieval_preset_not_found_handler(
 app.add_exception_handler(
     RetrievalPresetNotFoundError, retrieval_preset_not_found_handler
 )
+
+
+async def invalid_retrieval_config_handler(
+    _request: Request, exc: InvalidRetrievalConfigError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": {
+                "code": "invalid_retrieval_config",
+                "message": str(exc),
+            }
+        },
+    )
+
+
+app.add_exception_handler(InvalidRetrievalConfigError, invalid_retrieval_config_handler)
 
 
 @app.exception_handler(Exception)
