@@ -10,7 +10,7 @@ from core.config import config
 from core.session import SessionContext
 from db import filter_document_ids_by_metadata, find_similar_chunks
 from services.context_service import build_context_from_chunks
-from services.history_config import prepare_turn_history
+from services.history_config import history_load_limit, prepare_turn_history
 from services.query_service import QueryTransformResult, transform_query
 from services.retrieval_config import (
     EffectiveRetrievalConfig,
@@ -731,7 +731,9 @@ async def answer_question_for_document(
         import db
         try:
             history = await db.get_session_history(
-                session_id=session_id, limit=config.MAX_SESSION_HISTORY_MESSAGES, tenant_id=tenant_id
+                session_id=session_id,
+                limit=history_load_limit(history_fields),
+                tenant_id=tenant_id,
             )
         except Exception as e:
             logger.error(f"Failed to load chat history for session {session_id}: {e}", exc_info=True)
@@ -860,7 +862,9 @@ async def answer_question_stream_for_document(
             import db
             try:
                 history = await db.get_session_history(
-                    session_id=session_id, limit=config.MAX_SESSION_HISTORY_MESSAGES, tenant_id=tenant_id
+                    session_id=session_id,
+                    limit=history_load_limit(history_fields),
+                    tenant_id=tenant_id,
                 )
             except Exception as e:
                 logger.error(f"Failed to load chat history for session {session_id}: {e}", exc_info=True)
@@ -1048,14 +1052,16 @@ async def answer_questions_for_documents_batch(
 
     # Pre-load session histories so each query's transformation can resolve
     # follow-up references.  One DB round-trip per unique session_id.
-    async def _load_batch_history(session_id: str | None) -> list[dict]:
+    async def _load_batch_history(
+        session_id: str | None, history_fields: dict | None
+    ) -> list[dict]:
         if not session_id:
             return []
         import db
         try:
             return await db.get_session_history(
                 session_id=session_id,
-                limit=config.MAX_SESSION_HISTORY_MESSAGES,
+                limit=history_load_limit(history_fields),
                 tenant_id=tenant_id,
             )
         except Exception as e:
@@ -1069,7 +1075,10 @@ async def answer_questions_for_documents_batch(
 
     per_query_histories: list[list[dict]] = list(
         await asyncio.gather(
-            *[_load_batch_history(q.get("session_id")) for q in normalized_queries]
+            *[
+                _load_batch_history(q.get("session_id"), q.get("history_fields"))
+                for q in normalized_queries
+            ]
         )
     )
     history_plans = [

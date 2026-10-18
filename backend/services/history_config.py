@@ -354,6 +354,34 @@ def prepare_turn_history(
     )
 
 
+def history_load_limit(
+    request_fields: Mapping[str, Any] | None = None,
+    *,
+    process_env: HistoryProcessDefaults | None = None,
+    session_load_floor: int | None = None,
+) -> int:
+    """How many session messages to load so requested windows can take effect.
+
+    Requested windows are honored up to ``MAX_HISTORY_WINDOW`` (100).
+    ``MAX_SESSION_HISTORY_MESSAGES`` remains the default floor when windows
+    are smaller, so omitted-history behavior stays the same.
+    """
+    from core.config import config
+
+    effective = resolve_history_config(request_fields, process_env)
+    floor = (
+        int(config.MAX_SESSION_HISTORY_MESSAGES)
+        if session_load_floor is None
+        else int(session_load_floor)
+    )
+    needed = max(
+        floor,
+        effective.retrieval_history_window,
+        effective.generation_history_window,
+    )
+    return min(MAX_HISTORY_WINDOW, max(0, needed))
+
+
 def merge_history_fields(*layers: Mapping[str, Any]) -> dict[str, Any]:
     """Merge history request layers. Earlier layers outrank later layers."""
     merged: dict[str, Any] = {}

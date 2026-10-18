@@ -428,25 +428,8 @@ _validate_webhook_settings(config)
 _validate_artifact_storage(config)
 _validate_multi_api_instance(config)
 
-if config.QUERY_TRANSFORMATION_HISTORY_WINDOW > config.MAX_SESSION_HISTORY_MESSAGES:
-    logger.warning(
-        "QUERY_TRANSFORMATION_HISTORY_WINDOW=%d exceeds MAX_SESSION_HISTORY_MESSAGES=%d. "
-        "The effective window will be capped at %d messages loaded from the session. "
-        "Lower QUERY_TRANSFORMATION_HISTORY_WINDOW or raise MAX_SESSION_HISTORY_MESSAGES.",
-        config.QUERY_TRANSFORMATION_HISTORY_WINDOW,
-        config.MAX_SESSION_HISTORY_MESSAGES,
-        config.MAX_SESSION_HISTORY_MESSAGES,
-    )
-
-if config.GENERATION_HISTORY_WINDOW > config.MAX_SESSION_HISTORY_MESSAGES:
-    logger.warning(
-        "GENERATION_HISTORY_WINDOW=%d exceeds MAX_SESSION_HISTORY_MESSAGES=%d. "
-        "The effective window will be capped at %d messages loaded from the session. "
-        "Lower GENERATION_HISTORY_WINDOW or raise MAX_SESSION_HISTORY_MESSAGES.",
-        config.GENERATION_HISTORY_WINDOW,
-        config.MAX_SESSION_HISTORY_MESSAGES,
-        config.MAX_SESSION_HISTORY_MESSAGES,
-    )
+# Requested history windows (0–100) are loaded up to history_config.MAX_HISTORY_WINDOW.
+# MAX_SESSION_HISTORY_MESSAGES is the default load floor, not a silent request ceiling.
 
 
 def _validate_cors_origins(origins: list[str]) -> None:

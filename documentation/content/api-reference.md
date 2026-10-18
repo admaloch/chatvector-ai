@@ -163,8 +163,8 @@ The same three endpoints accept an optional `history` object. It does not enable
 
 | Field | Meaning |
 |-------|---------|
-| `retrieval_history_window` | Recent messages used to decide and run standalone resolution. Integer 0–100. Default `QUERY_TRANSFORMATION_HISTORY_WINDOW` (6). |
-| `generation_history_window` | Recent messages injected into the answer context. Integer 0–100. Default `GENERATION_HISTORY_WINDOW` (10). |
+| `retrieval_history_window` | Recent messages used to decide and run standalone resolution. Integer 0–100. Default `QUERY_TRANSFORMATION_HISTORY_WINDOW` (6). Honored up to the system cap of 100; values above 100 are rejected. |
+| `generation_history_window` | Recent messages injected into the answer context. Integer 0–100. Default `GENERATION_HISTORY_WINDOW` (10). Honored up to the system cap of 100; values above 100 are rejected. |
 | `history_aware_retrieval` | When `true`, run the need-resolution gate. When explicitly `false`, never resolve history for that request. Default `HISTORY_AWARE_RETRIEVAL_DEFAULT` (true). |
 | `max_generation_history_chars` | Optional cap on generation-history characters, applied before `MAX_CONTEXT_CHARS` drops chunks. |
 

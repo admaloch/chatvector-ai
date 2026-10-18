@@ -5,7 +5,9 @@ import pytest
 from services.history_config import (
     HistoryProcessDefaults,
     InvalidHistoryConfigError,
+    MAX_HISTORY_WINDOW,
     build_resolution_policy,
+    history_load_limit,
     merge_history_fields,
     prepare_turn_history,
     resolve_history_config,
@@ -153,6 +155,26 @@ def test_prepare_turn_history_splits_retrieval_and_generation_windows():
     assert plan.observation.retrieval_messages_used == 2
     assert plan.observation.generation_messages_used == 4
     assert plan.observation.retrieval_messages_dropped == 6
+
+
+def test_history_load_limit_honors_requested_windows_up_to_cap():
+    env = _env()
+    assert history_load_limit(None, process_env=env, session_load_floor=20) == 20
+    assert history_load_limit(
+        {"retrieval_history_window": 50},
+        process_env=env,
+        session_load_floor=20,
+    ) == 50
+    assert history_load_limit(
+        {"generation_history_window": 100},
+        process_env=env,
+        session_load_floor=20,
+    ) == MAX_HISTORY_WINDOW
+    assert history_load_limit(
+        {"retrieval_history_window": 0, "generation_history_window": 0},
+        process_env=env,
+        session_load_floor=20,
+    ) == 20
 
 
 def test_compare_skip_clears_transform_and_generation_history():

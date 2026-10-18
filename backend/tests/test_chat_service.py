@@ -1028,6 +1028,28 @@ async def test_history_session_isolation_single_chat():
 
 
 @pytest.mark.asyncio
+async def test_requested_history_window_is_loaded_not_silently_capped():
+    full_history = [{"role": "user", "content": f"m{i}"} for i in range(40)]
+    with (
+        patch("services.chat_service.get_embeddings", new=AsyncMock(return_value=[[0.1]])),
+        patch("services.chat_service.find_similar_chunks", new=AsyncMock(return_value=[])),
+        patch("services.chat_service.build_context_from_chunks", return_value="ctx"),
+        patch("services.chat_service.generate_answer", new=AsyncMock(return_value=("ans", 0, "m"))),
+        patch("db.get_session_history", new=AsyncMock(return_value=full_history)) as mock_hist,
+        patch("db.store_chat_turn", new=AsyncMock()),
+    ):
+        await answer_question_for_document(
+            question="Q",
+            doc_id="doc-1",
+            session_id="session-wide",
+            auth=TEST_AUTH,
+            history_fields={"retrieval_history_window": 40, "generation_history_window": 30},
+        )
+
+    assert mock_hist.await_args.kwargs["limit"] == 40
+
+
+@pytest.mark.asyncio
 async def test_history_tenant_isolation_single_chat():
     """get_session_history must be called with the tenant_id from the AuthContext."""
     with (
