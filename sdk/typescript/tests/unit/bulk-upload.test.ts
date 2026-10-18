@@ -1,4 +1,4 @@
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -90,6 +90,34 @@ describe("uploadDirectory", () => {
     await writeFile(join(root, "inside.txt"), "ok");
     await symlink(outside, join(root, "escape.txt"));
     await expect(collectDirectoryUploadPaths(root)).rejects.toThrow(/outside directory root/);
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { force: true });
+  });
+
+  it("allows a symlink that stays inside the original upload root", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cv-sibling-"));
+    await mkdir(join(root, "a"));
+    await mkdir(join(root, "b"));
+    const target = join(root, "b", "file.txt");
+    await writeFile(target, "ok");
+    await symlink(target, join(root, "a", "sibling.txt"));
+
+    const paths = await collectDirectoryUploadPaths(root);
+
+    expect(paths).toContain(await realpath(target));
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("rejects a nested symlink that escapes the original upload root", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cv-nested-escape-"));
+    const outside = join(tmpdir(), `cv-outside-nested-${Date.now()}.txt`);
+    await mkdir(join(root, "nested"));
+    await writeFile(outside, "secret");
+    await symlink(outside, join(root, "nested", "escape.txt"));
+
+    await expect(collectDirectoryUploadPaths(root)).rejects.toThrow(
+      /outside directory root/,
+    );
     await rm(root, { recursive: true, force: true });
     await rm(outside, { force: true });
   });

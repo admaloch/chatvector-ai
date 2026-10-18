@@ -25,6 +25,7 @@ function matchesPattern(fileName: string, pattern: string): boolean {
 
 async function walkDirectory(
   directory: string,
+  root: string,
   pattern: string,
   recursive: boolean,
   matches: string[],
@@ -34,7 +35,7 @@ async function walkDirectory(
     const fullPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
       if (recursive) {
-        await walkDirectory(fullPath, pattern, recursive, matches);
+        await walkDirectory(fullPath, root, pattern, recursive, matches);
       }
       continue;
     }
@@ -44,7 +45,7 @@ async function walkDirectory(
     const stat = await lstat(fullPath);
     if (stat.isSymbolicLink()) {
       const resolved = await realpath(fullPath);
-      await assertPathUnderRoot(directory, resolved);
+      await assertPathUnderRoot(root, resolved);
       matches.push(resolved);
       continue;
     }
@@ -52,7 +53,7 @@ async function walkDirectory(
       continue;
     }
     const resolved = await realpath(fullPath);
-    await assertPathUnderRoot(directory, resolved);
+    await assertPathUnderRoot(root, resolved);
     matches.push(resolved);
   }
 }
@@ -66,13 +67,18 @@ export async function collectDirectoryUploadPaths(
   if (directoryPath.split(path.sep).includes("..")) {
     throw new Error("directoryPath must not contain '..' path segments.");
   }
-  const resolvedDirectory = path.resolve(directoryPath);
+  let resolvedDirectory: string;
+  try {
+    resolvedDirectory = await realpath(path.resolve(directoryPath));
+  } catch {
+    throw new Error(`Upload directory was not found: ${directoryPath}`);
+  }
   const directoryStat = await lstat(resolvedDirectory).catch(() => undefined);
   if (directoryStat === undefined || !directoryStat.isDirectory()) {
     throw new Error(`Upload directory was not found: ${directoryPath}`);
   }
 
   const matches: string[] = [];
-  await walkDirectory(resolvedDirectory, pattern, recursive, matches);
+  await walkDirectory(resolvedDirectory, resolvedDirectory, pattern, recursive, matches);
   return matches.sort();
 }
