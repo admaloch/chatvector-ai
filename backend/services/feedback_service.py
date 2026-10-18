@@ -36,18 +36,15 @@ async def create_feedback(
     if feedback_type == "answer":
         if message_id is None:
             raise FeedbackValidationError("message_id_required")
-        await _validate_message(message_id, session_id=session_id, tenant_id=tenant_id)
     elif feedback_type in DOC_LINKED_TYPES:
-        if message_id is not None:
-            await _validate_message(message_id, session_id=session_id, tenant_id=tenant_id)
-        elif document_id is None:
+        if message_id is None and document_id is None:
             raise FeedbackValidationError("document_link_required")
-        else:
-            await _validate_document(document_id, tenant_id=tenant_id)
     else:
         raise FeedbackValidationError("invalid_feedback_type")
 
-    if document_id is not None and message_id is None:
+    if message_id is not None:
+        await _validate_message(message_id, session_id=session_id, tenant_id=tenant_id)
+    if document_id is not None:
         await _validate_document(document_id, tenant_id=tenant_id)
 
     return await db.create_retrieval_feedback(

@@ -243,3 +243,181 @@ async def test_citation_without_message_id_requires_document():
 
     reset_session_factory()
     await svc.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_both_ids_validate_document_before_store():
+    """A valid message_id must not skip document_id checks or persistence."""
+    from services.feedback_service import FeedbackValidationError, create_feedback
+
+    message_id = uuid.UUID("00000000-0000-0000-0000-000000000011")
+    document_id = uuid.UUID("00000000-0000-0000-0000-000000000022")
+    session = {"id": "sess-1"}
+    message = {"session_id": "sess-1"}
+    stored = {
+        "id": "fb-both",
+        "type": "citation",
+        "rating": 1,
+        "comment": None,
+        "session_id": "sess-1",
+        "message_id": str(message_id),
+        "document_id": str(document_id),
+        "chunk_index": 0,
+        "created_at": "2026-01-01T00:00:00",
+    }
+
+    with (
+        patch(
+            "services.feedback_service.session_service.get_session",
+            new=AsyncMock(return_value=session),
+        ),
+        patch(
+            "services.feedback_service.db.get_chat_message",
+            new=AsyncMock(return_value=message),
+        ) as mock_message,
+        patch(
+            "services.feedback_service.db.get_document",
+            new=AsyncMock(return_value={"id": str(document_id)}),
+        ) as mock_document,
+        patch(
+            "services.feedback_service.db.create_retrieval_feedback",
+            new=AsyncMock(return_value=stored),
+        ) as mock_create,
+    ):
+        created = await create_feedback(
+            tenant_id="tenant-1",
+            session_id="sess-1",
+            feedback_type="citation",
+            rating=1,
+            comment=None,
+            message_id=message_id,
+            document_id=document_id,
+            chunk_index=0,
+        )
+
+    assert created["document_id"] == str(document_id)
+    mock_message.assert_awaited_once()
+    mock_document.assert_awaited_once_with(str(document_id), tenant_id="tenant-1")
+    mock_create.assert_awaited_once()
+
+    with (
+        patch(
+            "services.feedback_service.session_service.get_session",
+            new=AsyncMock(return_value=session),
+        ),
+        patch(
+            "services.feedback_service.db.get_chat_message",
+            new=AsyncMock(return_value=message),
+        ),
+        patch(
+            "services.feedback_service.db.get_document",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "services.feedback_service.db.create_retrieval_feedback",
+            new=AsyncMock(),
+        ) as mock_create_rejected,
+    ):
+        with pytest.raises(FeedbackValidationError, match="document_not_found"):
+            await create_feedback(
+                tenant_id="tenant-1",
+                session_id="sess-1",
+                feedback_type="retrieval",
+                rating=-1,
+                comment=None,
+                message_id=message_id,
+                document_id=document_id,
+                chunk_index=None,
+            )
+    mock_create_rejected.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_same_tenant_message_and_document_feedback_persists():
+    svc = await _fresh_service()
+    if not await _feedback_table_exists(svc):
+        pytest.skip("retrieval_feedback table not migrated")
+
+    from services.api_key_service import create_tenant, reset_session_factory
+    from services.feedback_service import create_feedback, list_feedback
+
+    tenant_id = f"tenant-fb-{uuid.uuid4()}"
+    session_id = f"session-fb-{uuid.uuid4()}"
+    await create_tenant("Feedback both ids", tenant_id=tenant_id)
+    await svc.create_session_record(session_id, tenant_id)
+    _, assistant_id = await svc.store_chat_turn(
+        session_id, "question?", "answer.", tenant_id=tenant_id
+    )
+    doc_id = await svc.create_document("feedback.pdf", tenant_id=tenant_id)
+
+    created = await create_feedback(
+        tenant_id=tenant_id,
+        session_id=session_id,
+        feedback_type="citation",
+        rating=1,
+        comment="both ids",
+        message_id=uuid.UUID(assistant_id),
+        document_id=uuid.UUID(doc_id),
+        chunk_index=1,
+    )
+    assert created["message_id"] == assistant_id
+    assert created["document_id"] == doc_id
+
+    listed = await list_feedback(tenant_id=tenant_id, session_id=session_id)
+    assert any(item["id"] == created["id"] and item["document_id"] == doc_id for item in listed)
+
+    reset_session_factory()
+    await svc.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_cross_tenant_document_not_stored_when_message_is_valid():
+    """Cross-tenant and missing document_id share one non-oracular 404 code."""
+    svc = await _fresh_service()
+    if not await _feedback_table_exists(svc):
+        pytest.skip("retrieval_feedback table not migrated")
+
+    from services.api_key_service import create_tenant, reset_session_factory
+    from services.feedback_service import FeedbackValidationError, create_feedback, list_feedback
+
+    tenant_a = f"tenant-a-{uuid.uuid4()}"
+    tenant_b = f"tenant-b-{uuid.uuid4()}"
+    session_id = f"session-fb-{uuid.uuid4()}"
+    await create_tenant("Feedback owner", tenant_id=tenant_a)
+    await create_tenant("Feedback other", tenant_id=tenant_b)
+    await svc.create_session_record(session_id, tenant_a)
+    _, assistant_id = await svc.store_chat_turn(
+        session_id, "question?", "answer.", tenant_id=tenant_a
+    )
+    foreign_doc = await svc.create_document("other.pdf", tenant_id=tenant_b)
+    missing_doc = uuid.uuid4()
+
+    with pytest.raises(FeedbackValidationError, match="document_not_found") as cross_tenant:
+        await create_feedback(
+            tenant_id=tenant_a,
+            session_id=session_id,
+            feedback_type="citation",
+            rating=-1,
+            comment=None,
+            message_id=uuid.UUID(assistant_id),
+            document_id=uuid.UUID(foreign_doc),
+            chunk_index=0,
+        )
+    with pytest.raises(FeedbackValidationError, match="document_not_found") as missing:
+        await create_feedback(
+            tenant_id=tenant_a,
+            session_id=session_id,
+            feedback_type="citation",
+            rating=-1,
+            comment=None,
+            message_id=uuid.UUID(assistant_id),
+            document_id=missing_doc,
+            chunk_index=0,
+        )
+
+    assert str(cross_tenant.value) == str(missing.value) == "document_not_found"
+    listed = await list_feedback(tenant_id=tenant_a, session_id=session_id)
+    assert listed == []
+
+    reset_session_factory()
+    await svc.engine.dispose()
