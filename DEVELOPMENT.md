@@ -1588,6 +1588,14 @@ error messages.
 > dimensions. Re-embed documents or use a fresh database after switching
 > embedding providers.
 
+Optional embedding cache (off by default). See `backend/.env.example` for
+`ENABLE_EMBEDDING_CACHE`, `EMBEDDING_CACHE_KEY_PREFIX`,
+`EMBEDDING_CACHE_TTL_SECONDS`, `EMBEDDING_CACHE_INCLUDE_TENANT`, and
+`EMBEDDING_CACHE_REDIS_TIMEOUT_SEC`. Cache Redis reads use that short timeout
+and fail open; they do not use `REDIS_SOCKET_TIMEOUT_SEC`. `/status` LLM and
+embedding probes use `LLM_HEALTH_CHECK_TIMEOUT_SEC` and
+`EMBEDDING_HEALTH_CHECK_TIMEOUT_SEC` (default 10 seconds each).
+
 ### Authentication variables
 
 | Variable | Default | Description |
