@@ -108,6 +108,11 @@ ALLOWED_UPLOAD_TYPES = {
     *HTML_CONTENT_TYPES,
     *DOCX_CONTENT_TYPES,
 }
+
+
+def _base_upload_mime(content_type: str | None) -> str:
+    """Lowercase a MIME type and drop parameters such as ``; charset=utf-8``."""
+    return (content_type or "").split(";", 1)[0].strip().lower()
 _SUPPORTED_UPLOAD_MESSAGE = (
     "Only PDF, TXT, Markdown (.md), HTML (.html/.htm), and DOCX (.docx) files are supported."
 )
@@ -782,8 +787,9 @@ class IngestionPipeline:
 
     def validate_file(self, file: UploadFile, file_bytes: bytes) -> None:
         stage = "validation"
+        mime_type = _base_upload_mime(file.content_type)
 
-        if file.content_type not in ALLOWED_UPLOAD_TYPES:
+        if mime_type not in ALLOWED_UPLOAD_TYPES:
             raise UploadPipelineError(
                 status_code=400,
                 code="invalid_file_type",
@@ -861,7 +867,7 @@ class IngestionPipeline:
                 ),
             )
 
-        if file.content_type == "application/pdf" and not file_bytes.startswith(b"%PDF-"):
+        if mime_type == "application/pdf" and not file_bytes.startswith(b"%PDF-"):
             raise UploadPipelineError(
                 status_code=400,
                 code="invalid_file_content",
@@ -895,7 +901,7 @@ class IngestionPipeline:
                     message="File content does not match the declared DOCX type.",
                 )
 
-        if file.content_type == "text/plain" or markdown_mime or html_mime:
+        if mime_type == "text/plain" or markdown_mime or html_mime:
             try:
                 try:
                     file_bytes.decode("utf-8")

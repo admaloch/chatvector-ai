@@ -191,6 +191,34 @@ async def test_process_document_rejects_invalid_file_type():
     assert excinfo.value.stage == "validation"
 
 
+def test_validate_file_accepts_charset_parameters_without_loosening_allowlist():
+    pipeline = IngestionPipeline(splitter_cls=_SingleChunkSplitter)
+    accepted = (
+        ("text/plain; charset=utf-8", "notes.txt", b"hello"),
+        ("text/html; charset=utf-8", "page.html", b"<p>hello</p>"),
+        ("Text/Plain; charset=UTF-8", "notes.txt", b"hello"),
+    )
+    for content_type, filename, body in accepted:
+        upload = AsyncMock(spec=UploadFile)
+        upload.filename = filename
+        upload.content_type = content_type
+        pipeline.validate_file(upload, body)
+
+    rejected = AsyncMock(spec=UploadFile)
+    rejected.filename = "photo.png"
+    rejected.content_type = "image/png; charset=binary"
+    with pytest.raises(UploadPipelineError) as excinfo:
+        pipeline.validate_file(rejected, b"\x89PNG")
+    assert excinfo.value.code == "invalid_file_type"
+
+    mismatched = AsyncMock(spec=UploadFile)
+    mismatched.filename = "page.html"
+    mismatched.content_type = "text/plain; charset=utf-8"
+    with pytest.raises(UploadPipelineError) as mismatch_info:
+        pipeline.validate_file(mismatched, b"hello")
+    assert mismatch_info.value.code == "invalid_file_content"
+
+
 @pytest.mark.asyncio
 async def test_process_document_rejects_file_too_large(monkeypatch):
     mock_file = AsyncMock(spec=UploadFile)
