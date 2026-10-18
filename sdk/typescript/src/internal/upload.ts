@@ -37,6 +37,9 @@ export async function createUploadFormData(
     }
     form.set("replace_document_id", replaceDocumentId);
   }
+  if (input.metadata !== undefined) {
+    form.set("metadata", JSON.stringify(input.metadata));
+  }
   return form;
 }
 

@@ -52,6 +52,8 @@ export type UploadInput =
       /** Re-ingest this completed/failed document in place instead of creating a new one. */
       replaceDocumentId?: string;
       idempotencyKey?: string;
+      /** Document metadata sent as the multipart JSON ``metadata`` field. */
+      metadata?: Record<string, unknown>;
     }
   | {
       data: Uint8Array | Blob;
@@ -61,6 +63,8 @@ export type UploadInput =
       /** Re-ingest this completed/failed document in place instead of creating a new one. */
       replaceDocumentId?: string;
       idempotencyKey?: string;
+      /** Document metadata sent as the multipart JSON ``metadata`` field. */
+      metadata?: Record<string, unknown>;
     };
 
 /** Opt-in retrieval debug metadata when the backend exposes it. */

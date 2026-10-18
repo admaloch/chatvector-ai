@@ -308,4 +308,37 @@ describe("uploadDocument replaceDocumentId", () => {
     expect(error).toMatchObject({ statusCode: 409 });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+
+  it("sends optional metadata as a JSON multipart field and omits it when unset", async () => {
+    const metadata = { department: "legal", active: true };
+    const withMetadata = await createUploadFormData({
+      data: new Uint8Array([1]),
+      fileName: "guide.pdf",
+      metadata,
+    });
+    expect(withMetadata.get("metadata")).toBe(JSON.stringify(metadata));
+
+    const omitted = await createUploadFormData({
+      data: new Uint8Array([1]),
+      fileName: "guide.pdf",
+    });
+    expect(omitted.has("metadata")).toBe(false);
+  });
+
+  it("forwards per-file metadata through uploadMany", async () => {
+    const metadata = { source: "bulk" };
+    let captured: Awaited<ReturnType<typeof getMultipartFile>> | undefined;
+    const fetch = createFetchMock(async (_input, init) => {
+      captured = await getMultipartFile(init ?? {});
+      return jsonResponse(uploadAcceptedPayload, { status: 202 });
+    });
+    await makeClient(fetch).uploadMany([
+      {
+        data: new Uint8Array([1]),
+        fileName: "notes.txt",
+        metadata,
+      },
+    ]);
+    expect(captured?.form.get("metadata")).toBe(JSON.stringify(metadata));
+  });
 });

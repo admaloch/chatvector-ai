@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Sequence
 from typing import Any, Mapping
@@ -226,6 +227,30 @@ def serialize_batch_query(query: BatchChatQuery | JSONMapping) -> JSONDict:
     if isinstance(query, Mapping):
         return dict(query)
     raise TypeError("Each batch query must be a BatchChatQuery instance or a mapping.")
+
+
+def build_upload_form_data(
+    *,
+    replace_document_id: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> JSONDict | None:
+    """Build optional multipart fields for document upload.
+
+    ``metadata`` is the JSON object expected by ``POST /upload``. It is omitted
+    entirely when unset so existing uploads keep the previous form shape.
+    """
+    form: JSONDict = {}
+    if replace_document_id is not None:
+        if not replace_document_id.strip():
+            raise ValueError("replace_document_id must not be empty.")
+        form["replace_document_id"] = replace_document_id.strip()
+    if metadata is not None:
+        form["metadata"] = json.dumps(
+            dict(metadata),
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    return form or None
 
 
 def build_client_headers(api_key: str | None) -> dict[str, str]:
