@@ -86,7 +86,7 @@ async for event in client.stream_chat("Summarize this", "doc-1"):
 
 The async client mirrors the sync surface for upload, status, ``wait_for_ready``,
 chat, batch chat, sessions, and streaming chat. Document status SSE streaming
-(``iter_document_status``) is sync-only for now.
+(``iter_document_status``) is supported on the async client as well.
 
 ## Authentication
 
@@ -222,7 +222,9 @@ converted into structured SDK exceptions. Legacy `[DONE]` completion markers are
 ignored for backward compatibility.
 
 Each `sources[]` item may include `score` and `score_type` (`vector`,
-`hybrid_rrf`, or `reranked`). Scores are only comparable within the same
+`hybrid_rrf`, or `reranked`) plus component scores (`vector_score`,
+`full_text_score`, `rrf_score`, `reranker_score`, and `rerank_order`) when the
+backend sends them. Scores are only comparable within the same
 `score_type`; see `DEVELOPMENT.md` for semantics.
 
 Non-streaming `chat()` responses include `latency_ms` and `model` on the
@@ -247,6 +249,8 @@ with ChatVectorClient(base_url="http://localhost:8000", api_key="cv_live_...") a
 Each event is a typed `DocumentStatus` snapshot. Backend `error` events are
 converted into structured SDK exceptions. Stop iterating early to cancel the
 stream; the SDK closes the underlying HTTP response automatically.
+``AsyncChatVectorClient.iter_document_status`` yields the same snapshots with
+``async for``.
 
 ## Replacing a Document
 
@@ -346,8 +350,9 @@ Backoff uses bounded exponential full jitter (cap 8s) and honors numeric
 
 Mutating requests are never automatically replayed. This includes document
 uploads, chat, streaming chat, batch chat, session creation, and session
-deletion. The API has no idempotency-key contract, so replaying an ambiguous
-request could duplicate documents, sessions, or messages.
+deletion. Document upload and session creation accept an ``Idempotency-Key``;
+pass ``idempotency_key`` on those methods when a retry must replay the same
+result instead of creating a duplicate.
 
 See [DEVELOPMENT.md — Retry behavior](../../DEVELOPMENT.md#retry-behavior) for
 the full cross-surface contract shared with the backend and TypeScript SDK.
@@ -369,8 +374,3 @@ Server-side FastAPI proxy (upload → wait → session → chat):
 ## API Notes
 
 The backend currently exposes document upload at `/upload`. The SDK targets `/ingest` as the forward-facing contract and transparently falls back to `/upload` for compatibility with the current repository backend.
-
-## Current Gaps
-
-- **No per-component retrieval scores** — citations expose collapsed `score` + `score_type` only
-- **Async ingestion SSE** — sync ``iter_document_status`` is available; the async client still uses polling via ``wait_for_ready``
