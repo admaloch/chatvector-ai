@@ -82,6 +82,27 @@ class RequestConfigTests(unittest.TestCase):
         payload = RetrievalConfig(hybrid_enabled=True).to_dict()
         self.assertEqual(payload, {"hybrid_enabled": True})
         self.assertNotIn("match_count", payload)
+        self.assertNotIn("metadata_filter", payload)
+
+    def test_metadata_filter_serializes_to_backend_key_and_is_omitted_when_unset(self) -> None:
+        response = make_response(
+            200,
+            method="POST",
+            url="https://api.chatvector.test/chat",
+            json_data={"question": "Q", "chunks": 0, "answer": "A", "sources": []},
+        )
+        metadata_filter = {"department": "legal", "active": True}
+
+        with patch.object(self.client._client, "request", return_value=response) as mock_request:
+            self.client.chat(
+                "Q",
+                "doc-1",
+                retrieval=RetrievalConfig(metadata_filter=metadata_filter),
+            )
+
+        body = mock_request.call_args.kwargs["json"]
+        self.assertEqual(body["retrieval"], {"metadata_filter": metadata_filter})
+        self.assertNotIn("metadata_filter", RetrievalConfig().to_dict())
 
     def test_same_config_instance_is_not_mutated_across_calls(self) -> None:
         response = make_response(

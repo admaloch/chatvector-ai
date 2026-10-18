@@ -29,6 +29,7 @@ class RetrievalConfig:
     query_transformation_strategy: QueryTransformationStrategy | None = None
     skip_history_transform: bool | None = None
     preset: str | None = None
+    metadata_filter: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.match_count is not None:
@@ -55,6 +56,8 @@ class RetrievalConfig:
             payload["skip_history_transform"] = self.skip_history_transform
         if self.preset is not None:
             payload["preset"] = self.preset
+        if self.metadata_filter is not None:
+            payload["metadata_filter"] = dict(self.metadata_filter)
         return payload
 
 

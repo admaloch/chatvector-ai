@@ -94,6 +94,33 @@ describe("retrieval and history config", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("serializes metadataFilter to metadata_filter and omits it when unset", async () => {
+    const fetch = createFetchMock(jsonResponse(chatOkPayload));
+    const metadataFilter = { department: "legal", active: true };
+    await makeClient(fetch).chat({
+      question: "Q",
+      docId: DOCUMENT_ID,
+      retrieval: { metadataFilter },
+    });
+    expect(getJsonBody(getFetchCall(fetch).init)).toEqual({
+      question: "Q",
+      doc_id: DOCUMENT_ID,
+      retrieval: { metadata_filter: metadataFilter },
+    });
+
+    const omitted = createFetchMock(jsonResponse(chatOkPayload));
+    await makeClient(omitted).chat({
+      question: "Q",
+      docId: DOCUMENT_ID,
+      retrieval: { hybridEnabled: true },
+    });
+    expect(getJsonBody(getFetchCall(omitted).init)).toEqual({
+      question: "Q",
+      doc_id: DOCUMENT_ID,
+      retrieval: { hybrid_enabled: true },
+    });
+  });
+
   it("chat without config objects matches prior optional-field behavior", async () => {
     const fetch = createFetchMock(jsonResponse(chatOkPayload));
     await makeClient(fetch).chat({

@@ -23,6 +23,8 @@ export type RetrievalConfig = {
   skipHistoryTransform?: boolean;
   /** Reserved for Named Retrieval Configuration Presets when backend ships it. */
   preset?: string;
+  /** Document metadata filter; serialized as backend ``metadata_filter``. */
+  metadataFilter?: Record<string, unknown>;
 };
 
 /** Per-request history overrides (nested ``history`` on chat bodies). */

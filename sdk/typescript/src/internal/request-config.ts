@@ -43,6 +43,9 @@ export function serializeRetrievalConfig(
   if (config.preset !== undefined) {
     payload.preset = config.preset;
   }
+  if (config.metadataFilter !== undefined) {
+    payload.metadata_filter = config.metadataFilter;
+  }
   return Object.keys(payload).length > 0 ? payload : undefined;
 }
 
