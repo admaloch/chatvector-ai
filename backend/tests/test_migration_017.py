@@ -46,6 +46,30 @@ def test_orm_retrieval_feedback_model():
     assert table.name == "retrieval_feedback"
     assert "feedback_type" in table.columns
     assert "rating" in table.columns
+    assert list(table.c.document_id.foreign_keys) == []
+    assert list(table.c.session_id.foreign_keys) == []
+    assert table.c.message_id.foreign_keys
+
+
+def test_feedback_source_ids_stay_unconstrained_until_deletion_policy():
+    """F29 deferred: document_id and session_id are not foreign keys.
+
+    Feedback currently survives document and session deletion and keeps those
+    ids. message_id already uses ON DELETE SET NULL. CASCADE, SET NULL, and
+    RESTRICT would each change that behavior, and dangling ids would make a
+    new foreign key unsafe to apply. The tradeoff is recorded in migration 017.
+    """
+    raw = MIGRATION_PATH.read_text(encoding="utf-8")
+    sql = _executable_sql()
+    assert "F29" in raw
+    assert "document_id and session_id stay unconstrained" in raw
+    assert re.search(
+        r"message_id\s+UUID\s+REFERENCES\s+chat_messages\(id\)\s+ON\s+DELETE\s+SET\s+NULL",
+        sql,
+        re.IGNORECASE,
+    )
+    assert re.search(r"session_id\s+VARCHAR\(255\)\s+NOT\s+NULL\s*,", sql, re.IGNORECASE)
+    assert re.search(r"document_id\s+UUID\s*,", sql, re.IGNORECASE)
 
 
 @pytest.fixture

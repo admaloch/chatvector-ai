@@ -122,6 +122,13 @@ class SessionDocument(Base):
 
 
 class RetrievalFeedback(Base):
+    """Feedback rows survive document and session deletion and keep those ids.
+
+    ``message_id`` is the only foreign key (ON DELETE SET NULL in migration
+    017). ``document_id`` and ``session_id`` are intentionally unconstrained;
+    see the F29 note in ``backend/db/init/017_retrieval_feedback.sql``.
+    """
+
     __tablename__ = "retrieval_feedback"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
