@@ -830,13 +830,13 @@ async def answer_question_stream_for_document(
     logger.info(f"Starting chat stream for document {doc_id} (scope={scope or 'session'})")
     request_started = time.perf_counter()
     tenant_id = require_current_tenant(auth)
-    effective = resolve_effective_retrieval(
-        match_count=match_count,
-        scope=scope,
-        retrieval_fields=retrieval_fields,
-    )
 
     try:
+        effective = resolve_effective_retrieval(
+            match_count=match_count,
+            scope=scope,
+            retrieval_fields=retrieval_fields,
+        )
         doc_ids = await _resolve_retrieval_doc_ids(
             scope=effective.scope,
             requested_doc_ids=[doc_id],

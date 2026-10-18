@@ -1513,7 +1513,7 @@ question was transformed before embedding and search:
 - `transformed_queries` — final query list embedded and searched
 - `transformation_strategy` — active strategy (`rewrite`, `expand`, or `stepback`) when a strategy ran
 - `effective_retrieval_query` — primary retrieval string (first transformed query), used for keyword search and reranking
-- `effective_config` — resolved retrieval settings with `value` and `source` (`request` or `env`) for each field, plus the process `max_context_chars` annex
+- `effective_config` — resolved retrieval settings with `value` and `source` (`request`, `preset`, or `env`) for each field, plus the process `max_context_chars` annex
 - `reranker` — present only when reranking ran: `provider`, `model` (hosted providers), `latency_ms`, `candidates_sent`, and `fallback_reason` when the provider failed and the pre-rerank order was kept
 - `timing_ms` — transform, embed, search, rerank, context, and total milliseconds
 

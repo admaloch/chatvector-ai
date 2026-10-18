@@ -302,6 +302,25 @@ async def test_chat_stream_unknown_preset_raises_before_sse_starts():
     stream_fn.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_stream_service_unknown_preset_emits_sse_error():
+    from services.chat_service import answer_question_stream_for_document
+
+    set_retrieval_presets_for_tests({})
+    events = [
+        event
+        async for event in answer_question_stream_for_document(
+            question="hello",
+            doc_id="doc-1",
+            auth=AuthContext(tenant_id="dev"),
+            retrieval_fields={"retrieval": {"preset": "missing"}},
+        )
+    ]
+    assert len(events) == 1
+    assert events[0].startswith("event: error")
+    assert "preset_not_found" in events[0]
+
+
 def test_batch_unknown_preset_is_400_config_error():
     set_retrieval_presets_for_tests({})
     payload = {
