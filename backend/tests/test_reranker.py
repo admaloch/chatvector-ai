@@ -116,6 +116,20 @@ def test_unknown_reranker_provider_raises():
             get_reranker_provider()
 
 
+def test_invalid_reranker_provider_env_fails_at_startup(monkeypatch):
+    import importlib
+
+    import core.config as core_config
+
+    monkeypatch.setenv("RERANKER_PROVIDER", "typo-cohere")
+    with patch("dotenv.load_dotenv"):
+        with pytest.raises(ValueError, match="Invalid RERANKER_PROVIDER"):
+            importlib.reload(core_config)
+    monkeypatch.setenv("RERANKER_PROVIDER", "similarity")
+    with patch("dotenv.load_dotenv"):
+        importlib.reload(core_config)
+
+
 @pytest.mark.asyncio
 async def test_similarity_reranker_normalizes_hybrid_rrf_scale():
     """RRF-scale similarity should not let lexical overlap dominate retrieval weight."""

@@ -37,6 +37,7 @@ STALE_INGESTION_STATUSES = [
 ]
 VALID_CHUNKING_STRATEGIES = {"fixed", "paragraph", "semantic"}
 VALID_QUERY_TRANSFORMATION_STRATEGIES = {"rewrite", "expand", "stepback"}
+VALID_RERANKER_PROVIDERS = {"similarity", "cohere"}
 VALID_LLM_PROVIDERS = set(LLM_PROVIDER_NAMES)
 VALID_EMBEDDING_PROVIDERS = set(EMBEDDING_PROVIDER_NAMES)
 
@@ -79,6 +80,16 @@ def _get_embedding_provider() -> str:
         valid = ", ".join(sorted(VALID_EMBEDDING_PROVIDERS))
         raise ValueError(
             f"Invalid EMBEDDING_PROVIDER={provider!r}. Expected one of: {valid}."
+        )
+    return provider
+
+
+def _get_reranker_provider() -> str:
+    provider = os.getenv("RERANKER_PROVIDER", "similarity").strip().lower()
+    if provider not in VALID_RERANKER_PROVIDERS:
+        valid = ", ".join(sorted(VALID_RERANKER_PROVIDERS))
+        raise ValueError(
+            f"Invalid RERANKER_PROVIDER={provider!r}. Expected one of: {valid}."
         )
     return provider
 
@@ -163,7 +174,7 @@ class Settings:
         "true",
         "yes",
     )
-    RERANKER_PROVIDER: str = os.getenv("RERANKER_PROVIDER", "similarity").strip().lower()
+    RERANKER_PROVIDER: str = _get_reranker_provider()
     # Hosted reranker (Cohere). The key is process-env only, never request-supplied.
     COHERE_API_KEY: str | None = os.getenv("COHERE_API_KEY") or None
     COHERE_RERANK_MODEL: str = os.getenv("COHERE_RERANK_MODEL", "rerank-v3.5").strip()

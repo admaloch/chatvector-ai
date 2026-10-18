@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 
-from core.config import config
+from core.config import VALID_RERANKER_PROVIDERS, config
 from db.base import ChunkMatch
 from services.reranker.base import (
     RerankRequest,
@@ -20,8 +20,6 @@ from services.reranker.similarity import SimilarityRerankerProvider
 logger = logging.getLogger(__name__)
 
 _provider_cache: dict[str, RerankerProvider] = {}
-
-VALID_RERANKER_PROVIDERS = {"similarity", "cohere"}
 
 
 def _reset_reranker_provider() -> None:
