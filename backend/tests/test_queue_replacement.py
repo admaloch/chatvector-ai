@@ -173,12 +173,15 @@ async def test_replacement_requeue_on_full_queue_records_replacement_failed(monk
     pipeline.process_document_background = AsyncMock(side_effect=fail_and_fill_queue)
     update_status = AsyncMock()
     set_detail = AsyncMock()
+    notify = AsyncMock()
+    monkeypatch.setattr("core.config.config.WEBHOOK_ENABLED", True)
 
     with (
         patch("services.ingestion_pipeline.IngestionPipeline", mock_pipeline_cls),
         patch("services.queue_asyncio.db.update_document_status", new=update_status),
         patch("services.queue_asyncio.db.set_document_status_detail", new=set_detail),
         patch("services.queue_asyncio.asyncio.sleep", new=AsyncMock()),
+        patch("services.ingestion_webhook.notify_ingestion_terminal", notify),
     ):
         await service.start()
         try:
@@ -191,7 +194,9 @@ async def test_replacement_requeue_on_full_queue_records_replacement_failed(monk
     failure_calls = [c for c in set_detail.await_args_list if c.args[1] == REPLACEMENT_FAILED]
     assert len(failure_calls) == 1
     assert failure_calls[0].kwargs["error"]["stage"] == "queued"
+    assert failure_calls[0].kwargs["error"]["code"] == "queue_full"
     assert any(entry.doc_id == "doc-full" for entry in service.dlq_jobs())
+    notify.assert_awaited_once_with("doc-full", "tenant-1", outcome="failed")
 
 
 # ---------------------------------------------------------------------------

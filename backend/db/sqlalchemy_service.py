@@ -731,24 +731,36 @@ class SQLAlchemyService(DatabaseService):
             # the active chunks alone so the prior content stays retrievable, and
             # clear the in-progress marker so the document can be replaced again.
             replacement_rows = await session.execute(
-                select(Document.id).where(
+                select(Document.id, Document.status, Document.error).where(
                     Document.status_detail == REPLACEMENT_IN_PROGRESS
                 )
             )
-            replacement_ids = {str(row[0]) for row in replacement_rows}
-            if replacement_ids:
+            replacement_ids: set[str] = set()
+            restart_error = {
+                "stage": "server_restart",
+                "code": "server_restart",
+                "message": (
+                    "Server restarted while document replacement was being processed."
+                ),
+            }
+            for row in replacement_rows:
+                replacement_id = str(row[0])
+                replacement_ids.add(replacement_id)
                 await session.execute(
                     sql_update(Document)
-                    .where(Document.id.in_(replacement_ids))
+                    .where(Document.id == replacement_id)
                     .values(
                         status_detail=REPLACEMENT_FAILED,
-                        error={
-                            "stage": "server_restart",
-                            "message": "Server restarted while document replacement was being processed.",
-                        },
+                        error=_replacement_error_preserving_prior(
+                            row[1],
+                            row[2],
+                            REPLACEMENT_FAILED,
+                            restart_error,
+                        ),
                         updated_at=datetime.utcnow(),
                     )
                 )
+            if replacement_ids:
                 await session.commit()
                 logger.info(
                     f"[PostgreSQL] Reset {len(replacement_ids)} stale replacement(s) on startup"

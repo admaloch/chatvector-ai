@@ -42,7 +42,7 @@ from rq import SimpleWorker
 from rq.job import Job as RQJob
 
 from core.config import config, redis_connection_kwargs
-from db.base import REPLACEMENT_FAILED, REPLACEMENT_IN_PROGRESS
+from db.base import REPLACEMENT_IN_PROGRESS
 from utils.url_display import safe_url_display
 from services.artifact_storage import (
     ArtifactMissingError,
@@ -50,7 +50,10 @@ from services.artifact_storage import (
     get_artifact_storage,
 )
 from services.ingestion_webhook import WEBHOOK_QUEUE_NAME
-from services.ingestion_outcome import ingestion_failure_is_terminal
+from services.ingestion_outcome import (
+    ingestion_failure_is_terminal,
+    record_terminal_ingestion_failure,
+)
 from services.queue_base import (
     BaseIngestionQueue,
     DLQEntry,
@@ -281,32 +284,23 @@ async def _async_execute_job(
                         doc_id,
                         error_msg,
                     )
-                    try:
-                        if replace:
-                            await db_module.set_document_status_detail(
-                                doc_id,
-                                REPLACEMENT_FAILED,
-                                tenant_id=tenant_id,
-                                error={
-                                    "stage": "queued",
-                                    "message": error_msg,
-                                },
-                            )
-                        else:
-                            await db_module.update_document_status(
+                    if tenant_id:
+                        try:
+                            await record_terminal_ingestion_failure(
                                 doc_id=doc_id,
-                                status="failed",
                                 tenant_id=tenant_id,
                                 error={
                                     "stage": "queued",
+                                    "code": "queue_full",
                                     "message": error_msg,
                                 },
+                                replace=replace,
                             )
-                    except Exception as status_err:
-                        logger.error(
-                            "Failed to set failed status for %s: %s",
-                            doc_id, status_err,
-                        )
+                        except Exception as status_err:
+                            logger.error(
+                                "Failed to set failed status for %s: %s",
+                                doc_id, status_err,
+                            )
                     _push_dlq_entry(DLQEntry(
                         doc_id=doc_id,
                         file_name=file_name,

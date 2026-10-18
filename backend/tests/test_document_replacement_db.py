@@ -425,3 +425,21 @@ async def test_startup_reconciliation_resets_replacement_without_touching_conten
     assert payload["error"]["stage"] == "server_restart"
     assert await _retrieved_texts(svc, doc_id, tenant_id) == before
     assert await svc.begin_document_replacement(doc_id, tenant_id) == "started"
+
+
+@pytest.mark.asyncio
+async def test_startup_reset_of_failed_document_keeps_prior_error(svc, tenant_id):
+    doc_id = await svc.create_document("broken.pdf", tenant_id=tenant_id)
+    original = {"stage": "extracting", "code": "no_text_extracted", "message": "bad pdf"}
+    await svc.update_document_status(
+        doc_id, "failed", tenant_id=tenant_id, error=original
+    )
+    assert await svc.begin_document_replacement(doc_id, tenant_id) == "started"
+
+    await svc.fail_stale_documents_global(STALE_INGESTION_STATUSES)
+
+    payload = await svc.get_document_status(doc_id, tenant_id)
+    assert payload["status"] == "failed"
+    assert payload["status_detail"] == REPLACEMENT_FAILED
+    assert payload["error"]["code"] == "server_restart"
+    assert payload["error"]["prior_error"] == original

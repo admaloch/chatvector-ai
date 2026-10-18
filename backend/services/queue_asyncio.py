@@ -20,8 +20,11 @@ from typing import Optional
 
 import db
 from core.config import config
-from db.base import REPLACEMENT_FAILED, REPLACEMENT_IN_PROGRESS
-from services.ingestion_outcome import ingestion_failure_is_terminal
+from db.base import REPLACEMENT_IN_PROGRESS
+from services.ingestion_outcome import (
+    ingestion_failure_is_terminal,
+    record_terminal_ingestion_failure,
+)
 from services.queue_base import (
     BaseIngestionQueue,
     DLQEntry,
@@ -292,31 +295,22 @@ class AsyncioIngestionQueue(BaseIngestionQueue):
                         job.doc_id,
                         error_msg,
                     )
-                    try:
-                        if job.replace:
-                            await db.set_document_status_detail(
-                                job.doc_id,
-                                REPLACEMENT_FAILED,
-                                tenant_id=job.tenant_id,
-                                error={
-                                    "stage": "queued",
-                                    "message": error_msg,
-                                },
-                            )
-                        else:
-                            await db.update_document_status(
+                    if job.tenant_id:
+                        try:
+                            await record_terminal_ingestion_failure(
                                 doc_id=job.doc_id,
-                                status="failed",
                                 tenant_id=job.tenant_id,
                                 error={
                                     "stage": "queued",
+                                    "code": "queue_full",
                                     "message": error_msg,
                                 },
+                                replace=job.replace,
                             )
-                    except Exception as status_err:
-                        logger.error(
-                            f"Failed to set failed status for {job.doc_id}: {status_err}"
-                        )
+                        except Exception as status_err:
+                            logger.error(
+                                f"Failed to set failed status for {job.doc_id}: {status_err}"
+                            )
                     self._append_dlq(DLQEntry(
                         doc_id=job.doc_id,
                         file_name=job.file_name,
