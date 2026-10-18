@@ -288,3 +288,72 @@ async def test_eval_arm_new_keys_win_when_both_names_are_present(tmp_path):
     )
     assert arm.hybrid_retrieval_enabled is True
     assert arm.enable_reranking is False
+
+
+@pytest.mark.asyncio
+async def test_retrieve_for_documents_forwards_use_embedding_cache_to_embedding_layer():
+    """Eval cache bypass must reach embedding_service through the chat wrapper.
+
+    Patching ``chat_service.get_embeddings`` would hide a wrapper TypeError.
+    """
+    from services.chat_service import retrieve_for_documents
+    from services.query_service import QueryTransformResult
+    from services.retrieval_config import RetrievalProcessDefaults, resolve_retrieval_config
+
+    captured: dict = {}
+
+    async def fake_embed(texts, *, tenant_id=None, use_cache=None):
+        captured["use_cache"] = use_cache
+        captured["tenant_id"] = tenant_id
+        captured["texts"] = list(texts)
+        return [[0.1, 0.2] for _ in texts]
+
+    effective = resolve_retrieval_config({}, RetrievalProcessDefaults.from_process())
+    transform = QueryTransformResult(queries=["cache bypass query"], original_query="cache bypass query")
+
+    with (
+        patch("services.embedding_service.get_embeddings", new=fake_embed),
+        patch("services.chat_service.find_similar_chunks", new=AsyncMock(return_value=[])),
+        patch("services.chat_service.build_context_from_chunks", return_value="ctx"),
+    ):
+        await retrieve_for_documents(
+            "cache bypass query",
+            ["doc-1"],
+            "tenant-eval-test",
+            effective,
+            use_embedding_cache=False,
+            transform_result=transform,
+        )
+
+    assert captured["use_cache"] is False
+    assert captured["tenant_id"] == "tenant-eval-test"
+    assert captured["texts"] == ["cache bypass query"]
+
+
+@pytest.mark.asyncio
+async def test_eval_bypasses_embedding_cache_by_default():
+    dataset = load_dataset(FIXTURES_DIR / "basic_queries.json")
+    captured: list[bool | None] = []
+
+    async def fake_embed(texts, *, tenant_id=None, use_cache=None):
+        captured.append(use_cache)
+        return [[0.1, 0.2] for _ in texts]
+
+    arm = EffectiveRetrievalConfig(
+        label="current-config",
+        hybrid_retrieval_enabled=False,
+        enable_reranking=False,
+    )
+    assert arm.allow_embedding_cache is False
+
+    with (
+        patch("services.embedding_service.get_embeddings", new=fake_embed),
+        patch(
+            "services.chat_service.find_similar_chunks",
+            new=AsyncMock(return_value=[_chunk("doc-1", 0)]),
+        ),
+    ):
+        await run_eval(dataset, [arm], tenant_id="tenant-eval-test")
+
+    assert captured
+    assert all(flag is False for flag in captured)

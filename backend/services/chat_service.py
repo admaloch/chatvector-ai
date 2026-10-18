@@ -115,14 +115,20 @@ async def generate_answer_stream(question: str, context: str) -> AsyncGenerator[
 
 
 async def get_embeddings(
-    texts: list[str], *, tenant_id: str | None = None
+    texts: list[str],
+    *,
+    tenant_id: str | None = None,
+    use_cache: bool | None = None,
 ) -> list[list[float]]:
     """
     Lazily import batch embedding dependency to keep module import side-effect free.
+
+    ``use_cache`` is forwarded to the embedding layer so callers such as eval
+    can bypass the cache without a separate retrieval path.
     """
     from services.embedding_service import get_embeddings as _get_embeddings
 
-    return await _get_embeddings(texts, tenant_id=tenant_id)
+    return await _get_embeddings(texts, tenant_id=tenant_id, use_cache=use_cache)
 
 
 def _normalize_doc_ids(doc_ids: list[str], *, query_index: int) -> list[str]:
