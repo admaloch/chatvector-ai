@@ -223,10 +223,8 @@ async def _resolve_to_standalone(question: str, history: list[dict]) -> str:
 #
 # Unresolved references (case-insensitive, word boundaries):
 # - pronouns: it, they, them, their, theirs, he, she, him, her, his, hers, its
-# - demonstratives this/that/these/those when they are not determiners.
-#   A following content word ("that clause") is treated as a determiner and
-#   does not by itself require resolution. No follower, or a follower in
-#   _PRONOMINAL_FOLLOWERS ("that was", "that says"), does require resolution.
+# - demonstratives this/that/these/those, including determiner uses that
+#   point at prior conversation ("that clause", "this section", "those terms")
 # - elliptical patterns: "what about …", "how about …", "and the …",
 #   "and what …", "and how …", "what else …", "tell me more …",
 #   "more about …", and "how much was that"
@@ -243,17 +241,9 @@ _ANAPHORA_RE = re.compile(
     re.IGNORECASE,
 )
 _DEMONSTRATIVE_RE = re.compile(
-    r"\b(?:this|that|these|those)\b(?:\s+([A-Za-z][A-Za-z'-]*))?",
+    r"\b(?:this|that|these|those)\b",
     re.IGNORECASE,
 )
-_PRONOMINAL_FOLLOWERS = {
-    "is", "are", "was", "were", "be", "been", "being",
-    "do", "does", "did", "has", "have", "had",
-    "can", "could", "will", "would", "should", "may", "might", "must",
-    "say", "says", "said", "mean", "means", "meant",
-    "about", "of", "for", "with", "from", "to", "in", "on", "at", "by",
-    "one", "ones",
-}
 _ELLIPTICAL_RE = re.compile(
     r"(?:^(?:what about|how about|and the|and what|and how|what else|tell me more|more about)\b"
     r"|\bhow much was that\b)",
@@ -270,11 +260,7 @@ _STANDALONE_MIN_QUESTION_WORDS = 4
 
 
 def _has_unresolved_demonstrative(question: str) -> bool:
-    for match in _DEMONSTRATIVE_RE.finditer(question):
-        follower = match.group(1)
-        if follower is None or follower.casefold() in _PRONOMINAL_FOLLOWERS:
-            return True
-    return False
+    return bool(_DEMONSTRATIVE_RE.search(question))
 
 
 def question_needs_history_resolution(question: str, history: list[dict]) -> tuple[bool, str | None]:

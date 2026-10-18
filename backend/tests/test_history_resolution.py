@@ -71,11 +71,30 @@ def test_gate_runs_for_pronouns_and_elliptical_followups():
     assert question_needs_history_resolution("And the termination clause?", _HISTORY) == (True, None)
 
 
+def test_gate_runs_for_demonstrative_followups():
+    assert question_needs_history_resolution("What does that clause require?", _HISTORY) == (
+        True,
+        None,
+    )
+    assert question_needs_history_resolution("How does this section work?", _HISTORY) == (
+        True,
+        None,
+    )
+    assert question_needs_history_resolution("Can you explain those terms?", _HISTORY) == (
+        True,
+        None,
+    )
+
+
 def test_gate_skips_standalone_topic_switch_and_empty_history():
     assert question_needs_history_resolution(_STANDALONE, _HISTORY) == (
         False,
         "standalone_question",
     )
+    assert question_needs_history_resolution(
+        "How does the arbitration clause work under California law?",
+        _HISTORY,
+    ) == (False, "standalone_question")
     assert question_needs_history_resolution(_TOPIC_SWITCH, _HISTORY) == (False, "topic_switch")
     assert question_needs_history_resolution(_PRONOUN, []) == (False, "empty_history")
     # A topic cue does not override an unresolved pronoun.
