@@ -209,6 +209,8 @@ export type DocumentStatus = {
   statusDetail?: string;
   /** Optional ingestion timing, attempt count, and failure classification. */
   job?: Record<string, unknown> | null;
+  /** Document metadata when the status payload includes it. */
+  metadata?: Record<string, unknown>;
   _raw?: Record<string, unknown>;
 };
 

@@ -54,6 +54,19 @@ describe("getDocumentStatus", () => {
     });
   });
 
+  it("types document metadata and preserves unknown raw fields", async () => {
+    const payload = {
+      ...queuedStatusPayload,
+      metadata: { department: "legal", active: true },
+    };
+    const result = await makeClient(
+      createFetchMock(jsonResponse(payload)),
+    ).getDocumentStatus(DOCUMENT_ID);
+    expect(result.metadata).toEqual({ department: "legal", active: true });
+    expect(result._raw).toEqual(payload);
+    expect(result._raw?.future_status_field).toEqual({ trace: "abc" });
+  });
+
   it("retains explicit null status fields", async () => {
     const payload = {
       document_id: DOCUMENT_ID,

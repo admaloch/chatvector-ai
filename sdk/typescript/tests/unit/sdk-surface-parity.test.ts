@@ -99,6 +99,31 @@ describe("SDK surface parity", () => {
     expect(events).toEqual(["queued", "completed"]);
   });
 
+  it("streamDocumentStatus types metadata and keeps unknown raw fields", async () => {
+    const payload = {
+      document_id: DOCUMENT_ID,
+      status: "completed",
+      metadata: { department: "legal" },
+      future_field: { trace: "abc" },
+    };
+    const body = ["event: status", `data: ${JSON.stringify(payload)}`, ""].join(
+      "\n",
+    );
+    const fetch = createFetchMock(sseResponse(body));
+    const events = [];
+    for await (const event of makeClient(fetch).streamDocumentStatus(DOCUMENT_ID)) {
+      events.push(event);
+    }
+    expect(events).toEqual([
+      {
+        documentId: DOCUMENT_ID,
+        status: "completed",
+        metadata: { department: "legal" },
+        _raw: payload,
+      },
+    ]);
+  });
+
   it("uploadDocument sends X-Session-Id when sessionId is set", async () => {
     const fetch = createFetchMock(jsonResponse(uploadAcceptedPayload, { status: 202 }));
     await makeClient(fetch).uploadDocument({

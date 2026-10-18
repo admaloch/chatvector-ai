@@ -472,6 +472,9 @@ function mapDocumentStatusPayload(
   if (payload.job === null || isRecord(payload.job)) {
     result.job = payload.job;
   }
+  if (isRecord(payload.metadata)) {
+    result.metadata = payload.metadata;
+  }
   return result;
 }
 

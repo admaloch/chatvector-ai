@@ -121,6 +121,28 @@ class ChatVectorClientTests(unittest.TestCase):
         self.assertEqual(status.status, "embedding")
         self.assertEqual(status.chunks, {"total": 10, "processed": 4})
         self.assertEqual(status.queue_position, 2)
+        self.assertIsNone(status.metadata)
+
+    def test_get_status_parses_metadata_and_keeps_unknown_fields(self) -> None:
+        payload = {
+            "document_id": "doc-123",
+            "status": "completed",
+            "metadata": {"department": "legal", "active": True},
+            "future_field": {"trace": "abc"},
+        }
+        response = make_response(
+            200,
+            url="https://api.chatvector.test/documents/doc-123/status",
+            json_data=payload,
+        )
+
+        with patch.object(self.client._client, "request", return_value=response):
+            status = self.client.get_status("doc-123")
+
+        self.assertEqual(status.metadata, {"department": "legal", "active": True})
+        self.assertEqual(status.raw["future_field"], {"trace": "abc"})
+        self.assertEqual(status.to_dict()["metadata"], payload["metadata"])
+        self.assertNotIn("future_field", status.to_dict())
 
     def test_chat_returns_typed_response_with_sources(self) -> None:
         """Single chat responses should include typed source models."""
