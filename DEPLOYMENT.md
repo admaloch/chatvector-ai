@@ -219,6 +219,24 @@ Manual checklist when running two API processes (same Redis, Postgres, and S3):
 
 ---
 
+## Ingestion webhooks
+
+Terminal ingestion can POST a signed callback. This is off unless you set:
+
+```env
+WEBHOOK_ENABLED=true
+WEBHOOK_URL=https://your-service.example/webhooks/ingestion
+WEBHOOK_SECRET=shared_hmac_secret
+WEBHOOK_MAX_ATTEMPTS=5
+WEBHOOK_TIMEOUT_SECONDS=10
+```
+
+`WEBHOOK_URL` and `WEBHOOK_SECRET` are required when `WEBHOOK_ENABLED=true`. Payloads are `ingestion.completed` and `ingestion.failed`. The body is signed with HMAC-SHA256 in `X-ChatVector-Signature` (`sha256=<hex>`) using `WEBHOOK_SECRET`. Delivery retries are bounded by `WEBHOOK_MAX_ATTEMPTS`. Treat delivery as at-least-once and dedupe on `event_id`.
+
+Payload shape, the signature test vector, and local setup are in [DEVELOPMENT.md](DEVELOPMENT.md) under "Ingestion completion webhooks". There is no webhook CRUD API or admin UI; configuration is environment-only.
+
+---
+
 ## Related documentation
 
 - [DEVELOPMENT.md](DEVELOPMENT.md) — local development, migration details, auth deep dive

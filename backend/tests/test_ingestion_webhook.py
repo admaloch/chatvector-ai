@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -218,3 +219,17 @@ async def test_pipeline_skips_webhook_when_disabled():
             tenant_id="tenant-1",
         )
     notify_mock.assert_not_awaited()
+
+
+def test_deployment_docs_mention_webhook_ops():
+    repo_root = Path(__file__).resolve().parents[2]
+    deployment = (repo_root / "DEPLOYMENT.md").read_text()
+    docs_page = (repo_root / "documentation" / "content" / "deployment.md").read_text()
+    for text in (deployment, docs_page):
+        assert "WEBHOOK_ENABLED" in text
+        assert "WEBHOOK_SECRET" in text
+        assert "HMAC" in text or "hmac" in text.lower()
+        assert "WEBHOOK_MAX_ATTEMPTS" in text
+        assert "event_id" in text
+        assert "DEVELOPMENT.md" in text
+    assert "Ingestion completion webhooks" in deployment or "Ingestion webhooks" in deployment

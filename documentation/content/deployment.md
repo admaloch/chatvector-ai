@@ -53,6 +53,10 @@ docker compose -f docker-compose.prod.yml up --build -d
 
 See [DEPLOYMENT.md](https://github.com/chatvector-ai/chatvector-ai/blob/main/DEPLOYMENT.md) for database setup, health checks, scaling notes, and troubleshooting.
 
+## Ingestion webhooks
+
+Optional signed callbacks for `ingestion.completed` and `ingestion.failed` are off until `WEBHOOK_ENABLED=true`, with `WEBHOOK_URL` and `WEBHOOK_SECRET`. Requests are HMAC-signed, retries are bounded by `WEBHOOK_MAX_ATTEMPTS`, and consumers should dedupe on `event_id`. Configuration is environment-only. Details and the signature test vector are in [DEVELOPMENT.md](https://github.com/chatvector-ai/chatvector-ai/blob/main/DEVELOPMENT.md) under "Ingestion completion webhooks".
+
 ## Hosting this documentation site
 
 This issue covers local builds and CI validation only. Publishing the static site to GitHub Pages or another CDN is a follow-up task.
