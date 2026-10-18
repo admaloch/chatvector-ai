@@ -291,3 +291,49 @@ async def test_redis_queue_retries_without_terminal_webhook(webhook_on):
     assert "failed" not in statuses
     assert "retrying" in statuses
     rq_queue.enqueue.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_missing_artifact_uses_terminal_failure_path(webhook_on):
+    from contextlib import asynccontextmanager
+
+    import services.queue_redis as queue_redis
+
+    @asynccontextmanager
+    async def fake_worker_db_context():
+        yield
+
+    from services.artifact_storage import ArtifactMissingError
+
+    update_status = AsyncMock()
+    notify = AsyncMock()
+    storage = MagicMock()
+    storage.get.side_effect = ArtifactMissingError("gone")
+
+    with (
+        patch("db.worker_db_context", fake_worker_db_context),
+        patch("db.update_document_status", update_status),
+        patch.object(queue_redis, "get_artifact_storage", return_value=storage),
+        patch.object(queue_redis, "_push_dlq_entry") as push_dlq,
+        patch.object(queue_redis.redis_lib.Redis, "from_url", return_value=MagicMock()),
+        patch("services.ingestion_webhook.notify_ingestion_terminal", notify),
+    ):
+        await queue_redis._async_execute_job(
+            "doc-missing",
+            "gone.pdf",
+            "application/pdf",
+            "artifact://doc-missing",
+            0,
+            "tenant-1",
+        )
+
+    update_status.assert_awaited_once()
+    error = update_status.await_args.kwargs["error"]
+    assert error["code"] == "job_payload_missing"
+    assert update_status.await_args.kwargs["status"] == "failed"
+    assert update_status.await_args.kwargs["job_metadata_patch"]["failure_class"] == (
+        "job_payload_missing"
+    )
+    notify.assert_awaited_once_with("doc-missing", "tenant-1", outcome="failed")
+    push_dlq.assert_called_once()
+    assert push_dlq.call_args.args[0].error == "job_payload_missing"

@@ -85,6 +85,38 @@ def _job_payload_missing_error() -> dict:
     }
 
 
+async def _record_missing_artifact_failure(
+    *,
+    doc_id: str,
+    tenant_id: Optional[str],
+    replace: bool,
+    error_payload: dict,
+) -> None:
+    """Terminal failure for a missing or unreadable upload artifact.
+
+    Uses the shared ingestion outcome helper so job metadata and the
+    ``ingestion.failed`` webhook match other terminal failures. The error
+    ``code`` (``job_payload_missing`` or ``job_payload_unreadable``) is preserved.
+    """
+    from services.ingestion_outcome import record_terminal_ingestion_failure
+
+    if not tenant_id:
+        logger.error(
+            "Cannot record missing artifact for document %s without a tenant",
+            doc_id,
+        )
+        return
+    try:
+        await record_terminal_ingestion_failure(
+            doc_id=doc_id,
+            tenant_id=tenant_id,
+            error=error_payload,
+            replace=replace,
+        )
+    except Exception:
+        logger.exception("Failed to mark document %s as failed", doc_id)
+
+
 def _rq_worker_name(worker_id: int) -> str:
     host = socket.gethostname().split(".")[0][:32]
     return (
@@ -153,24 +185,12 @@ async def _async_execute_job(
             await _cleanup_artifact(artifact_uri, doc_id, tenant_id)
         except ArtifactMissingError:
             logger.error("Artifact missing for doc %s", doc_id)
-            error_payload = _job_payload_missing_error()
-            try:
-                if replace:
-                    await db_module.set_document_status_detail(
-                        doc_id,
-                        REPLACEMENT_FAILED,
-                        tenant_id=tenant_id,
-                        error=error_payload,
-                    )
-                else:
-                    await db_module.update_document_status(
-                        doc_id=doc_id,
-                        status="failed",
-                        error=error_payload,
-                        tenant_id=tenant_id,
-                    )
-            except Exception:
-                logger.exception("Failed to mark document %s as failed", doc_id)
+            await _record_missing_artifact_failure(
+                doc_id=doc_id,
+                tenant_id=tenant_id,
+                replace=replace,
+                error_payload=_job_payload_missing_error(),
+            )
             _push_dlq_entry(DLQEntry(
                 doc_id=doc_id,
                 file_name=file_name,
@@ -183,28 +203,16 @@ async def _async_execute_job(
         except ArtifactUnreadableError as exc:
             error_msg = f"Cannot read upload payload for doc {doc_id}: {exc.reason}"
             logger.error(error_msg)
-            unreadable_error = {
-                "code": "job_payload_unreadable",
-                "stage": "queued",
-                "message": JOB_PAYLOAD_MISSING_USER_MESSAGE,
-            }
-            try:
-                if replace:
-                    await db_module.set_document_status_detail(
-                        doc_id,
-                        REPLACEMENT_FAILED,
-                        tenant_id=tenant_id,
-                        error=unreadable_error,
-                    )
-                else:
-                    await db_module.update_document_status(
-                        doc_id=doc_id,
-                        status="failed",
-                        error=unreadable_error,
-                        tenant_id=tenant_id,
-                    )
-            except Exception:
-                logger.exception("Failed to mark document %s as failed", doc_id)
+            await _record_missing_artifact_failure(
+                doc_id=doc_id,
+                tenant_id=tenant_id,
+                replace=replace,
+                error_payload={
+                    "code": "job_payload_unreadable",
+                    "stage": "queued",
+                    "message": JOB_PAYLOAD_MISSING_USER_MESSAGE,
+                },
+            )
             _push_dlq_entry(DLQEntry(
                 doc_id=doc_id,
                 file_name=file_name,
