@@ -212,15 +212,15 @@ async def _resolve_retrieval_doc_ids(
 def _scope_error(
     doc_ids: list[str],
     *,
-    doc_id: str,
+    requested_doc_ids: list[str],
     effective: EffectiveRetrievalConfig,
 ) -> dict | None:
     """Structured error when a chat request has no usable scope, else ``None``.
 
-    With a ``metadata_filter`` the anchor ``doc_id`` must itself be in the
-    filtered scope set; the filter never replaces the anchor.
+    With a ``metadata_filter`` at least one requested/anchor document must
+    remain in the filtered scope set; the filter never replaces the anchors.
     """
-    if effective.metadata_filter and doc_id not in doc_ids:
+    if effective.metadata_filter and not any(doc_id in doc_ids for doc_id in requested_doc_ids):
         return {
             "code": "anchor_document_excluded_by_filter",
             "message": "The requested document is not in the retrieval scope after applying metadata_filter.",
@@ -706,7 +706,7 @@ async def answer_question_for_document(
         tenant_id=tenant_id,
         metadata_filter=effective.metadata_filter,
     )
-    scope_error = _scope_error(doc_ids, doc_id=doc_id, effective=effective)
+    scope_error = _scope_error(doc_ids, requested_doc_ids=[doc_id], effective=effective)
     if scope_error is not None:
         return {
             "question": question,
@@ -838,7 +838,7 @@ async def answer_question_stream_for_document(
             tenant_id=tenant_id,
             metadata_filter=effective.metadata_filter,
         )
-        scope_error = _scope_error(doc_ids, doc_id=doc_id, effective=effective)
+        scope_error = _scope_error(doc_ids, requested_doc_ids=[doc_id], effective=effective)
         if scope_error is not None:
             yield _format_sse_event(
                 "error",
@@ -1160,16 +1160,18 @@ async def answer_questions_for_documents_batch(
                 tenant_id=tenant_id,
                 metadata_filter=effective.metadata_filter,
             )
-            if not doc_ids:
+            scope_error = _scope_error(
+                doc_ids,
+                requested_doc_ids=query["doc_ids"],
+                effective=effective,
+            )
+            if scope_error is not None:
                 return {
                     "status": "error",
                     "question": query["question"],
                     "doc_ids": query["doc_ids"],
                     "chunks": 0,
-                    "error": {
-                        "code": "no_documents_in_scope",
-                        "message": "No documents available for retrieval in the requested scope.",
-                    },
+                    "error": scope_error,
                     "latency_ms": 0,
                     "model": "",
                     "session_id": session_id,

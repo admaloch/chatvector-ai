@@ -548,8 +548,42 @@ async def test_batch_item_filter_narrows_documents_and_reports_empty_scope():
 
     assert results[0]["status"] == "ok"
     assert results[1]["status"] == "error"
-    assert results[1]["error"]["code"] == "no_documents_in_scope"
+    assert results[1]["error"]["code"] == "anchor_document_excluded_by_filter"
     assert {call.kwargs["doc_id"] for call in find_similar.await_args_list} == {"doc-1", "doc-3"}
+
+
+@pytest.mark.asyncio
+async def test_batch_anchor_exclusion_matches_sync_error_code():
+    _register_docs("tenant-a", "doc-1", "doc-2")
+    find_similar = AsyncMock(return_value=[])
+    p1, p2, p3, p4 = _chat_patches(find_similar)
+
+    with p1, p2, p3, p4, patch(
+        "services.chat_service.filter_document_ids_by_metadata",
+        new=AsyncMock(return_value=["doc-2"]),
+    ), patch("services.chat_service.get_embeddings", new=AsyncMock(return_value=[[0.1, 0.2]])):
+        sync = await answer_question_for_document(
+            question="Q?",
+            doc_id="doc-1",
+            auth=AuthContext(tenant_id="tenant-a"),
+            scope="tenant",
+            retrieval_fields={"scope": "tenant", "metadata_filter": _FILTER},
+        )
+        batch = await answer_questions_for_documents_batch(
+            [
+                {
+                    "question": "Q?",
+                    "doc_ids": ["doc-1"],
+                    "retrieval_fields": {"scope": "tenant", "metadata_filter": _FILTER},
+                }
+            ],
+            auth=AuthContext(tenant_id="tenant-a"),
+            scope="tenant",
+        )
+
+    assert sync["error"]["code"] == "anchor_document_excluded_by_filter"
+    assert batch[0]["error"]["code"] == sync["error"]["code"]
+    assert batch[0]["error"]["message"] == sync["error"]["message"]
 
 
 def test_retrieval_overrides_model_accepts_filter():
