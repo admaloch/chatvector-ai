@@ -1035,8 +1035,14 @@ async def test_process_document_background_auth_error_sets_structured_code():
 
 
 @pytest.mark.asyncio
-async def test_process_document_background_rate_limit_sets_structured_code():
+async def test_process_document_background_rate_limit_sets_structured_code(monkeypatch):
     from services.providers.base import ProviderRateLimitError
+
+    # Rate limits are retryable. The structured code is stored once retries
+    # are exhausted, not on the first attempt.
+    monkeypatch.setattr(
+        "services.ingestion_outcome.config.QUEUE_JOB_MAX_RETRIES", 0
+    )
 
     pipeline = IngestionPipeline(splitter_cls=_SingleChunkSplitter)
 

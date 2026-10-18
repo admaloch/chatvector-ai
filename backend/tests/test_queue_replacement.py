@@ -174,7 +174,7 @@ async def test_replacement_requeue_on_full_queue_records_replacement_failed(monk
     update_status = AsyncMock()
     set_detail = AsyncMock()
     notify = AsyncMock()
-    monkeypatch.setattr("core.config.config.WEBHOOK_ENABLED", True)
+    monkeypatch.setattr("services.ingestion_outcome.config.WEBHOOK_ENABLED", True)
 
     with (
         patch("services.ingestion_pipeline.IngestionPipeline", mock_pipeline_cls),
