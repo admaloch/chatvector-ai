@@ -366,3 +366,43 @@ def test_independent_limiters_share_redis_bucket():
     finally:
         limiter_a.reset()
         limiter_b.reset()
+
+
+_FEEDBACK_WINDOW = 60
+
+
+def test_post_feedback_returns_429_after_limit_exceeded():
+    from routes.feedback import router as feedback_router
+
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+    app.include_router(feedback_router)
+    payload = {
+        "type": "answer",
+        "rating": 1,
+        "session_id": "sess-rate",
+        "message_id": "00000000-0000-0000-0000-000000000001",
+    }
+    row = {
+        "id": "fb-1",
+        "type": "answer",
+        "rating": 1,
+        "comment": None,
+        "session_id": "sess-rate",
+        "message_id": "00000000-0000-0000-0000-000000000001",
+        "document_id": None,
+        "chunk_index": None,
+        "created_at": "2026-01-01T00:00:00",
+    }
+    with TestClient(app) as client, patch(
+        "routes.feedback.create_feedback",
+        new=AsyncMock(return_value=row),
+    ):
+        for _ in range(_FEEDBACK_WINDOW):
+            assert client.post("/feedback", json=payload).status_code == 201
+        limited = client.post("/feedback", json=payload)
+    assert limited.status_code == 429
+    assert limited.json()["detail"]["code"] == "rate_limited"
+    assert limited.headers.get("Retry-After") == "60"

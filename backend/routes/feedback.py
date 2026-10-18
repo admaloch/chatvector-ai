@@ -3,10 +3,12 @@ from datetime import datetime
 from typing import Literal, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from core.auth import AuthContext, require_auth, require_current_tenant
+from core.config import config
+from middleware.rate_limit import limiter
 from services.feedback_service import FeedbackValidationError, create_feedback, list_feedback
 
 logger = logging.getLogger(__name__)
@@ -72,7 +74,9 @@ def _validation_to_http(exc: FeedbackValidationError) -> HTTPException:
 
 
 @router.post("/feedback", status_code=201, response_model=FeedbackItemResponse)
+@limiter.limit(config.RATE_LIMIT_FEEDBACK)
 async def post_feedback(
+    request: Request,
     payload: FeedbackCreateRequest,
     auth: AuthContext = Depends(require_auth),
 ):
@@ -94,7 +98,9 @@ async def post_feedback(
 
 
 @router.get("/feedback", response_model=FeedbackListResponse)
+@limiter.limit(config.RATE_LIMIT_FEEDBACK)
 async def get_feedback_list(
+    request: Request,
     auth: AuthContext = Depends(require_auth),
     session_id: Optional[str] = Query(None, min_length=1, max_length=255),
     created_after: Optional[datetime] = Query(None),

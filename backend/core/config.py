@@ -290,6 +290,7 @@ class Settings:
     RATE_LIMIT_DOCUMENT_DELETE: str = os.getenv(
         "RATE_LIMIT_DOCUMENT_DELETE", "60/hour"
     )
+    RATE_LIMIT_FEEDBACK: str = os.getenv("RATE_LIMIT_FEEDBACK", "60/minute")
 
     PROMPT_PERSONA: str = _get_persona()
     SYSTEM_PROMPT_PATH: str = _get_system_prompt_path(PROMPT_PERSONA)

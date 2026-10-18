@@ -10,6 +10,7 @@ import pytest
 from fastapi import HTTPException
 
 from core.auth import AuthContext
+from request_utils import make_test_request
 from routes.feedback import (
     FeedbackCreateRequest,
     FeedbackListResponse,
@@ -36,6 +37,7 @@ async def test_post_feedback_success_with_message():
         new=AsyncMock(return_value=row),
     ) as mock_create:
         result = await post_feedback(
+            make_test_request("POST", "/feedback"),
             FeedbackCreateRequest(
                 type="answer",
                 rating=1,
@@ -60,6 +62,7 @@ async def test_post_feedback_not_found_maps_to_404():
     ):
         with pytest.raises(HTTPException) as excinfo:
             await post_feedback(
+                make_test_request("POST", "/feedback"),
                 FeedbackCreateRequest(
                     type="answer",
                     rating=-1,
@@ -90,7 +93,10 @@ async def test_list_feedback_success():
         "routes.feedback.list_feedback",
         new=AsyncMock(return_value=rows),
     ) as mock_list:
-        result = await get_feedback_list(auth=AuthContext(tenant_id="tenant-1"))
+        result = await get_feedback_list(
+            make_test_request("GET", "/feedback"),
+            auth=AuthContext(tenant_id="tenant-1"),
+        )
         assert isinstance(result, FeedbackListResponse)
         assert len(result.feedback) == 1
         assert result.feedback[0].type == "citation"
