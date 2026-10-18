@@ -506,9 +506,51 @@ async def test_answer_question_stream_for_document_success():
         assert complete_data["session_id"] is None
         assert complete_data["sources"] == []
         assert complete_data["latency_ms"] >= 0
+        assert complete_data["request_latency_ms"] >= complete_data["latency_ms"]
         assert complete_data["model"] == "test-stream-model"
 
         assert chunks[3] == "event: done\ndata: [DONE]\n\n"
+
+
+@pytest.mark.asyncio
+async def test_stream_request_latency_includes_pre_token_work():
+    """request_latency_ms is additive; latency_ms stays generation-only."""
+    from services.chat_service import answer_question_stream_for_document
+
+    async def delayed_retrieve(*args, **kwargs):
+        await asyncio.sleep(0.05)
+        return []
+
+    async def mock_generate_stream(q, c):
+        yield "ok"
+
+    mock_provider = MagicMock()
+    mock_provider.model_name = "test-stream-model"
+
+    with (
+        patch("services.chat_service._resolve_retrieval_doc_ids", new=AsyncMock(return_value=["doc-1"])),
+        patch(
+            "services.chat_service.transform_query",
+            new=AsyncMock(return_value=_mock_transform_result("q")),
+        ),
+        patch("services.chat_service.get_embeddings", new=AsyncMock(return_value=[[0.1, 0.2]])),
+        patch("services.chat_service._retrieve_chunks_for_documents", new=delayed_retrieve),
+        patch("services.chat_service.build_context_from_chunks", return_value="context"),
+        patch("services.chat_service.generate_answer_stream", new=mock_generate_stream),
+        patch("services.providers.get_llm_provider", return_value=mock_provider),
+    ):
+        events = [
+            event
+            async for event in answer_question_stream_for_document(
+                "q", "doc-1", match_count=5, auth=TEST_AUTH
+            )
+        ]
+
+    _, complete_data = _parse_sse_event(events[-2])
+    assert complete_data["latency_ms"] >= 0
+    assert complete_data["request_latency_ms"] >= 50
+    assert complete_data["request_latency_ms"] >= complete_data["latency_ms"]
+
 
 @pytest.mark.asyncio
 async def test_stream_history_loaded_and_bounded_before_transform():
@@ -650,6 +692,7 @@ async def test_stream_complete_event_includes_sources_and_session_id():
     ]
     assert complete_data["model"] == "gemini-test"
     assert complete_data["latency_ms"] >= 0
+    assert complete_data["request_latency_ms"] >= complete_data["latency_ms"]
 
 
 @pytest.mark.asyncio

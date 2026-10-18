@@ -480,7 +480,7 @@ Requires `ENABLE_STREAMING=true` in `backend/.env`. The request body matches
 | Event | Payload | Notes |
 |---|---|---|
 | `token` | JSON string | Incremental answer text. Format unchanged for existing clients. |
-| `complete` | JSON object | Final metadata: `type`, `session_id`, `sources`, `latency_ms`, `model`. |
+| `complete` | JSON object | Final metadata: `type`, `session_id`, `sources`, `latency_ms`, `request_latency_ms`, `model`. |
 | `done` | `[DONE]` | **Deprecated.** Retained for backward compatibility; emitted after `complete`. |
 | `error` | JSON object | `type`, `code`, and `message`. Valid JSON — not a plain string. |
 
@@ -491,7 +491,7 @@ event: token
 data: "Hello"
 
 event: complete
-data: {"type":"complete","session_id":"...","sources":[...],"latency_ms":1234,"model":"..."}
+data: {"type":"complete","session_id":"...","sources":[...],"latency_ms":1234,"request_latency_ms":1500,"model":"..."}
 
 event: done
 data: [DONE]
@@ -511,6 +511,8 @@ successful `complete` event.
 
 **Latency note:** `latency_ms` in the `complete` event measures LLM generation
 wall time for the stream, not retrieval or embedding time.
+`request_latency_ms` is the additive total from stream start through `complete`,
+including history resolution, query transformation, embedding, and retrieval.
 
 ### Citation score types
 

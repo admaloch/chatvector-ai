@@ -317,8 +317,10 @@ async def chat_stream(
 
     - ``token`` — incremental answer text; ``data`` is a JSON-encoded string
       (unchanged from earlier clients).
-    - ``complete`` — final structured payload with ``sources``, ``latency_ms``,
-      ``model``, ``session_id``, and optional ``retrieval_debug`` when requested.
+    - ``complete`` — final structured payload with ``sources``, ``latency_ms``
+      (generation only), ``request_latency_ms`` (full request including history
+      and retrieval), ``model``, ``session_id``, and optional ``retrieval_debug``
+      when requested.
     - ``done`` — legacy completion marker ``[DONE]`` (deprecated; retained for
       backward compatibility).
     - ``error`` — structured JSON object ``{"type": "error", "code": "...", "message": "..."}``.

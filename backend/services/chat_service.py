@@ -654,6 +654,7 @@ def _build_stream_complete_payload(
     latency_ms: int,
     model: str,
     retrieval_debug: dict | None = None,
+    request_latency_ms: int | None = None,
 ) -> dict:
     payload = {
         "type": "complete",
@@ -662,6 +663,8 @@ def _build_stream_complete_payload(
         "latency_ms": latency_ms,
         "model": model,
     }
+    if request_latency_ms is not None:
+        payload["request_latency_ms"] = request_latency_ms
     if retrieval_debug is not None:
         payload["retrieval_debug"] = retrieval_debug
     return payload
@@ -823,6 +826,7 @@ async def answer_question_stream_for_document(
     a server-sent events (SSE) stream.
     """
     logger.info(f"Starting chat stream for document {doc_id} (scope={scope or 'session'})")
+    request_started = time.perf_counter()
     tenant_id = require_current_tenant(auth)
     effective = resolve_effective_retrieval(
         match_count=match_count,
@@ -914,6 +918,7 @@ async def answer_question_stream_for_document(
             raise
 
         latency_ms = int((time.perf_counter() - t0) * 1000)
+        request_latency_ms = int((time.perf_counter() - request_started) * 1000)
         from services.providers import get_llm_provider
 
         model_name = getattr(get_llm_provider(), "model_name", "")
@@ -945,6 +950,7 @@ async def answer_question_stream_for_document(
                 latency_ms=latency_ms,
                 model=model_name,
                 retrieval_debug=retrieval_debug,
+                request_latency_ms=request_latency_ms,
             ),
         )
         # Legacy completion marker — deprecated; retained for backward compatibility.
