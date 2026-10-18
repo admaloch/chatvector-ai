@@ -100,6 +100,39 @@ def test_cache_key_namespaced_under_prefix():
 # Redis-down handling
 # ---------------------------------------------------------------------------
 
+def test_cache_client_uses_short_timeout_not_general_redis_timeout(monkeypatch):
+    monkeypatch.setattr(config, "REDIS_SOCKET_TIMEOUT_SEC", 5.0)
+    monkeypatch.setattr(config, "EMBEDDING_CACHE_REDIS_TIMEOUT_SEC", 0.25)
+    captured: dict = {}
+
+    def from_url(url, **kwargs):
+        captured["url"] = url
+        captured["kwargs"] = kwargs
+        return _FailingRedis()
+
+    monkeypatch.setattr(redis_lib.Redis, "from_url", from_url)
+    cache_mod._get_client()
+
+    assert captured["kwargs"]["socket_timeout"] == 0.25
+    assert captured["kwargs"]["socket_connect_timeout"] == 0.25
+    assert captured["kwargs"]["socket_timeout"] < config.REDIS_SOCKET_TIMEOUT_SEC
+
+
+class _TimeoutRedis:
+    def get(self, *args, **kwargs):
+        raise redis_lib.exceptions.TimeoutError("cache read exceeded short timeout")
+
+    def set(self, *args, **kwargs):
+        raise redis_lib.exceptions.TimeoutError("cache write exceeded short timeout")
+
+
+@pytest.mark.asyncio
+async def test_cache_get_fails_open_on_redis_timeout(monkeypatch):
+    monkeypatch.setattr(cache_mod, "_redis_client", _TimeoutRedis())
+    result = await cache_mod.get_cached_embedding("hello", provider="gemini", model="m")
+    assert result is None
+
+
 @pytest.mark.asyncio
 async def test_get_cached_embedding_returns_none_on_redis_error(monkeypatch):
     monkeypatch.setattr(cache_mod, "_redis_client", _FailingRedis())

@@ -27,8 +27,13 @@ cache_misses = 0
 def _get_client() -> redis_lib.Redis:
     global _redis_client
     if _redis_client is None:
+        timeout = config.EMBEDDING_CACHE_REDIS_TIMEOUT_SEC
         _redis_client = redis_lib.Redis.from_url(
-            config.REDIS_URL, **redis_connection_kwargs()
+            config.REDIS_URL,
+            **redis_connection_kwargs(
+                socket_timeout=timeout,
+                socket_connect_timeout=timeout,
+            ),
         )
     return _redis_client
 
