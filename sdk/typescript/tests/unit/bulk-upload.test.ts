@@ -108,6 +108,19 @@ describe("uploadDirectory", () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  it("skips an in-root symlink that points at a directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cv-dirlink-"));
+    await mkdir(join(root, "a"));
+    await mkdir(join(root, "b"));
+    await writeFile(join(root, "b", "file.txt"), "ok");
+    await symlink(join(root, "b"), join(root, "a", "linked-dir"));
+
+    const paths = await collectDirectoryUploadPaths(root);
+
+    expect(paths).toEqual([await realpath(join(root, "b", "file.txt"))]);
+    await rm(root, { recursive: true, force: true });
+  });
+
   it("rejects a nested symlink that escapes the original upload root", async () => {
     const root = await mkdtemp(join(tmpdir(), "cv-nested-escape-"));
     const outside = join(tmpdir(), `cv-outside-nested-${Date.now()}.txt`);

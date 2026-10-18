@@ -46,6 +46,10 @@ async function walkDirectory(
     if (stat.isSymbolicLink()) {
       const resolved = await realpath(fullPath);
       await assertPathUnderRoot(root, resolved);
+      const targetStat = await lstat(resolved);
+      if (!targetStat.isFile()) {
+        continue;
+      }
       matches.push(resolved);
       continue;
     }
