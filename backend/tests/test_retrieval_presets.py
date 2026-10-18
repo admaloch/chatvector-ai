@@ -300,3 +300,77 @@ async def test_chat_stream_unknown_preset_raises_before_sse_starts():
             )
     assert exc_info.value.preset == "eval_hybrid"
     stream_fn.assert_not_called()
+
+
+def test_batch_unknown_preset_is_400_config_error():
+    set_retrieval_presets_for_tests({})
+    payload = {
+        "queries": [
+            {
+                "question": "hello",
+                "doc_ids": ["00000000-0000-0000-0000-000000000001"],
+                "retrieval": {"preset": "missing"},
+            }
+        ]
+    }
+    with (
+        patch("routes.chat.config") as mock_config,
+        patch("routes.chat.db.get_document", new=AsyncMock(return_value={"id": "doc", "status": "completed"})),
+        patch(
+            "routes.chat.get_or_create_session",
+            new=AsyncMock(return_value=Session(id="s", tenant_id="dev")),
+        ),
+        patch("routes.chat.register_session_document", new=AsyncMock()),
+        patch("routes.chat.register_tenant_document"),
+    ):
+        mock_config.RATE_LIMIT_CHAT_BATCH = "1000/minute"
+        with _preset_http_client() as client:
+            response = client.post("/chat/batch", json=payload)
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "preset_not_found"
+
+
+@pytest.mark.asyncio
+async def test_batch_preset_rewrite_changes_effective_query(monkeypatch):
+    from services.chat_service import answer_questions_for_documents_batch
+
+    set_retrieval_presets_for_tests(
+        {"rewrite_preset": {"query_transformation_strategy": "rewrite"}}
+    )
+    monkeypatch.setattr("core.config.config.QUERY_TRANSFORMATION_ENABLED", False)
+    monkeypatch.setattr("services.chat_service.config.QUERY_TRANSFORMATION_ENABLED", False)
+    monkeypatch.setattr("services.query_service.config.QUERY_TRANSFORMATION_ENABLED", False)
+
+    async def fake_rewrite(question: str) -> str:
+        return f"rewritten:{question}"
+
+    with (
+        patch("services.query_service.rewrite_query", new=fake_rewrite),
+        patch("services.chat_service.get_embeddings", new=AsyncMock(return_value=[[0.1, 0.2]])),
+        patch("services.chat_service.find_similar_chunks", new=AsyncMock(return_value=[])),
+        patch("services.chat_service.generate_answer", new=AsyncMock(return_value=("ans", 1, "m"))),
+        patch(
+            "services.chat_service._resolve_retrieval_doc_ids",
+            new=AsyncMock(return_value=["doc-1", "doc-2"]),
+        ),
+    ):
+        results = await answer_questions_for_documents_batch(
+            [
+                {
+                    "question": "original question",
+                    "doc_ids": ["doc-1", "doc-2"],
+                    "match_count": 5,
+                    "retrieval_fields": {"retrieval": {"preset": "rewrite_preset"}},
+                }
+            ],
+            auth=AuthContext(tenant_id="dev"),
+            debug_retrieval=True,
+        )
+
+    assert results[0]["status"] == "ok"
+    assert results[0]["retrieval_debug"]["effective_retrieval_query"] == "rewritten:original question"
+    assert results[0]["retrieval_debug"]["effective_config"]["query_transformation_strategy"] == {
+        "value": "rewrite",
+        "source": "preset",
+    }
