@@ -337,7 +337,10 @@ def _apply_compare_history_policy(
     compare_style: bool,
 ) -> EffectiveRetrievalConfig:
     """Single-document batch items skip history during transform unless overridden."""
-    if compare_style and effective.sources.get("skip_history_transform") != "request":
+    if compare_style and effective.sources.get("skip_history_transform") not in {
+        "request",
+        "preset",
+    }:
         return replace(effective, skip_history_transform=True)
     return effective
 

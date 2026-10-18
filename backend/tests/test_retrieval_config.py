@@ -7,6 +7,7 @@ from services.retrieval_config import (
     RetrievalProcessDefaults,
     merge_retrieval_field_layers,
     resolve_retrieval_config,
+    transformation_is_request_scoped,
 )
 
 
@@ -142,6 +143,59 @@ def test_debug_dict_records_value_and_source_and_context_annex():
     assert debug["reranking_enabled"]["source"] == "env"
     assert debug["max_context_chars"] == {"value": 1234, "source": "env"}
     assert "skip_history_transform" not in debug
+
+
+def test_preset_query_transformation_is_treated_as_request_scoped():
+    env = _env(query_transformation_enabled=False, query_transformation_strategy="rewrite")
+    effective = resolve_retrieval_config(
+        {},
+        env,
+        preset_fields={"query_transformation_strategy": "rewrite"},
+        resolved_preset="rewrite_preset",
+    )
+
+    assert effective.query_transformation_enabled is True
+    assert effective.apply_query_strategy is True
+    assert effective.sources["query_transformation_strategy"] == "preset"
+    assert transformation_is_request_scoped(effective) is True
+    assert effective.to_debug_dict()["query_transformation_strategy"] == {
+        "value": "rewrite",
+        "source": "preset",
+    }
+
+
+def test_debug_dict_includes_preset_skip_history_and_metadata_filter():
+    env = _env()
+    effective = resolve_retrieval_config(
+        {},
+        env,
+        preset_fields={
+            "skip_history_transform": True,
+            "metadata_filter": {"department": "legal"},
+        },
+        resolved_preset="filtered",
+    )
+    debug = effective.to_debug_dict()
+    assert debug["skip_history_transform"] == {"value": True, "source": "preset"}
+    assert debug["metadata_filter"]["source"] == "preset"
+
+
+def test_request_query_transformation_overrides_preset():
+    env = _env(query_transformation_enabled=False, query_transformation_strategy="rewrite")
+    effective = resolve_retrieval_config(
+        {"query_transformation_enabled": False, "query_transformation_strategy": "expand"},
+        env,
+        preset_fields={
+            "query_transformation_enabled": True,
+            "query_transformation_strategy": "rewrite",
+        },
+        resolved_preset="rewrite_preset",
+    )
+
+    assert effective.query_transformation_enabled is False
+    assert effective.apply_query_strategy is False
+    assert effective.sources["query_transformation_enabled"] == "request"
+    assert effective.sources["query_transformation_strategy"] == "request"
 
 
 def test_merge_layers_item_top_beats_item_retrieval_and_batch():

@@ -100,24 +100,24 @@ class EffectiveRetrievalConfig:
             "value": self.max_context_chars,
             "source": "env",
         }
-        if self.sources.get("skip_history_transform") == "request":
+        if self.sources.get("skip_history_transform") in {"request", "preset"}:
             payload["skip_history_transform"] = {
                 "value": self.skip_history_transform,
-                "source": "request",
+                "source": self.sources["skip_history_transform"],
             }
-        if self.sources.get("metadata_filter") == "request":
+        if self.sources.get("metadata_filter") in {"request", "preset"}:
             payload["metadata_filter"] = {
                 "value": self.metadata_filter,
-                "source": "request",
+                "source": self.sources["metadata_filter"],
             }
         return payload
 
 
 def transformation_is_request_scoped(effective: EffectiveRetrievalConfig) -> bool:
-    """True when this request set a query-transformation override."""
+    """True when this request or a named preset set a query-transformation override."""
     return (
-        effective.sources.get("query_transformation_enabled") == "request"
-        or effective.sources.get("query_transformation_strategy") == "request"
+        effective.sources.get("query_transformation_enabled") in {"request", "preset"}
+        or effective.sources.get("query_transformation_strategy") in {"request", "preset"}
     )
 
 

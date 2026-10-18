@@ -81,6 +81,62 @@ def test_extract_preset_name_prefers_top_level():
 
 
 @pytest.mark.asyncio
+async def test_preset_rewrite_changes_effective_query_unless_request_overrides(monkeypatch):
+    """A named preset with rewrite must reach transform_query, not only debug state."""
+    from unittest.mock import AsyncMock, patch
+
+    from core.auth import AuthContext
+    from services.chat_service import answer_question_for_document
+
+    set_retrieval_presets_for_tests(
+        {"rewrite_preset": {"query_transformation_strategy": "rewrite"}}
+    )
+    monkeypatch.setattr("core.config.config.QUERY_TRANSFORMATION_ENABLED", False)
+    monkeypatch.setattr("services.chat_service.config.QUERY_TRANSFORMATION_ENABLED", False)
+    monkeypatch.setattr("services.query_service.config.QUERY_TRANSFORMATION_ENABLED", False)
+
+    async def fake_rewrite(question: str) -> str:
+        return f"rewritten:{question}"
+
+    find_similar = AsyncMock(return_value=[])
+    with (
+        patch("services.query_service.rewrite_query", new=fake_rewrite),
+        patch("services.chat_service.get_embeddings", new=AsyncMock(return_value=[[0.1, 0.2]])),
+        patch("services.chat_service.find_similar_chunks", new=find_similar),
+        patch("services.chat_service.generate_answer", new=AsyncMock(return_value=("ans", 1, "m"))),
+        patch("services.chat_service._resolve_retrieval_doc_ids", new=AsyncMock(return_value=["doc-1"])),
+    ):
+        result = await answer_question_for_document(
+            question="original question",
+            doc_id="doc-1",
+            auth=AuthContext(tenant_id="dev"),
+            debug_retrieval=True,
+            retrieval_fields={"retrieval": {"preset": "rewrite_preset"}},
+        )
+        overridden = await answer_question_for_document(
+            question="original question",
+            doc_id="doc-1",
+            auth=AuthContext(tenant_id="dev"),
+            debug_retrieval=True,
+            retrieval_fields={
+                "query_transformation_enabled": False,
+                "retrieval": {"preset": "rewrite_preset"},
+            },
+        )
+
+    assert result["retrieval_debug"]["effective_retrieval_query"] == "rewritten:original question"
+    assert result["retrieval_debug"]["effective_config"]["query_transformation_strategy"] == {
+        "value": "rewrite",
+        "source": "preset",
+    }
+    assert overridden["retrieval_debug"]["effective_retrieval_query"] == "original question"
+    assert overridden["retrieval_debug"]["effective_config"]["query_transformation_enabled"] == {
+        "value": False,
+        "source": "request",
+    }
+
+
+@pytest.mark.asyncio
 async def test_chat_unknown_preset_raises_not_found():
     from unittest.mock import AsyncMock, patch
 
