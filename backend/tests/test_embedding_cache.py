@@ -92,10 +92,11 @@ def test_cache_key_ignores_tenant_when_disabled(monkeypatch):
 
 
 def test_cache_settings_are_documented():
-    repo_root = Path(__file__).resolve().parents[2]
-    example = (repo_root / "backend" / ".env.example").read_text()
-    architecture = (repo_root / "ARCHITECTURE.md").read_text()
-    development = (repo_root / "DEVELOPMENT.md").read_text()
+    from tests.repo_layout import repo_file
+
+    example = repo_file("backend", ".env.example").read_text()
+    architecture = repo_file("ARCHITECTURE.md").read_text()
+    development = repo_file("DEVELOPMENT.md").read_text()
     for name in (
         "ENABLE_EMBEDDING_CACHE",
         "EMBEDDING_CACHE_KEY_PREFIX",

@@ -71,6 +71,8 @@ services:
     volumes:
       - ./backend:/app
       - ./docker-compose.prod.yml:/docker-compose.prod.yml:ro
+      # Repo-root docs are outside the backend mount. Tests read them here.
+      - .:/workspace:ro
     environment:
       # 👇 Same fix here
       DATABASE_URL: "postgresql+asyncpg://postgres:postgres@db:5432/postgres"
