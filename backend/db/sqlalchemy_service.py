@@ -47,6 +47,36 @@ logger = logging.getLogger(__name__)
 # Full-text config matches migration 004 (to_tsvector / plainto_tsquery).
 _FTS_LANGUAGE = "english"
 
+
+def _replacement_error_preserving_prior(
+    status: str | None,
+    existing_error: dict | None,
+    status_detail: str | None,
+    new_error: dict,
+) -> dict:
+    """Keep the original failure when a replacement of a failed document also fails.
+
+    A completed document's replacement error replaces any stale error. A failed
+    document keeps the error that explains why it has no content under
+    ``prior_error``. Later replacement failures keep that same original error
+    rather than nesting a history of attempts.
+    """
+    if (
+        status_detail != REPLACEMENT_FAILED
+        or status != "failed"
+        or not isinstance(existing_error, dict)
+        or not existing_error
+    ):
+        return new_error
+
+    merged = dict(new_error)
+    prior = existing_error.get("prior_error")
+    if isinstance(prior, dict) and prior:
+        merged["prior_error"] = prior
+    else:
+        merged["prior_error"] = existing_error
+    return merged
+
 # Only completed/failed documents may be replaced (staged replacement, migration 014).
 _REPLACEABLE_STATUSES = ("completed", "failed")
 
@@ -539,7 +569,13 @@ class SQLAlchemyService(DatabaseService):
                 return
 
             document.status_detail = status_detail
-            document.error = error
+            if error is not None:
+                document.error = _replacement_error_preserving_prior(
+                    document.status,
+                    document.error,
+                    status_detail,
+                    error,
+                )
             _apply_job_metadata_patch(document, job_metadata_patch)
             document.updated_at = datetime.utcnow()
             await session.commit()

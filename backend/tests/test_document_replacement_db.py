@@ -318,6 +318,84 @@ async def test_failed_document_can_be_replaced_and_becomes_retrievable(svc, tena
 
 
 @pytest.mark.asyncio
+async def test_failed_replacement_of_failed_document_keeps_prior_error(svc, tenant_id):
+    doc_id = await svc.create_document("broken.pdf", tenant_id=tenant_id)
+    original = {"stage": "extracting", "code": "no_text_extracted", "message": "bad pdf"}
+    await svc.update_document_status(
+        doc_id,
+        "failed",
+        tenant_id=tenant_id,
+        error=original,
+    )
+    assert await svc.begin_document_replacement(doc_id, tenant_id) == "started"
+
+    await svc.set_document_status_detail(
+        doc_id,
+        REPLACEMENT_IN_PROGRESS,
+        tenant_id=tenant_id,
+    )
+    during = await svc.get_document_status(doc_id, tenant_id)
+    assert during["status"] == "failed"
+    assert during["error"] == original
+
+    replacement_error = {
+        "stage": "embedding",
+        "code": "provider_timeout",
+        "message": "timed out",
+    }
+    await svc.set_document_status_detail(
+        doc_id,
+        REPLACEMENT_FAILED,
+        tenant_id=tenant_id,
+        error=replacement_error,
+    )
+    failed = await svc.get_document_status(doc_id, tenant_id)
+    assert failed["status"] == "failed"
+    assert failed["status_detail"] == REPLACEMENT_FAILED
+    assert failed["error"]["code"] == "provider_timeout"
+    assert failed["error"]["prior_error"] == original
+    assert await _retrieved_texts(svc, doc_id, tenant_id) == []
+
+    await svc.begin_document_replacement(doc_id, tenant_id)
+    await svc.set_document_status_detail(
+        doc_id,
+        REPLACEMENT_FAILED,
+        tenant_id=tenant_id,
+        error={"stage": "embedding", "code": "pipeline_error", "message": "again"},
+    )
+    again = await svc.get_document_status(doc_id, tenant_id)
+    assert again["error"]["code"] == "pipeline_error"
+    assert again["error"]["prior_error"] == original
+
+    await svc.begin_document_replacement(doc_id, tenant_id)
+    await svc.replace_document_content(
+        doc_id, _records([NEW_PHRASE], _unit_vector(1)), tenant_id, file_name="fixed.pdf"
+    )
+    cutover = await svc.get_document_status(doc_id, tenant_id)
+    assert cutover["status"] == "completed"
+    assert cutover["error"] is None
+    assert set(await _retrieved_texts(svc, doc_id, tenant_id)) == {NEW_PHRASE}
+
+
+@pytest.mark.asyncio
+async def test_completed_replacement_failure_keeps_prior_content(svc, tenant_id):
+    doc_id = await _make_completed_document(svc, tenant_id)
+    before = await _retrieved_texts(svc, doc_id, tenant_id)
+    assert await svc.begin_document_replacement(doc_id, tenant_id) == "started"
+    await svc.set_document_status_detail(
+        doc_id,
+        REPLACEMENT_FAILED,
+        tenant_id=tenant_id,
+        error={"stage": "embedding", "code": "pipeline_error", "message": "nope"},
+    )
+    payload = await svc.get_document_status(doc_id, tenant_id)
+    assert payload["status"] == "completed"
+    assert payload["error"]["code"] == "pipeline_error"
+    assert "prior_error" not in payload["error"]
+    assert await _retrieved_texts(svc, doc_id, tenant_id) == before
+
+
+@pytest.mark.asyncio
 async def test_summaries_expose_status_detail_only_when_set(svc, tenant_id):
     doc_id = await _make_completed_document(svc, tenant_id)
 
