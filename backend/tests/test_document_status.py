@@ -107,3 +107,42 @@ async def test_get_document_status_stream_emits_status_and_closes_on_completed()
         data2 = json.loads(chunks[1].replace("event: status\ndata: ", "").strip())
         assert data2["status"] == "completed"
         assert data2["chunks"]["total"] == 5
+
+
+@pytest.mark.asyncio
+async def test_status_stream_stays_open_while_retrying_and_closes_on_failure():
+    payloads = [
+        {"document_id": "doc-1", "status": "embedding", "chunks": None, "error": None},
+        {"document_id": "doc-1", "status": "retrying", "chunks": None, "error": None},
+        {
+            "document_id": "doc-1",
+            "status": "failed",
+            "chunks": None,
+            "error": {"code": "provider_timeout", "stage": "embedding", "message": "timed out"},
+        },
+    ]
+
+    async def mock_get_document_status(doc_id, **kwargs):
+        if payloads:
+            return payloads.pop(0)
+        return None
+
+    request = make_test_request("GET", "/documents/doc-1/status/stream")
+    request.is_disconnected = AsyncMock(return_value=False)
+
+    with patch("routes.documents.config") as mock_config, \
+         patch("routes.documents.db.get_document_status", new=AsyncMock(side_effect=mock_get_document_status)), \
+         patch("routes.documents.asyncio.sleep", new=AsyncMock()):
+        mock_config.ENABLE_STREAMING = True
+        response = await get_document_status_stream(request, "doc-1", auth=AuthContext(tenant_id="dev"))
+
+        chunks = []
+        async for chunk in response.body_iterator:
+            chunks.append(chunk)
+
+    assert len(chunks) == 3
+    statuses = [
+        json.loads(chunk.replace("event: status\ndata: ", "").strip())["status"]
+        for chunk in chunks
+    ]
+    assert statuses == ["embedding", "retrying", "failed"]

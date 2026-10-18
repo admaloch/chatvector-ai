@@ -50,13 +50,13 @@ from services.artifact_storage import (
     get_artifact_storage,
 )
 from services.ingestion_webhook import WEBHOOK_QUEUE_NAME
+from services.ingestion_outcome import ingestion_failure_is_terminal
 from services.queue_base import (
     BaseIngestionQueue,
     DLQEntry,
     QueueFull,
     QueueJob,
     get_process_embedding_rate_limiter,
-    is_retryable_ingestion_failure,
 )
 
 logger = logging.getLogger(__name__)
@@ -130,7 +130,7 @@ async def _async_execute_job(
     """Async bridge that replicates the retry / DLQ logic from AsyncioIngestionQueue."""
     import db as db_module
     from db import worker_db_context
-    from services.ingestion_pipeline import IngestionPipeline, UploadPipelineError
+    from services.ingestion_pipeline import IngestionPipeline
 
     async with worker_db_context():
         _redis_conn = redis_lib.Redis.from_url(config.REDIS_URL, **redis_connection_kwargs())
@@ -215,27 +215,10 @@ async def _async_execute_job(
             ), conn=_redis_conn)
             return
         except Exception as exc:
-            if isinstance(exc, UploadPipelineError) and 400 <= exc.status_code < 500:
+            if ingestion_failure_is_terminal(exc, attempt):
                 logger.error(
-                    "Document %s (%r) non-retryable error (HTTP %d) — DLQ: %s",
-                    doc_id, file_name, exc.status_code, exc,
-                    exc_info=True,
-                )
-                await _cleanup_artifact(artifact_uri, doc_id, tenant_id)
-                _push_dlq_entry(DLQEntry(
-                    doc_id=doc_id,
-                    file_name=file_name,
-                    content_type=content_type,
-                    attempt=attempt,
-                    error=str(exc),
-                    tenant_id=tenant_id,
-                ), conn=_redis_conn)
-                return
-
-            if not is_retryable_ingestion_failure(exc):
-                logger.error(
-                    "Document %s (%r) non-retryable error — DLQ: %s",
-                    doc_id, file_name, exc,
+                    "Document %s (%r) terminal failure on attempt %s — DLQ: %s",
+                    doc_id, file_name, attempt, exc,
                     exc_info=True,
                 )
                 await _cleanup_artifact(artifact_uri, doc_id, tenant_id)
@@ -257,15 +240,22 @@ async def _async_execute_job(
                     "Document %s failed attempt %d — re-enqueuing after %.2fs: %s",
                     doc_id, next_attempt, delay, exc,
                 )
+                retry_job_patch = {"attempt": next_attempt + 1}
                 try:
                     if replace:
                         # Keep `status` (and the retrievable chunks) untouched.
                         await db_module.set_document_status_detail(
-                            doc_id, REPLACEMENT_IN_PROGRESS, tenant_id=tenant_id,
+                            doc_id,
+                            REPLACEMENT_IN_PROGRESS,
+                            tenant_id=tenant_id,
+                            job_metadata_patch=retry_job_patch,
                         )
                     else:
                         await db_module.update_document_status(
-                            doc_id=doc_id, status="retrying", tenant_id=tenant_id,
+                            doc_id=doc_id,
+                            status="retrying",
+                            tenant_id=tenant_id,
+                            job_metadata_patch=retry_job_patch,
                         )
                 except Exception as status_err:
                     logger.error(

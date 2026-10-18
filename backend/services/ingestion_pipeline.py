@@ -75,7 +75,7 @@ except ImportError:  # pragma: no cover - lightweight fallback for constrained e
 
 import db
 from core.config import config
-from db.base import REPLACEMENT_FAILED, ChunkRecord
+from db.base import ChunkRecord
 from db.tenant_scope import require_tenant_id
 from services.embedding_service import get_embeddings
 from services.docx_extraction import (
@@ -996,54 +996,41 @@ class IngestionPipeline:
         exc: Exception,
         tenant_id: str,
         replace: bool = False,
+        attempt: int | None = None,
     ) -> None:
         tenant_id = require_tenant_id(tenant_id, method="delete_document_chunks")
         error = _classify_ingestion_error(exc, stage)
-        from services.ingestion_job_metadata import patch_terminal_failure
+        from services.ingestion_outcome import (
+            ingestion_failure_is_terminal,
+            record_retrying_ingestion_attempt,
+            record_terminal_ingestion_failure,
+        )
 
-        terminal_job_patch = patch_terminal_failure(error)
-
-        if replace:
-            # The active chunks and `status` are the last known-good content:
-            # record the failure in status_detail and leave both untouched.
-            try:
-                await db.set_document_status_detail(
-                    doc_id,
-                    REPLACEMENT_FAILED,
+        # Synchronous uploads (no queue attempt) are always terminal. Queued
+        # work stays non-terminal while retries remain.
+        terminal = attempt is None or ingestion_failure_is_terminal(exc, attempt)
+        try:
+            if not terminal:
+                await record_retrying_ingestion_attempt(
+                    doc_id=doc_id,
                     tenant_id=tenant_id,
-                    error=error,
-                    job_metadata_patch=terminal_job_patch,
-                )
-            except Exception as status_error:
-                logger.error(
-                    f"Failed to record replacement failure for document {doc_id}: {status_error}"
+                    replace=replace,
                 )
                 return
-            if config.WEBHOOK_ENABLED:
-                try:
-                    from services.ingestion_webhook import notify_ingestion_terminal
-
-                    await notify_ingestion_terminal(
-                        doc_id, tenant_id, outcome="failed"
-                    )
-                except Exception as webhook_error:
-                    logger.error(
-                        "Failed to schedule ingestion webhook for document %s: %s",
-                        doc_id,
-                        webhook_error,
-                    )
-            return
-
-        try:
-            await self._update_status(
+            await record_terminal_ingestion_failure(
                 doc_id=doc_id,
-                status="failed",
                 tenant_id=tenant_id,
                 error=error,
-                job_metadata_patch=terminal_job_patch,
+                replace=replace,
             )
         except Exception as status_error:
-            logger.error(f"Failed to mark document {doc_id} as failed: {status_error}")
+            logger.error(
+                f"Failed to record ingestion outcome for document {doc_id}: {status_error}"
+            )
+            return
+
+        if replace:
+            return
 
         try:
             await db.delete_document_chunks(doc_id, tenant_id=tenant_id)
@@ -1320,7 +1307,12 @@ class IngestionPipeline:
 
         except UploadPipelineError as e:
             await self._handle_error(
-                doc_id=doc_id, stage=e.stage, exc=e, tenant_id=tenant_id, replace=replace
+                doc_id=doc_id,
+                stage=e.stage,
+                exc=e,
+                tenant_id=tenant_id,
+                replace=replace,
+                attempt=attempt,
             )
             logger.warning(
                 f"Background pipeline failed at stage={e.stage} "
@@ -1330,7 +1322,12 @@ class IngestionPipeline:
 
         except Exception as e:
             await self._handle_error(
-                doc_id=doc_id, stage=stage, exc=e, tenant_id=tenant_id, replace=replace
+                doc_id=doc_id,
+                stage=stage,
+                exc=e,
+                tenant_id=tenant_id,
+                replace=replace,
+                attempt=attempt,
             )
             logger.error(
                 f"Background pipeline unexpected error at stage={stage} "
