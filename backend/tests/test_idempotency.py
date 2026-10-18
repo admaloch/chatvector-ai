@@ -18,12 +18,18 @@ from request_utils import make_test_request
 from middleware.rate_limit import limiter
 from routes.sessions import router as sessions_router
 from routes.upload import router as upload_router
+from fastapi import HTTPException
+
 from services.idempotency import (
     ROUTE_SESSION_CREATE,
     ROUTE_UPLOAD,
+    IdempotencyLease,
     _redis_key,
+    begin_idempotency,
+    complete_idempotent_http_exception,
     upload_request_fingerprint,
 )
+from services.queue_service import QueueFull
 
 
 class FakeRedis:
@@ -351,6 +357,152 @@ def test_upload_same_key_different_tenants_create_two_documents(fake_redis):
     assert resp_a.json()["document_id"] == "doc-tenant-a"
     assert resp_b.json()["document_id"] == "doc-tenant-b"
     limiter.reset()
+
+
+def test_upload_queue_full_releases_key_so_retry_succeeds(upload_client, fake_redis):
+    create_document = AsyncMock(side_effect=["doc-blocked", "doc-ok"])
+    enqueue = AsyncMock(side_effect=[QueueFull("full"), 1])
+    headers = {"Idempotency-Key": "queue-full-key"}
+    with (
+        patch("services.idempotency.redis_client", fake_redis),
+        patch("routes.upload.ingestion_pipeline.validate_file", return_value=None),
+        patch("routes.upload.db.create_document", new=create_document),
+        patch("routes.upload.db.update_document_status", new=AsyncMock()),
+        patch("routes.upload.ingestion_queue.enqueue", new=enqueue),
+    ):
+        blocked = upload_client.post("/upload", files=_pdf_files(), headers=headers)
+        recovered = upload_client.post("/upload", files=_pdf_files(), headers=headers)
+
+    assert blocked.status_code == 503
+    assert blocked.json()["detail"]["code"] == "queue_full"
+    assert recovered.status_code == 202
+    assert recovered.json()["document_id"] == "doc-ok"
+    assert create_document.await_count == 2
+    assert enqueue.await_count == 2
+
+
+def test_replacement_in_progress_releases_key_when_conflict_clears(
+    upload_client, fake_redis
+):
+    replace_id = "11111111-1111-4111-8111-111111111111"
+    begin_replace = AsyncMock(side_effect=["in_progress", "started"])
+    headers = {"Idempotency-Key": "replace-busy-key"}
+    with (
+        patch("services.idempotency.redis_client", fake_redis),
+        patch("routes.upload.ingestion_pipeline.validate_file", return_value=None),
+        patch("routes.upload.db.begin_document_replacement", new=begin_replace),
+        patch(
+            "routes.upload.db.get_document_status",
+            new=AsyncMock(return_value={"status": "completed"}),
+        ),
+        patch("routes.upload.ingestion_queue.enqueue", new=AsyncMock(return_value=1)),
+    ):
+        busy = upload_client.post(
+            "/upload",
+            files=_pdf_files(),
+            data={"replace_document_id": replace_id},
+            headers=headers,
+        )
+        cleared = upload_client.post(
+            "/upload",
+            files=_pdf_files(),
+            data={"replace_document_id": replace_id},
+            headers=headers,
+        )
+
+    assert busy.status_code == 409
+    assert busy.json()["detail"]["code"] == "replacement_in_progress"
+    assert cleared.status_code == 202
+    assert cleared.json()["document_id"] == replace_id
+    assert begin_replace.await_count == 2
+
+
+def test_validation_422_before_claim_does_not_block_later_success(
+    upload_client, fake_redis
+):
+    """Invalid metadata is rejected before a claim, so the key stays usable."""
+    create_document = AsyncMock(return_value="doc-after-422")
+    headers = {"Idempotency-Key": "validation-key"}
+    p1, p2, p3, p4 = _patched_upload(create_document)
+    with patch("services.idempotency.redis_client", fake_redis), p1, p2, p3, p4:
+        invalid = upload_client.post(
+            "/upload",
+            files=_pdf_files(),
+            data={"metadata": "not-json"},
+            headers=headers,
+        )
+        accepted = upload_client.post("/upload", files=_pdf_files(), headers=headers)
+
+    assert invalid.status_code == 422
+    assert accepted.status_code == 202
+    assert accepted.json()["document_id"] == "doc-after-422"
+    create_document.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_recorded_422_still_replays(fake_redis):
+    fingerprint = upload_request_fingerprint(
+        file_bytes=b"%PDF-1.4 same",
+        filename="doc.pdf",
+        content_type="application/pdf",
+        replace_document_id=None,
+    )
+    with patch("services.idempotency.redis_client", fake_redis):
+        lease, replay = await begin_idempotency(
+            tenant_id="tenant-a",
+            route=ROUTE_UPLOAD,
+            idempotency_key="stable-422",
+            fingerprint=fingerprint,
+        )
+        assert replay is None
+        await complete_idempotent_http_exception(
+            lease,
+            HTTPException(
+                status_code=422,
+                detail={"code": "no_text_extracted", "message": "No text."},
+            ),
+        )
+        _again, replay = await begin_idempotency(
+            tenant_id="tenant-a",
+            route=ROUTE_UPLOAD,
+            idempotency_key="stable-422",
+            fingerprint=fingerprint,
+        )
+
+    assert replay is not None
+    assert replay.status_code == 422
+    assert replay.body
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_429_releases_idempotency_claim(fake_redis):
+    fingerprint = "fp-429"
+    with patch("services.idempotency.redis_client", fake_redis):
+        lease, replay = await begin_idempotency(
+            tenant_id="tenant-a",
+            route=ROUTE_UPLOAD,
+            idempotency_key="rate-limit-key",
+            fingerprint=fingerprint,
+        )
+        assert replay is None
+        assert lease.active
+        await complete_idempotent_http_exception(
+            lease,
+            HTTPException(
+                status_code=429,
+                detail={"code": "rate_limited", "message": "Too many requests."},
+            ),
+        )
+        again, second_replay = await begin_idempotency(
+            tenant_id="tenant-a",
+            route=ROUTE_UPLOAD,
+            idempotency_key="rate-limit-key",
+            fingerprint=fingerprint,
+        )
+
+    assert second_replay is None
+    assert again.active
+    assert isinstance(again, IdempotencyLease)
 
 
 def test_session_fingerprint_independent_per_tenant(fake_redis):

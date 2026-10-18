@@ -130,6 +130,29 @@ def _store_unavailable_error() -> HTTPException:
     )
 
 
+# Completed results worth replaying. Transient infrastructure and conflict
+# responses must release the claim so the same key can succeed later.
+_TRANSIENT_STATUS_CODES = frozenset({429, 503})
+_TRANSIENT_409_CODES = frozenset({
+    "replacement_in_progress",
+    "document_processing",
+    "idempotency_in_progress",
+})
+_STABLE_409_CODES = frozenset({"idempotency_key_mismatch"})
+
+
+def is_transient_idempotency_http(exc: HTTPException) -> bool:
+    """True when an HTTP result must not be cached for the idempotency TTL."""
+    if exc.status_code in _TRANSIENT_STATUS_CODES:
+        return True
+    if exc.status_code != 409 or not isinstance(exc.detail, dict):
+        return False
+    code = exc.detail.get("code")
+    if code in _STABLE_409_CODES:
+        return False
+    return code in _TRANSIENT_409_CODES
+
+
 @dataclass
 class IdempotencyLease:
     """Handle for an idempotency claim; no-op when no key was supplied."""
@@ -262,6 +285,15 @@ def _evaluate_existing(
 async def complete_idempotent_http_exception(
     lease: IdempotencyLease, exc: HTTPException
 ) -> None:
+    """Store a stable HTTP result, or release the claim when it is transient.
+
+    Queue-full 503, rate-limit 429, and in-flight conflicts (replacement or
+    idempotency still running) are not replayed. Deterministic 422 responses
+    and fingerprint mismatches stay replayable.
+    """
+    if is_transient_idempotency_http(exc):
+        await lease.abort()
+        return
     if isinstance(exc.detail, dict):
         body: Any = {"detail": exc.detail}
     else:
