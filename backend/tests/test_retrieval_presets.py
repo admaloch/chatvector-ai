@@ -161,3 +161,38 @@ async def test_chat_unknown_preset_raises_not_found():
                 auth=__import__("core.auth", fromlist=["AuthContext"]).AuthContext(tenant_id="dev"),
             )
     assert exc_info.value.preset == "eval_hybrid"
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_unknown_preset_raises_before_sse_starts():
+    from unittest.mock import AsyncMock, patch
+
+    from core.session import Session
+    from request_utils import make_test_request
+    from routes.chat import ChatRequest, RetrievalOverrides, chat_stream
+
+    set_retrieval_presets_for_tests({})
+    with (
+        patch("routes.chat.config") as mock_config,
+        patch("routes.chat.db.get_document", new=AsyncMock(return_value={"id": "doc", "status": "completed"})),
+        patch(
+            "routes.chat.get_or_create_session",
+            new=AsyncMock(return_value=Session(id="s", tenant_id="dev")),
+        ),
+        patch("routes.chat.register_session_document", new=AsyncMock()),
+        patch("routes.chat.register_tenant_document"),
+        patch("routes.chat.answer_question_stream_for_document") as stream_fn,
+    ):
+        mock_config.ENABLE_STREAMING = True
+        with pytest.raises(RetrievalPresetNotFoundError) as exc_info:
+            await chat_stream(
+                make_test_request("POST", "/chat/stream"),
+                ChatRequest(
+                    question="hello",
+                    doc_id="00000000-0000-0000-0000-000000000001",
+                    retrieval=RetrievalOverrides(preset="eval_hybrid"),
+                ),
+                auth=__import__("core.auth", fromlist=["AuthContext"]).AuthContext(tenant_id="dev"),
+            )
+    assert exc_info.value.preset == "eval_hybrid"
+    stream_fn.assert_not_called()

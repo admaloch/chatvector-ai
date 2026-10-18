@@ -17,6 +17,7 @@ from services.chat_service import (
     answer_questions_for_documents_batch,
     merge_batch_results,
     prepare_batch_chat_items,
+    resolve_effective_retrieval,
 )
 from services.history_config import HISTORY_FIELD_NAMES, merge_history_fields
 from services.metadata_filter import validate_metadata_filter
@@ -348,6 +349,15 @@ async def chat_stream(
     await register_session_document(session.id, doc_id_str, tenant_id)
     register_tenant_document(tenant_id, doc_id_str)
 
+    retrieval_fields = retrieval_fields_from_model(payload)
+    history_fields = history_fields_from_model(payload)
+    # Resolve before SSE starts so unknown/invalid presets are HTTP 400, not 200 empty.
+    resolve_effective_retrieval(
+        match_count=payload.match_count,
+        scope=payload.scope,
+        retrieval_fields=retrieval_fields,
+    )
+
     return StreamingResponse(
         answer_question_stream_for_document(
             question=payload.question,
@@ -360,8 +370,8 @@ async def chat_stream(
                 query_param=debug_retrieval,
                 request_field=payload.debug_retrieval,
             ),
-            retrieval_fields=retrieval_fields_from_model(payload),
-            history_fields=history_fields_from_model(payload),
+            retrieval_fields=retrieval_fields,
+            history_fields=history_fields,
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},

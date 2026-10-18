@@ -14,10 +14,15 @@ from services.history_config import prepare_turn_history
 from services.query_service import QueryTransformResult, transform_query
 from services.retrieval_config import (
     EffectiveRetrievalConfig,
+    InvalidRetrievalConfigError,
     resolve_retrieval_config,
     transformation_is_request_scoped,
 )
-from services.retrieval_presets import extract_preset_name, lookup_retrieval_preset
+from services.retrieval_presets import (
+    RetrievalPresetNotFoundError,
+    extract_preset_name,
+    lookup_retrieval_preset,
+)
 from services.retrieval_service import (
     filter_doc_ids_for_tenant,
     parse_retrieval_scope,
@@ -310,7 +315,7 @@ class RetrievalResult:
         return payload
 
 
-def _resolve_effective_retrieval(
+def resolve_effective_retrieval(
     *,
     match_count: int,
     scope: str | None,
@@ -688,7 +693,7 @@ async def answer_question_for_document(
     """
     logger.info(f"Starting chat for document {doc_id} (session={session_id}, scope={scope or 'session'})")
     tenant_id = require_current_tenant(auth)
-    effective = _resolve_effective_retrieval(
+    effective = resolve_effective_retrieval(
         match_count=match_count,
         scope=scope,
         retrieval_fields=retrieval_fields,
@@ -819,7 +824,7 @@ async def answer_question_stream_for_document(
     """
     logger.info(f"Starting chat stream for document {doc_id} (scope={scope or 'session'})")
     tenant_id = require_current_tenant(auth)
-    effective = _resolve_effective_retrieval(
+    effective = resolve_effective_retrieval(
         match_count=match_count,
         scope=scope,
         retrieval_fields=retrieval_fields,
@@ -948,6 +953,22 @@ async def answer_question_stream_for_document(
 
     except asyncio.CancelledError:
         raise
+    except RetrievalPresetNotFoundError as e:
+        yield _format_sse_event(
+            "error",
+            _build_stream_error_payload(
+                code="preset_not_found",
+                message=str(e),
+            ),
+        )
+    except InvalidRetrievalConfigError as e:
+        yield _format_sse_event(
+            "error",
+            _build_stream_error_payload(
+                code="invalid_retrieval_config",
+                message=str(e),
+            ),
+        )
     except Exception as e:
         logger.error(f"Stream failed for document {doc_id}: {e}", exc_info=True)
         yield _format_sse_event(
@@ -984,7 +1005,7 @@ async def answer_questions_for_documents_batch(
 
     effective_configs: list[EffectiveRetrievalConfig] = []
     for query in normalized_queries:
-        effective = _resolve_effective_retrieval(
+        effective = resolve_effective_retrieval(
             match_count=query["match_count"],
             scope=query.get("scope"),
             retrieval_fields=query["retrieval_fields"] if "retrieval_fields" in query else None,
