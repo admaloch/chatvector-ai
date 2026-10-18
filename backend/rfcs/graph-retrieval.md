@@ -145,7 +145,7 @@ rule as `ENABLE_EMBEDDING_CACHE`.
 | Default-path regression | Chat quality and tests must stay byte-stable when the flag is off | Gate on `ENABLE_GRAPH_RETRIEVAL`; lazy-import the module; no required deps |
 | Parallel retrieval stack | A second production path diverges from pgvector | Overlay only; no new score_type or request field in this spike |
 | Graph DB in default install | Ops and license burden | Forbidden; optional extra only if a later issue chooses Option C |
-| Tenant leakage | Neighbor hops could pull another tenant's chunks | Fixture graph is process-local; any durable model must filter by `tenant_id` on every hop |
+| Tenant leakage | Neighbor hops could pull another tenant's chunks | Expansion appends a neighbor only when its `document_id` is in the request's authorized `document_ids`. Callers build that list from the tenant before retrieval, so a fixture chunk from another document or tenant is dropped. Any durable model must keep the same filter on every hop |
 | Extraction cost/noise | Bad entities amplify irrelevant neighbors | Fixture-only until eval on real docs beats baseline without recall regression |
 | Latency | Extra hops before rerank | 1 hop, cap extra candidates, skip entirely when flag is off |
 | Public API creep | New `score_type` / request overrides lock clients in | Prototype does not add citation fields or per-request graph toggles |
@@ -191,8 +191,14 @@ Implemented in `backend/services/graph_retrieval.py`:
   the flag is true.
 - Neighbor chunks come from the fixture payload (no graph DB, no extra
   required packages).
+- A neighbor is appended only when its `document_id` is in the authorized
+  `document_ids` for that retrieval. Out-of-scope fixture chunks, including
+  ones that share an entity with a seed, are not added and do not consume
+  the extra-candidate cap.
 - Missing or empty fixture → no-op (seed ranking unchanged).
 - No request-body override; no new `score_type`.
+- `ENABLE_GRAPH_RETRIEVAL` stays default false. The disabled path does not
+  import or run expansion.
 
 ## 7. Non-goals (from #515)
 

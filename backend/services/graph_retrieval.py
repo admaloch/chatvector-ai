@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -129,16 +130,23 @@ def expand_chunks(
     seeds: list[ChunkMatch],
     graph: EntityChunkGraph,
     *,
+    allowed_document_ids: Collection[str],
     extra_limit: int = DEFAULT_EXTRA_CANDIDATES,
 ) -> list[ChunkMatch]:
-    """Append 1-hop neighbor chunks from ``graph`` that are not already seeds."""
+    """Append 1-hop neighbors that belong to ``allowed_document_ids``.
+
+    Out-of-scope neighbors are skipped before ``extra_limit`` is applied, so a
+    foreign fixture chunk cannot consume a slot that an authorized neighbor
+    should fill. Seeds are left unchanged; callers already scoped vector search.
+    """
     if not seeds or graph.is_empty() or extra_limit <= 0:
         return list(seeds)
 
+    allowed = {str(document_id) for document_id in allowed_document_ids}
     extras: list[ChunkMatch] = []
     for key in _neighbor_keys(seeds, graph):
         payload = graph.chunk_payloads.get(key)
-        if payload is None:
+        if payload is None or payload.document_id not in allowed:
             continue
         extras.append(_chunk_match_from_payload(payload))
         if len(extras) >= extra_limit:
@@ -164,12 +172,22 @@ def _load_configured_graph() -> EntityChunkGraph | None:
 def expand_chunks_if_enabled(
     seeds: list[ChunkMatch],
     *,
+    allowed_document_ids: Collection[str],
     extra_limit: int = DEFAULT_EXTRA_CANDIDATES,
 ) -> list[ChunkMatch]:
-    """No-op unless ``ENABLE_GRAPH_RETRIEVAL`` is true and a fixture loads."""
+    """No-op unless ``ENABLE_GRAPH_RETRIEVAL`` is true and a fixture loads.
+
+    When expansion runs, neighbors must fall inside ``allowed_document_ids``
+    (the request's already authorized tenant document scope).
+    """
     if not config.ENABLE_GRAPH_RETRIEVAL:
         return list(seeds)
     graph = _load_configured_graph()
     if graph is None:
         return list(seeds)
-    return expand_chunks(seeds, graph, extra_limit=extra_limit)
+    return expand_chunks(
+        seeds,
+        graph,
+        allowed_document_ids=allowed_document_ids,
+        extra_limit=extra_limit,
+    )

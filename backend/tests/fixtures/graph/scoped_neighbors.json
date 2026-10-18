@@ -1,0 +1,51 @@
+{
+  "name": "scoped-overlapping-neighbors",
+  "entities": [
+    {"id": "shared-topic", "name": "shared topic"}
+  ],
+  "relations": [],
+  "chunks": [
+    {
+      "id": "doc-aaa-foreign:0",
+      "document_id": "doc-aaa-foreign",
+      "chunk_index": 0,
+      "file_name": "foreign-early.txt",
+      "chunk_text": "EARLY FOREIGN SECRET sorts ahead of authorized neighbors."
+    },
+    {
+      "id": "doc-authorized:0",
+      "document_id": "doc-authorized",
+      "chunk_index": 0,
+      "file_name": "authorized.txt",
+      "chunk_text": "Authorized seed about the shared topic."
+    },
+    {
+      "id": "doc-authorized:1",
+      "document_id": "doc-authorized",
+      "chunk_index": 1,
+      "file_name": "authorized.txt",
+      "chunk_text": "Authorized neighbor still in this document."
+    },
+    {
+      "id": "doc-also-authorized:0",
+      "document_id": "doc-also-authorized",
+      "chunk_index": 0,
+      "file_name": "also-authorized.txt",
+      "chunk_text": "Neighbor in a second authorized document."
+    },
+    {
+      "id": "doc-foreign-tenant:0",
+      "document_id": "doc-foreign-tenant",
+      "chunk_index": 0,
+      "file_name": "foreign.txt",
+      "chunk_text": "FOREIGN TENANT SECRET must not be retrieved."
+    }
+  ],
+  "mentions": [
+    {"entity_id": "shared-topic", "document_id": "doc-aaa-foreign", "chunk_index": 0},
+    {"entity_id": "shared-topic", "document_id": "doc-authorized", "chunk_index": 0},
+    {"entity_id": "shared-topic", "document_id": "doc-authorized", "chunk_index": 1},
+    {"entity_id": "shared-topic", "document_id": "doc-also-authorized", "chunk_index": 0},
+    {"entity_id": "shared-topic", "document_id": "doc-foreign-tenant", "chunk_index": 0}
+  ]
+}

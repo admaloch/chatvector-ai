@@ -17,6 +17,8 @@ from services.graph_retrieval import (
 from services.retrieval_config import RetrievalProcessDefaults, resolve_retrieval_config
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "graph" / "multihop.json"
+SCOPED_FIXTURE_PATH = Path(__file__).parent / "fixtures" / "graph" / "scoped_neighbors.json"
+AUTHORIZED_DOC_IDS = ["graph-doc-01"]
 
 
 def _chunk(
@@ -56,7 +58,9 @@ def test_expand_chunks_recovers_one_hop_neighbor(multihop_graph):
             text="The annual plan is billed once per year and includes all product tiers.",
         )
     ]
-    expanded = expand_chunks(seeds, multihop_graph)
+    expanded = expand_chunks(
+        seeds, multihop_graph, allowed_document_ids=AUTHORIZED_DOC_IDS
+    )
 
     keys = [(c.document_id, c.chunk_index) for c in expanded]
     assert keys[0] == ("graph-doc-01", 0)
@@ -70,7 +74,9 @@ def test_expand_chunks_does_not_duplicate_seeds(multihop_graph):
         _chunk("graph-doc-01", 0),
         _chunk("graph-doc-01", 1, text="already present"),
     ]
-    expanded = expand_chunks(seeds, multihop_graph)
+    expanded = expand_chunks(
+        seeds, multihop_graph, allowed_document_ids=AUTHORIZED_DOC_IDS
+    )
     keys = [(c.document_id, c.chunk_index) for c in expanded]
     assert keys == [("graph-doc-01", 0), ("graph-doc-01", 1)]
 
@@ -79,15 +85,22 @@ def test_expand_chunks_empty_graph_is_noop():
     from services.graph_retrieval import EntityChunkGraph
 
     seeds = [_chunk("graph-doc-01", 0)]
-    assert expand_chunks(seeds, EntityChunkGraph()) == seeds
+    assert (
+        expand_chunks(seeds, EntityChunkGraph(), allowed_document_ids=AUTHORIZED_DOC_IDS)
+        == seeds
+    )
 
 
 def test_expand_chunks_respects_extra_limit(multihop_graph):
     seeds = [_chunk("graph-doc-01", 0)]
-    expanded = expand_chunks(seeds, multihop_graph, extra_limit=0)
+    expanded = expand_chunks(
+        seeds, multihop_graph, allowed_document_ids=AUTHORIZED_DOC_IDS, extra_limit=0
+    )
     assert [(c.document_id, c.chunk_index) for c in expanded] == [("graph-doc-01", 0)]
 
-    expanded = expand_chunks(seeds, multihop_graph, extra_limit=1)
+    expanded = expand_chunks(
+        seeds, multihop_graph, allowed_document_ids=AUTHORIZED_DOC_IDS, extra_limit=1
+    )
     keys = [(c.document_id, c.chunk_index) for c in expanded]
     assert keys == [("graph-doc-01", 0), ("graph-doc-01", 1)]
 
@@ -96,14 +109,14 @@ def test_expand_chunks_if_enabled_noop_when_flag_off(monkeypatch, multihop_graph
     monkeypatch.setattr(config, "ENABLE_GRAPH_RETRIEVAL", False)
     monkeypatch.setattr(config, "GRAPH_RETRIEVAL_FIXTURE_PATH", str(FIXTURE_PATH))
     seeds = [_chunk("graph-doc-01", 0)]
-    assert expand_chunks_if_enabled(seeds) == seeds
+    assert expand_chunks_if_enabled(seeds, allowed_document_ids=AUTHORIZED_DOC_IDS) == seeds
 
 
 def test_expand_chunks_if_enabled_noop_without_fixture_path(monkeypatch):
     monkeypatch.setattr(config, "ENABLE_GRAPH_RETRIEVAL", True)
     monkeypatch.setattr(config, "GRAPH_RETRIEVAL_FIXTURE_PATH", None)
     seeds = [_chunk("graph-doc-01", 0)]
-    assert expand_chunks_if_enabled(seeds) == seeds
+    assert expand_chunks_if_enabled(seeds, allowed_document_ids=AUTHORIZED_DOC_IDS) == seeds
 
 
 def test_expand_chunks_if_enabled_noop_on_missing_file(monkeypatch, tmp_path):
@@ -111,7 +124,7 @@ def test_expand_chunks_if_enabled_noop_on_missing_file(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "ENABLE_GRAPH_RETRIEVAL", True)
     monkeypatch.setattr(config, "GRAPH_RETRIEVAL_FIXTURE_PATH", str(missing))
     seeds = [_chunk("graph-doc-01", 0)]
-    assert expand_chunks_if_enabled(seeds) == seeds
+    assert expand_chunks_if_enabled(seeds, allowed_document_ids=AUTHORIZED_DOC_IDS) == seeds
 
 
 def test_expand_chunks_if_enabled_noop_on_invalid_json(monkeypatch, tmp_path):
@@ -120,14 +133,14 @@ def test_expand_chunks_if_enabled_noop_on_invalid_json(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "ENABLE_GRAPH_RETRIEVAL", True)
     monkeypatch.setattr(config, "GRAPH_RETRIEVAL_FIXTURE_PATH", str(bad))
     seeds = [_chunk("graph-doc-01", 0)]
-    assert expand_chunks_if_enabled(seeds) == seeds
+    assert expand_chunks_if_enabled(seeds, allowed_document_ids=AUTHORIZED_DOC_IDS) == seeds
 
 
 def test_expand_chunks_if_enabled_loads_fixture_when_flag_on(monkeypatch):
     monkeypatch.setattr(config, "ENABLE_GRAPH_RETRIEVAL", True)
     monkeypatch.setattr(config, "GRAPH_RETRIEVAL_FIXTURE_PATH", str(FIXTURE_PATH))
     seeds = [_chunk("graph-doc-01", 0)]
-    expanded = expand_chunks_if_enabled(seeds)
+    expanded = expand_chunks_if_enabled(seeds, allowed_document_ids=AUTHORIZED_DOC_IDS)
     assert ("graph-doc-01", 1) in {(c.document_id, c.chunk_index) for c in expanded}
 
 
@@ -136,7 +149,9 @@ def test_multihop_eval_note_graph_lifts_recall(multihop_graph):
     relevant = {("graph-doc-01", 1)}
     seeds = [_chunk("graph-doc-01", 0)]
     seed_keys = [eval_metrics.chunk_match_key(c.document_id, c.chunk_index) for c in seeds]
-    expanded = expand_chunks(seeds, multihop_graph)
+    expanded = expand_chunks(
+        seeds, multihop_graph, allowed_document_ids=AUTHORIZED_DOC_IDS
+    )
     expanded_keys = [
         eval_metrics.chunk_match_key(c.document_id, c.chunk_index) for c in expanded
     ]
@@ -201,3 +216,63 @@ async def test_retrieve_for_documents_expands_when_graph_flag_on(monkeypatch):
     keys = [(c.document_id, c.chunk_index) for c in result.chunks]
     assert keys[0] == ("graph-doc-01", 0)
     assert ("graph-doc-01", 1) in keys
+
+
+def test_expand_chunks_drops_foreign_fixture_neighbors():
+    """Overlapping entity neighbors outside authorized documents are not appended."""
+    graph = load_fixture_graph(SCOPED_FIXTURE_PATH)
+    seeds = [_chunk("doc-authorized", 0, text="Authorized seed about the shared topic.")]
+    allowed = ["doc-authorized", "doc-also-authorized"]
+
+    expanded = expand_chunks(seeds, graph, allowed_document_ids=allowed)
+    keys = [(c.document_id, c.chunk_index) for c in expanded]
+    texts = [c.chunk_text for c in expanded]
+
+    assert ("doc-authorized", 0) in keys
+    assert ("doc-authorized", 1) in keys
+    assert ("doc-also-authorized", 0) in keys
+    assert "doc-foreign-tenant" not in {doc_id for doc_id, _ in keys}
+    assert "doc-aaa-foreign" not in {doc_id for doc_id, _ in keys}
+    assert all("SECRET" not in text for text in texts)
+
+    limited = expand_chunks(seeds, graph, allowed_document_ids=allowed, extra_limit=1)
+    limited_keys = [(c.document_id, c.chunk_index) for c in limited]
+    assert limited_keys == [("doc-authorized", 0), ("doc-also-authorized", 0)]
+    assert all("SECRET" not in c.chunk_text for c in limited)
+
+
+def test_expand_chunks_empty_allowlist_adds_no_neighbors():
+    graph = load_fixture_graph(SCOPED_FIXTURE_PATH)
+    seeds = [_chunk("doc-authorized", 0)]
+    expanded = expand_chunks(seeds, graph, allowed_document_ids=[])
+    assert [(c.document_id, c.chunk_index) for c in expanded] == [("doc-authorized", 0)]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_for_documents_graph_expansion_stays_in_document_scope(monkeypatch):
+    monkeypatch.setattr(config, "ENABLE_GRAPH_RETRIEVAL", True)
+    monkeypatch.setattr(config, "GRAPH_RETRIEVAL_FIXTURE_PATH", str(SCOPED_FIXTURE_PATH))
+    monkeypatch.setattr(config, "ENABLE_RERANKING", False)
+    monkeypatch.setattr(config, "HYBRID_RETRIEVAL_ENABLED", False)
+    monkeypatch.setattr(config, "QUERY_TRANSFORMATION_ENABLED", False)
+
+    seed = _chunk("doc-authorized", 0, text="Authorized seed about the shared topic.")
+    allowed = ["doc-authorized", "doc-also-authorized"]
+    with (
+        patch("services.chat_service.get_embeddings", new=AsyncMock(return_value=[[0.1]])),
+        patch("services.chat_service.find_similar_chunks", new=AsyncMock(return_value=[seed])),
+    ):
+        effective = resolve_retrieval_config({}, RetrievalProcessDefaults.from_process())
+        result = await retrieve_for_documents(
+            "What does the shared topic say?",
+            allowed,
+            "tenant-a",
+            effective,
+        )
+
+    keys = [(c.document_id, c.chunk_index) for c in result.chunks]
+    assert ("doc-authorized", 1) in keys
+    assert ("doc-also-authorized", 0) in keys
+    assert "doc-foreign-tenant" not in {doc_id for doc_id, _ in keys}
+    assert "FOREIGN TENANT SECRET" not in result.context
+    assert "EARLY FOREIGN SECRET" not in result.context
