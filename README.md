@@ -2,7 +2,7 @@
 
 ### Open-Source Backend-First RAG Engine for Document Intelligence
 
-ChatVector is an open-source Retrieval-Augmented Generation (RAG) engine for ingesting, indexing, and querying unstructured documents such as PDFs and text files.
+ChatVector is an open-source Retrieval-Augmented Generation (RAG) engine for ingesting, indexing, and querying unstructured documents: PDF, plain text, Markdown, HTML, and DOCX.
 
 Think of it as an engine developers can use to build document-aware applications — such as research assistants, contract analysis tools, or internal knowledge systems — without having to reinvent the RAG pipeline.
 
@@ -47,12 +47,14 @@ Think of it as an engine developers can use to build document-aware applications
 
 ChatVector provides a **clean, extensible backend foundation for RAG-based document intelligence**. It handles the full lifecycle of document Q&A:
 
-- Document ingestion (PDF, text) with configurable chunking strategies
+- Document ingestion (PDF, plain text, Markdown, HTML, DOCX) with configurable chunking
+- Session-aware retrieval by default, without rewriting every standalone question
+- Optional per-request retrieval controls: hybrid search, reranking, metadata filters, and named presets
 - Text extraction, cleaning, and semantic chunking
 - Vector embedding and storage via pgvector
-- Semantic retrieval with optional query transformations
 - LLM-powered answer generation with cited responses
-- Background processing queue with rate limiting and retry logic
+- Background ingestion with retries, job status, optional webhooks, and durable artifacts
+- Python and TypeScript SDKs for server-side integration
 
 The goal is to offer a **developer-focused RAG engine** you can deploy as a service and integrate via HTTP — not a polished end-user SaaS, and not a framework you have to assemble yourself.
 
@@ -85,42 +87,40 @@ ChatVector is designed for:
 
 ## Current Status
 
-### Phases 1–2.5 Complete | Phase 3 Mostly Shipped
+### Current product
 
-Phases 1, 2, and 2.5 are complete. Phase 3 platform work is largely shipped — API-key authentication, tenant isolation, durable sessions, hybrid retrieval, Python and TypeScript SDKs, component score metadata, and the expanded frontend demo are in place. Remaining Phase 3 work is focused on distributed rate-limit storage across workers and documentation/examples polish. See [ROADMAP.md](ROADMAP.md) for the full breakdown.
+ChatVector is a backend-first RAG engine with strong defaults. History-aware sessions, vector retrieval, and cited answers work without extra configuration. Hybrid search, reranking, query rewrite/expand/step-back, metadata filters, named presets, the embedding cache, webhooks, and experimental GraphRAG stay off until you turn them on.
 
-**What's working today:**
+**Ingestion and documents**
+- PDF, plain text, Markdown, HTML, and DOCX, with a pluggable extractor registry
+- Flat document metadata and exact-match / `in` retrieval filters, scoped to the tenant
+- In-place replacement (`replace_document_id`) that keeps the last good content retrievable until cutover; this is not historical versioning
+- Job status over HTTP and SSE, including non-terminal `retrying` until retries are exhausted
+- Optional HMAC webhooks for terminal `ingestion.completed` and `ingestion.failed` only
+- Local artifact spill by default; S3-compatible storage when API hosts do not share a disk
+- Idempotency keys on `POST /upload` and `POST /sessions` (no automatic SDK POST retries)
 
-**Backend**
-- PDF and text document ingestion
-- Configurable chunking strategies (fixed, paragraph, semantic)
-- Vector embeddings + semantic search via pgvector
-- PostgreSQL/pgvector via SQLAlchemy in all environments (`DATABASE_URL`)
-- Hybrid retrieval (PostgreSQL full-text + vector, RRF fusion)
-- Baseline retrieval reranking (similarity + lexical overlap)
-- Session-scoped and tenant-wide retrieval modes
-- LLM-powered answers with source citations, relevance scores, and score types
-- Query transformations (rewrite, expand, stepback) with session-history context
-- Configurable response personas and system prompt
-- Session-based chat with persisted conversation history
-- SSE streaming chat (`/chat/stream`) with structured `complete` events (citations, `latency_ms`, `model`)
-- Background ingestion queue with rate limiting, retry, and DLQ
-- Redis-backed ingestion queue (production default; in-memory fallback for local dev)
-- Bearer API-key authentication and strict tenant isolation in production
-- Per-tenant rate limiting on authenticated API routes
-- Development/test auth bypass with automatic `DEV_TENANT_ID` bootstrap
-- Structured logging with request ID tracing
-- Health checks with TTL caching on `/status`
-- Security headers, CORS hardening, input validation
-- Production Compose config + GitHub Actions CI
-- Pluggable LLM providers (Gemini, OpenAI, Ollama, Anthropic Claude)
-- Pluggable embedding providers (Gemini, OpenAI, Ollama, Voyage AI)
-- Mixed-provider configurations (e.g. Claude + Voyage)
-- Response metadata: `latency_ms` and `model` on chat and batch responses
-- Optional component score metadata on citation sources
-- Tenant document listing (`GET /documents`)
-- Python client SDK (upload, status, chat, batch, sessions, streaming, async client, retrieval scopes)
-- TypeScript SDK (`@chatvector/sdk`) for Node backends (upload, chat, batch, sessions, streaming)
+**Retrieval and chat**
+- Session-scoped retrieval by default, or tenant-wide scope
+- Separate retrieval-history and generation-history windows
+- Gated follow-up resolution: ambiguous follow-ups use prior turns; standalone questions and topic switches do not spend an extra LLM call
+- Optional hybrid retrieval, similarity or Cohere reranking (hosted failures fall back to retrieval order), and rewrite / expand / step-back
+- Named presets loaded from a file or env at startup; a preset is an alias for the same retrieval config, not a separate system
+- `debug_retrieval` for effective config, queries, history decisions, timings, and component scores
+- Retrieval evaluation CLI (`python -m backend.cli eval`) over the real retrieval path; it does not generate answers and bypasses the embedding cache unless you opt in
+
+**Platform**
+- PostgreSQL/pgvector via SQLAlchemy; pluggable LLM and embedding providers
+- Bearer API keys and tenant isolation in production; auth bypass only in development/test
+- One API process per container by default; multiple API containers are supported with Redis, S3 artifacts, and `MULTI_API_INSTANCE=true`
+- Python and TypeScript SDKs for server-side upload, chat, streaming, sessions, bulk ingest, replacement, feedback, and retrieval config
+- React helpers in `sdk/typescript/examples/next-proxy` call your own proxy; the API key stays on the server
+
+GraphRAG (`ENABLE_GRAPH_RETRIEVAL`) is experimental and default-off. It does not change retrieval unless enabled, and it is not the production retrieval architecture. See [backend/rfcs/graph-retrieval.md](backend/rfcs/graph-retrieval.md).
+
+Feedback (`POST /feedback`) records tenant-scoped signals. It does not retune retrieval.
+
+See [documentation/content/getting-started.md](documentation/content/getting-started.md) for a first run and [documentation/content/api-reference.md](documentation/content/api-reference.md) for request shapes.
 
 **Frontend Demo**
 - Document upload with live pipeline stage display and ingestion SSE progress
@@ -130,9 +130,6 @@ Phases 1, 2, and 2.5 are complete. Phase 3 platform work is largely shipped — 
 - Live system status page
 - Structured API error display and grouped Demo/Docs navigation
 - Postgres-backed session sidebar with dark/light theme
-
-**Active Phase 3 work:**
-- Redis-backed distributed rate-limit storage across workers
 
 ---
 
@@ -148,11 +145,11 @@ Phases 1, 2, and 2.5 are complete. Phase 3 platform work is largely shipped — 
 ### AI & Retrieval Layer
 
 - **Pluggable providers** — Gemini, OpenAI, Ollama, Anthropic Claude (LLM), and Voyage AI (embeddings); mix and match independently
-- **Hybrid retrieval** — vector similarity + PostgreSQL full-text search with RRF fusion
-- **Baseline reranking** — deterministic similarity + lexical overlap reranker
+- **Hybrid retrieval** — optional vector + PostgreSQL full-text fusion (off by default)
+- **Reranking** — optional in-process similarity reranker or Cohere (off by default)
 - **Retrieval scopes** — session-scoped (default) or tenant-wide search
 - **Configurable chunking** — fixed, paragraph, or semantic strategies
-- **Query transformations** — rewrite, expand, or stepback before retrieval
+- **Query transformations** — optional rewrite, expand, or step-back; history resolution is separate and gated
 - **Response personas** — `default`, `concise`, `conversational`, `academic`, `technical`
 
 ### Data Layer

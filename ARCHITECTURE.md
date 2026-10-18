@@ -643,7 +643,7 @@ with ChatVectorClient("http://localhost:8000", api_key="cv_live_...") as client:
   `ChatVectorTimeoutError`, `ChatVectorAPIError`
 - Context manager support
 
-**Current gaps:** async ingestion SSE client (sync Python `iter_document_status` is available); per-component citation scores are returned by the API but not yet modeled on SDK `ChatSource` types.
+Async `iter_document_status`, component citation scores, upload metadata, `metadata_filter`, replacement, bulk upload, feedback, and idempotency keys are on both the Python and TypeScript clients. The TypeScript package is server-side only.
 
 Install: `pip install ./sdk/python` — see [sdk/python/README.md](sdk/python/README.md)
 

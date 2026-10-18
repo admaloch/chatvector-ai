@@ -1,6 +1,6 @@
 # ChatVector Frontend Demo
 
-This folder contains the ChatVector frontend demo. It is a Next.js app for trying the local ChatVector flow: upload documents, watch ingestion progress, chat with retrieved context and citations, run batch queries, and inspect retrieval metadata. It is a contributor demo, not a standalone product.
+This folder contains the ChatVector frontend demo. It is a Next.js app for trying the local ChatVector flow: upload PDF, text, Markdown, HTML, or DOCX files, watch ingestion progress, chat with retrieved context and citations, run batch queries, and inspect retrieval metadata. It is a contributor demo, not a standalone product. Production apps should keep the API key on a server proxy (`sdk/typescript/examples/next-proxy` or `sdk/python/examples/fastapi-proxy`). The demo's `NEXT_PUBLIC_API_KEY` is only for local experiments against a development backend.
 
 ## What the demo includes
 

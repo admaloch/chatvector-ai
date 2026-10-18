@@ -1,6 +1,8 @@
 # ChatVector Documentation
 
-ChatVector is an open-source, backend-first RAG engine for ingesting, indexing, and querying unstructured documents.
+ChatVector is an open-source, backend-first RAG engine. Upload a document and ask questions with cited answers. Session follow-ups work by default. Hybrid search, reranking, query rewriting, metadata filters, presets, caching, and webhooks are optional.
+
+It is not a hosted SaaS product, an agent framework, a billing system, or a workflow builder. SDKs are for your server. Do not put API keys in browser code.
 
 Use this site to:
 

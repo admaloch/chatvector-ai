@@ -186,7 +186,8 @@ with ChatVectorClient(base_url="http://localhost:8000") as client:
 | ``query_transformation_enabled`` | ``query_transformation_enabled`` |
 | ``query_transformation_strategy`` | ``query_transformation_strategy`` |
 | ``skip_history_transform`` | ``skip_history_transform`` |
-| ``preset`` | ``preset`` (when backend presets ship) |
+| ``metadata_filter`` | ``metadata_filter`` |
+| ``preset`` | ``preset`` |
 | ``retrieval_history_window`` | ``retrieval_history_window`` |
 | ``generation_history_window`` | ``generation_history_window`` |
 | ``history_aware_retrieval`` | ``history_aware_retrieval`` |
@@ -194,6 +195,11 @@ with ChatVectorClient(base_url="http://localhost:8000") as client:
 
 The SDK rejects ``match_count`` outside 1–20 before sending a request. Other
 validation remains on the backend (422 responses surface through existing SDK errors).
+
+``metadata_filter`` is sent as the backend filter object and is omitted when unset.
+The client does not evaluate filters locally. ``upload_document(..., metadata=...)``
+sends that object as the multipart JSON ``metadata`` field. ``post_feedback`` and
+``list_feedback`` call ``/feedback``; stored feedback does not change retrieval.
 
 ## Streaming Chat
 

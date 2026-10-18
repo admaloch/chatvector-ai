@@ -1,6 +1,6 @@
 # Python SDK
 
-The official Python client wraps document upload, ingestion status, chat, batch operations, sessions, streaming, and retrieval scopes.
+The official Python client wraps document upload (including metadata, replacement, and bulk upload), ingestion status and SSE, chat, streaming, batch, sessions, retrieval and history config, metadata filters, feedback, and optional idempotency keys. Mutating POSTs are not retried automatically.
 
 Full API details live in the repository: [`sdk/python/README.md`](https://github.com/chatvector-ai/chatvector-ai/blob/main/sdk/python/README.md).
 

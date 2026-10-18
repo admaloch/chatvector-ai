@@ -641,6 +641,27 @@ webhooks.
 
 ---
 
+## Retrieval evaluation
+
+`python -m backend.cli eval` measures retrieval quality against a JSON fixture. It calls `retrieve_for_documents`, the same boundary chat uses. It does not call the answer-generation LLM. The embedding cache stays off unless you pass `--allow-cache`.
+
+```bash
+python -m backend.cli eval \
+  --dataset path/to/queries.json \
+  --tenant-id your-tenant \
+  --k 5,10 \
+  --match-count 10 \
+  --export /tmp/eval.json
+```
+
+Repeat `--config path/to/arm.json` to compare retrieval settings. Omit `--config` to score the current process defaults. Metrics are recall@k, MRR, and nDCG@k, plus retrieval latency. `--export` writes the config snapshot and per-query results.
+
+Each query needs `relevant_chunks` (`[document_id, chunk_index]`) and/or `relevant_doc_ids`. `doc_ids` are the documents to search. `simulate_session` defaults to false, so a run does not inherit conversational history unless the fixture sets it.
+
+An arm file is a JSON object of retrieval overrides, for example `{"hybrid_enabled": true, "match_count": 8}`. There is no public HTTP retrieval endpoint.
+
+---
+
 ## Horizontal API scaling
 
 Each API container still runs `uvicorn --workers 1`. To run more than one

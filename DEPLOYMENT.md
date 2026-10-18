@@ -49,11 +49,7 @@ Additional production-oriented defaults in `docker-compose.prod.yml`:
 - `LOG_FORMAT=JSON`
 - Single-process Uvicorn (`--workers 1`)
 
-**Supported topology:** Phase 3 runs one API process per container. Redis/RQ worker
-threads provide ingestion concurrency within that process. Multiple API processes
-or containers are not supported. Concurrency env vars (`QUEUE_WORKER_COUNT`,
-`QUEUE_EMBEDDING_RPS`, `RETRIEVAL_MAX_CONCURRENCY`, DB pool sizes) are
-process-scoped.
+**Supported topology:** the default is one API process per container (`uvicorn --workers 1`). Redis/RQ worker threads provide ingestion concurrency inside that process. More than one API container is supported when `MULTI_API_INSTANCE=true`, `QUEUE_BACKEND=redis`, and `ARTIFACT_STORAGE=s3`. Do not run multiple API processes against the local filesystem spill directory. Concurrency env vars (`QUEUE_WORKER_COUNT`, `QUEUE_EMBEDDING_RPS`, `RETRIEVAL_MAX_CONCURRENCY`, DB pool sizes) are per process. HTTP rate limits are Redis-backed. See [Horizontal API topology smoke](#horizontal-api-topology-smoke).
 
 **Never deploy with `APP_ENV=development` or `APP_ENV=test` in a shared or public
 environment.** Those modes bypass API-key authentication entirely.

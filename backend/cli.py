@@ -31,8 +31,8 @@ eval
     Run retrieval evaluation/benchmarking against a query fixture dataset.
     Computes recall@k, MRR, and nDCG@k; supports comparing multiple
     retrieval config "arms" in one run and exporting a reproducible JSON
-    artifact. Never calls answer-generation. See
-    backend/docs/eval-tooling.md for the dataset and config-arm schema.
+    artifact. Never calls answer-generation. See DEVELOPMENT.md
+    ("Retrieval evaluation") for the dataset and config-arm schema.
 """
 
 from __future__ import annotations

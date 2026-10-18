@@ -1,6 +1,6 @@
 # TypeScript SDK
 
-`@chatvector/sdk` is the official Node-first TypeScript client for upload, readiness polling, chat, batch operations, sessions, and streaming.
+`@chatvector/sdk` is the official Node client for upload (including metadata, replacement, and bulk upload), status and SSE, chat, streaming, batch, sessions, retrieval and history config, metadata filters, feedback, and optional idempotency keys. Mutating POSTs are not retried automatically.
 
 Full details: [`sdk/typescript/README.md`](https://github.com/chatvector-ai/chatvector-ai/blob/main/sdk/typescript/README.md).
 
@@ -68,6 +68,10 @@ for await (const event of client.streamChat({
   if (event.type === "complete") console.log(event.sources);
 }
 ```
+
+## Proxy example
+
+[`sdk/typescript/examples/next-proxy`](https://github.com/chatvector-ai/chatvector-ai/tree/main/sdk/typescript/examples/next-proxy) is a Next.js proxy plus React hooks. The browser calls your app. `CHATVECTOR_API_KEY` stays in server environment variables. This package is not a browser SDK.
 
 ## Reference implementation
 

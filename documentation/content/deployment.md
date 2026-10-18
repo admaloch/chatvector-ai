@@ -10,6 +10,8 @@ For system design context, see [ARCHITECTURE.md](https://github.com/chatvector-a
 
 ChatVector ships as a FastAPI backend with PostgreSQL (pgvector) and Redis for the production ingestion queue. The bundled `docker-compose.prod.yml` stack is the fastest path to a production-like environment.
 
+The default is one API process per container. Several API containers are supported with `MULTI_API_INSTANCE=true`, Redis, and S3-compatible artifact storage. Local disk spill is only for a single host. Terminal ingestion webhooks are optional and configured with environment variables, not an admin API.
+
 ## Prerequisites
 
 - Docker and Docker Compose, or your own runtime for the FastAPI service

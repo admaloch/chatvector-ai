@@ -1,5 +1,7 @@
 # ChatVector Development Roadmap
 
+The shipped product is a backend-first RAG engine: PDF, text, Markdown, HTML, and DOCX ingestion; session-aware retrieval by default; optional hybrid search, reranking, metadata filters, and presets; Python and TypeScript SDKs; ingestion jobs, webhooks, and horizontal API deployment. GraphRAG is experimental and off by default. The sections below are the historical plan, not a list of missing features.
+
 This document outlines the current development focus and future direction of the ChatVector project. It is intended for contributors to quickly understand priorities and pick up tasks.
 
 ---
@@ -83,7 +85,7 @@ Transform ChatVector into a **multi-tenant, session-aware document intelligence 
 
 **Core Principle:** Simple by default, powerful when explicitly enabled.
 
-> **Current status:** Phase 3A and 3B backend platform work is largely complete — API-key authentication, tenant isolation, durable sessions, streaming, hybrid retrieval, Python and TypeScript SDKs, component score metadata, and the expanded frontend demo are shipped. Remaining work is distributed rate-limit storage and documentation/examples polish.
+> **Current status:** This phase shipped. API-key authentication, tenant isolation, durable sessions, streaming, hybrid retrieval, and the Python and TypeScript SDKs are in the product. Later ingestion, retrieval-config, and deployment work is described at the top of this file.
 
 ---
 
@@ -290,31 +292,17 @@ Remaining work: additional patterns (streaming chat in proxies, multi-document b
 
 ---
 
-## Phase 4 — Advanced Capabilities (Future)
+## Still out of scope
 
-These are valuable extensions deferred until the Phase 3 platform foundation is stable.
+These are not part of the current engine. Do not document them as available.
 
-**Retrieval Quality**
-
-- External cross-encoder or API-based reranking providers (e.g. Cohere Rerank, Jina)
-- Retrieval evaluation and benchmarking datasets
-- Advanced retrieval observability (component score traces, faithfulness evaluation)
-
-**Scalability & Performance**
-
-- Embedding and query result caching
-- Webhook-based ingestion callbacks
-- Advanced rate limiting and usage tracking
-
-**Data & Document Management**
-
-- Document versioning
-- Retrieval feedback signals (thumbs up/down on answers)
-- Multi-format document ingestion (e.g. Docling — DOCX, PPTX, HTML, images)
-
-**Advanced Retrieval**
-
-- Knowledge graph and GraphRAG approaches
+- A second hosted reranker besides Cohere (the interface can take another provider; only Cohere is implemented)
+- Faithfulness or answer-quality scoring (retrieval eval covers recall, MRR, and nDCG only)
+- Document version history beyond in-place replacement
+- PPTX, image OCR, and remote HTML fetching
+- GraphRAG as a default or production retrieval mode
+- Webhook or preset administration APIs
+- Billing, user accounts, and agent/workflow builders
 - Domain-specific pipelines (legal, academic, code-aware)
 
 **Ecosystem**
@@ -328,16 +316,16 @@ These are valuable extensions deferred until the Phase 3 platform foundation is 
 
 ChatVector is intentionally **not** building the following:
 
-| Item | Reason |
-|------|--------|
-| User authentication (login/signup) | Developer's responsibility at the application layer |
-| Billing or subscriptions | Out of scope for an open-source backend engine |
-| Collaborative workspaces | Different product category |
-| Admin dashboards | Not needed for a developer tool |
-| API-key lifecycle UI | CLI covers create, list, revoke, rotate, expiry, and `external_user_id`; no first-party admin UI planned |
-| OAuth, RBAC, or per-user login | API-key auth only; application-layer identity is the developer's responsibility |
-| Full SaaS product layer | Conflicts with backend-first positioning |
-| Elasticsearch dependency | pgvector + PostgreSQL full-text covers the same ground at this scale |
+| Item                               | Reason                                                                                                   |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| User authentication (login/signup) | Developer's responsibility at the application layer                                                      |
+| Billing or subscriptions           | Out of scope for an open-source backend engine                                                           |
+| Collaborative workspaces           | Different product category                                                                               |
+| Admin dashboards                   | Not needed for a developer tool                                                                          |
+| API-key lifecycle UI               | CLI covers create, list, revoke, rotate, expiry, and `external_user_id`; no first-party admin UI planned |
+| OAuth, RBAC, or per-user login     | API-key auth only; application-layer identity is the developer's responsibility                          |
+| Full SaaS product layer            | Conflicts with backend-first positioning                                                                 |
+| Elasticsearch dependency           | pgvector + PostgreSQL full-text covers the same ground at this scale                                     |
 
 ---
 

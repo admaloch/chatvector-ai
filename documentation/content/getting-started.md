@@ -58,6 +58,16 @@ Use the key on authenticated requests:
 curl -H "Authorization: Bearer cv_live_..." http://localhost:8000/status
 ```
 
+## What works without extra configuration
+
+Upload a supported file, wait until ingestion is `completed`, and ask a question. Defaults:
+
+- Retrieval is session-scoped and vector-only. Hybrid search, reranking, query rewrite/expand/step-back, the embedding cache, and webhooks stay off.
+- Follow-up questions in a session can use recent history. A clearly standalone question does not spend an extra LLM call to rewrite it. If that resolution call fails, chat continues with the original question.
+- Supported uploads are PDF, plain text (`.txt`), Markdown (`.md`), HTML (`.html` / `.htm`), and DOCX (`.docx`). Image-only PDFs are not OCR'd. HTML is parsed locally; remote images and scripts are not fetched. PPTX is not supported.
+
+Pass `debug_retrieval: true` on chat when you need the effective query, history decision, timings, and component scores. That flag is diagnostic and does not change the answer path beyond returning the trace.
+
 ## First chat flow
 
 === "curl"
@@ -94,6 +104,37 @@ curl -H "Authorization: Bearer cv_live_..." http://localhost:8000/status
         )
 
     print(answer.answer)
+
+    follow_up = client.chat(
+        question="What does that section require?",
+        doc_id=ready.document_id,
+        session_id=answer.session_id,
+    )
+    print(follow_up.answer)
+    ```
+
+=== "TypeScript SDK"
+
+    ```typescript
+    import { ChatVectorClient } from "@chatvector/sdk";
+
+    const client = new ChatVectorClient({
+      baseUrl: "http://localhost:8000",
+    });
+
+    const uploaded = await client.uploadDocument({ path: "./handbook.pdf" });
+    await client.waitForReady(uploaded.documentId);
+    const answer = await client.chat({
+      question: "Summarize this document.",
+      docId: uploaded.documentId,
+      matchCount: 5,
+    });
+    const followUp = await client.chat({
+      question: "What does that section require?",
+      docId: uploaded.documentId,
+      sessionId: answer.sessionId,
+    });
+    console.log(answer.answer, followUp.answer);
     ```
 
 === "Frontend demo"
@@ -102,9 +143,11 @@ curl -H "Authorization: Bearer cv_live_..." http://localhost:8000/status
 
 ## Sessions and retrieval scopes
 
-For multi-turn conversations, create a session and pass `session_id` on subsequent chat requests. Use `scope` to search within the session (default) or across all tenant documents.
+Chat creates a session when you omit `session_id` and returns it on the response. Pass that id on the next turn. Retrieval history (used to understand a follow-up) and generation history (injected into the answer) are separate windows. Defaults are 6 and 10 recent messages. Requested windows from 0 through 100 are honored; values above 100 are rejected.
 
-See the [API reference](api-reference.md) for `/sessions` and `/chat` request fields, or the [Python](sdk/python.md) and [TypeScript](sdk/typescript.md) SDK guides for client helpers.
+Use `scope: "tenant"` to search every document for the tenant instead of the session. Compare-style batch items skip conversational history unless you set `skip_history_transform` to false.
+
+See the [API reference](api-reference.md) for retrieval, history, metadata, replacement, and debug fields.
 
 ## Next steps
 

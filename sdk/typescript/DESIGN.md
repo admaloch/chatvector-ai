@@ -266,7 +266,7 @@ informational; the backend enforces them.
 
 Every response type carries an optional `_raw` property with the full decoded
 JSON payload. This preserves forward-compatibility when the backend adds fields
-the SDK does not yet model (for example `retrieval_debug` on chat responses).
+the SDK does not yet model. `retrievalDebug` is typed when the backend returns `retrieval_debug`.
 The underscore prefix signals that `_raw` is not part of the stable response
 contract.
 
@@ -481,8 +481,9 @@ This retains Python's retryable-status set (`{408, 429, 502, 503, 504}`) but
 improves on the Python backoff formula in two ways: full jitter prevents
 thundering-herd on shared infrastructure, and a `maxDelayMs` cap bounds the
 worst-case wait. Both SDKs restrict automatic replay to `GET` and `HEAD`
-because the backend has no idempotency-key contract; mutating POST operations
-are never automatically replayed.
+even though `POST /upload` and `POST /sessions` accept an optional
+`Idempotency-Key` when the caller sets one. The SDKs never add that header
+or replay a mutating POST on their own.
 
 When a retryable response includes `Retry-After`, Python currently honors
 numeric delta-seconds only. TypeScript also accepts HTTP-date values

@@ -193,7 +193,8 @@ const answer = await client.chat({
 | `queryTransformationEnabled` | `query_transformation_enabled` |
 | `queryTransformationStrategy` | `query_transformation_strategy` |
 | `skipHistoryTransform` | `skip_history_transform` |
-| `preset` | `preset` (when backend presets ship) |
+| `metadataFilter` | `metadata_filter` |
+| `preset` | `preset` |
 | `retrievalHistoryWindow` | `retrieval_history_window` |
 | `generationHistoryWindow` | `generation_history_window` |
 | `historyAwareRetrieval` | `history_aware_retrieval` |
@@ -246,9 +247,10 @@ Backoff uses bounded exponential full jitter and respects valid delta-seconds
 or HTTP-date `Retry-After` headers.
 
 Mutating requests are never automatically replayed. This includes document
-uploads, chat, streaming chat, batch chat, session creation, and session deletion. The API has
-no idempotency-key contract, so replaying an ambiguous request could duplicate
-documents, sessions, or messages.
+uploads, chat, streaming chat, batch chat, session creation, and session deletion.
+`POST /upload` and `POST /sessions` accept an `Idempotency-Key`. Pass
+`idempotencyKey` on those methods when a retry must replay the same result
+instead of creating a duplicate. The SDK does not add that header on its own.
 
 See [DEVELOPMENT.md — Retry behavior](../DEVELOPMENT.md#retry-behavior) for the
 full cross-surface contract shared with the backend and Python SDK.
@@ -332,6 +334,10 @@ client.createSession(input?, options?);
 client.getSession(sessionId, options?);
 client.listSessions(options?);
 client.deleteSession(sessionId, options?);
+client.listDocuments(options?);
+client.streamDocumentStatus(documentId, options?);
+client.postFeedback(input, options?);
+client.listFeedback(input?, options?);
 ```
 
 Public request and response names use camelCase. The SDK translates them to
