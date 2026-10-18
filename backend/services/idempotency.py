@@ -7,7 +7,7 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping
 
 import orjson
 from fastapi import HTTPException, Request
@@ -26,12 +26,24 @@ _STATUS_IN_PROGRESS = "in_progress"
 _STATUS_COMPLETED = "completed"
 
 
+def _canonical_metadata_bytes(metadata: Mapping[str, Any] | None) -> bytes:
+    """Stable metadata bytes so key order does not change the fingerprint.
+
+    ``None`` means the client omitted metadata. An explicit object, including
+    an empty object, is canonical JSON.
+    """
+    if metadata is None:
+        return b""
+    return orjson.dumps(dict(metadata), option=orjson.OPT_SORT_KEYS)
+
+
 def upload_request_fingerprint(
     *,
     file_bytes: bytes,
     filename: str,
     content_type: str | None,
     replace_document_id: str | None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> str:
     """Logical upload fingerprint (not raw multipart transport bytes)."""
     parts: list[bytes] = [
@@ -42,6 +54,7 @@ def upload_request_fingerprint(
         parts.append(content_type.encode("utf-8"))
     if replace_document_id:
         parts.append(replace_document_id.encode("utf-8"))
+    parts.append(_canonical_metadata_bytes(metadata))
     joined = b"\x00".join(parts)
     return hashlib.sha256(joined).hexdigest()
 

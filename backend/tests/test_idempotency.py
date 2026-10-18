@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from io import BytesIO
 from unittest.mock import AsyncMock, patch
 
@@ -152,6 +153,63 @@ def test_upload_mismatch_different_replace_document_id(upload_client, fake_redis
     assert mismatch.status_code == 409
     assert mismatch.json()["detail"]["code"] == "idempotency_key_mismatch"
     begin_replace.assert_awaited_once()
+
+
+def test_upload_fingerprint_canonicalizes_metadata():
+    shared = dict(
+        file_bytes=b"%PDF-1.4 same",
+        filename="doc.pdf",
+        content_type="application/pdf",
+        replace_document_id=None,
+    )
+    ordered = upload_request_fingerprint(
+        **shared, metadata={"b": 1, "a": "legal"}
+    )
+    reordered = upload_request_fingerprint(
+        **shared, metadata={"a": "legal", "b": 1}
+    )
+    different = upload_request_fingerprint(**shared, metadata={"a": "hr"})
+    omitted = upload_request_fingerprint(**shared, metadata=None)
+    empty = upload_request_fingerprint(**shared, metadata={})
+
+    assert ordered == reordered
+    assert ordered != different
+    assert omitted != empty
+    assert omitted != ordered
+
+
+def test_upload_same_metadata_replays_and_different_metadata_mismatches(
+    upload_client, fake_redis
+):
+    create_document = AsyncMock(return_value="doc-meta")
+    headers = {"Idempotency-Key": "metadata-key"}
+    p1, p2, p3, p4 = _patched_upload(create_document)
+    with patch("services.idempotency.redis_client", fake_redis), p1, p2, p3, p4:
+        first = upload_client.post(
+            "/upload",
+            files=_pdf_files(),
+            data={"metadata": json.dumps({"b": 1, "a": "legal"})},
+            headers=headers,
+        )
+        replay = upload_client.post(
+            "/upload",
+            files=_pdf_files(),
+            data={"metadata": json.dumps({"a": "legal", "b": 1})},
+            headers=headers,
+        )
+        mismatch = upload_client.post(
+            "/upload",
+            files=_pdf_files(),
+            data={"metadata": json.dumps({"a": "hr"})},
+            headers=headers,
+        )
+
+    assert first.status_code == 202
+    assert replay.status_code == 202
+    assert replay.json() == first.json()
+    assert mismatch.status_code == 409
+    assert mismatch.json()["detail"]["code"] == "idempotency_key_mismatch"
+    create_document.assert_awaited_once()
 
 
 def test_idempotency_keys_are_tenant_scoped(fake_redis):

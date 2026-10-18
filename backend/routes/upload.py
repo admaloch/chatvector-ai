@@ -105,6 +105,7 @@ async def upload(
             filename=safe_filename,
             content_type=file.content_type,
             replace_document_id=replace_id,
+            metadata=None if metadata is None else document_metadata,
         )
         idempotency_key = parse_idempotency_key(request)
         idempotency_lease, replay = await begin_idempotency(
