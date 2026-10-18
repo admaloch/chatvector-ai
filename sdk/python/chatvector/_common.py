@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import time
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import quote
 
@@ -227,6 +229,32 @@ def serialize_batch_query(query: BatchChatQuery | JSONMapping) -> JSONDict:
     if isinstance(query, Mapping):
         return dict(query)
     raise TypeError("Each batch query must be a BatchChatQuery instance or a mapping.")
+
+
+# Explicit map so supported uploads do not depend on the host mimetypes DB.
+# Matches the backend allowlist and the TypeScript SDK.
+_UPLOAD_CONTENT_TYPES_BY_EXTENSION = {
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".markdown": "text/markdown",
+    ".html": "text/html",
+    ".htm": "text/html",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
+
+def content_type_for_filename(filename: str) -> str:
+    """Return the MIME type to send for an upload filename.
+
+    Supported ChatVector extensions use the explicit map above. Other names
+    fall back to ``mimetypes.guess_type`` and then ``application/octet-stream``.
+    """
+    mapped = _UPLOAD_CONTENT_TYPES_BY_EXTENSION.get(Path(filename).suffix.lower())
+    if mapped is not None:
+        return mapped
+    guessed, _encoding = mimetypes.guess_type(filename)
+    return guessed or "application/octet-stream"
 
 
 def build_upload_form_data(

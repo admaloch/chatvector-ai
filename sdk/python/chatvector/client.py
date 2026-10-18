@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import mimetypes
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -65,6 +64,7 @@ from ._common import (
     build_batch_chat_payload,
     build_chat_payload,
     build_upload_form_data,
+    content_type_for_filename,
     serialize_batch_query,
     build_client_headers,
 )
@@ -154,7 +154,7 @@ class ChatVectorClient:
         if not path.is_file():
             raise FileNotFoundError(f"Document file was not found: {file_path}")
 
-        content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        content_type = content_type_for_filename(path.name)
         endpoints = ("ingest", "upload")
         last_error: ChatVectorAPIError | None = None
         headers: JSONDict = {}

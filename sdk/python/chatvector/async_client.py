@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import mimetypes
 import time
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from pathlib import Path
@@ -19,6 +18,7 @@ from ._common import (
     build_chat_payload,
     build_client_headers,
     build_upload_form_data,
+    content_type_for_filename,
     cap_duration_to_deadline,
     default_error_message,
     encode_path_component,
@@ -140,7 +140,7 @@ class AsyncChatVectorClient:
         if not path.is_file():
             raise FileNotFoundError(f"Document file was not found: {file_path}")
 
-        content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        content_type = content_type_for_filename(path.name)
         endpoints = ("ingest", "upload")
         last_error: ChatVectorAPIError | None = None
         headers: JSONDict = {}
