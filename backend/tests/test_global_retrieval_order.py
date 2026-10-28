@@ -171,3 +171,94 @@ async def test_non_rerank_path_cuts_to_match_count_before_context(retrieval_env)
     assert seen_context_input == [["doc-b:0", "doc-b:1"]]
     assert all(call.kwargs["match_count"] == 2 for call in find_similar.await_args_list)
     assert find_similar.await_count == 3
+
+
+def _multi_doc_pool():
+    """Two documents each returning match_count=2, later doc has higher scores."""
+    return {
+        "doc-a": [
+            _chunk("doc-a", 0, similarity=0.40),
+            _chunk("doc-a", 1, similarity=0.30),
+        ],
+        "doc-b": [
+            _chunk("doc-b", 0, similarity=0.90),
+            _chunk("doc-b", 1, similarity=0.80),
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_successful_rerank_receives_full_merged_candidate_list(retrieval_env):
+    seen: dict = {}
+
+    async def fake_rerank(query, chunks, *, top_k=None, **kwargs):
+        del query, kwargs
+        seen["ids"] = [chunk.id for chunk in chunks]
+        seen["top_k"] = top_k
+        reranked = list(reversed(chunks))[:top_k]
+        return reranked, {
+            "provider": "similarity",
+            "model": "test",
+            "latency_ms": 1,
+            "candidates_sent": len(chunks),
+        }
+
+    find_similar = _find_by_doc(_multi_doc_pool())
+    with (
+        patch("services.chat_service.get_embeddings", new=AsyncMock(return_value=[[0.1]])),
+        patch("services.chat_service.find_similar_chunks", new=find_similar),
+        patch("services.chat_service.rerank_chunks_with_debug", new=fake_rerank),
+    ):
+        result = await retrieve_for_documents(
+            "which document is more relevant",
+            ["doc-a", "doc-b"],
+            "dev",
+            _effective(
+                reranking_enabled=True,
+                reranker_provider="similarity",
+                match_count=2,
+            ),
+        )
+
+    assert seen["ids"] == ["doc-b:0", "doc-b:1", "doc-a:0", "doc-a:1"]
+    assert seen["top_k"] == 2
+    assert [chunk.id for chunk in result.chunks] == ["doc-a:1", "doc-a:0"]
+    assert all(call.kwargs["match_count"] == 2 for call in find_similar.await_args_list)
+
+
+@pytest.mark.asyncio
+async def test_rerank_failure_packs_globally_ordered_head(retrieval_env):
+    seen: dict = {}
+
+    async def failing_rerank(query, chunks, *, top_k=None, **kwargs):
+        del query, kwargs
+        seen["ids"] = [chunk.id for chunk in chunks]
+        limit = top_k if top_k is not None else len(chunks)
+        return list(chunks)[:limit], {
+            "provider": "cohere",
+            "model": None,
+            "latency_ms": 1,
+            "candidates_sent": len(chunks),
+            "fallback_reason": "timeout",
+        }
+
+    find_similar = _find_by_doc(_multi_doc_pool())
+    with (
+        patch("services.chat_service.get_embeddings", new=AsyncMock(return_value=[[0.1]])),
+        patch("services.chat_service.find_similar_chunks", new=find_similar),
+        patch("services.chat_service.rerank_chunks_with_debug", new=failing_rerank),
+    ):
+        result = await retrieve_for_documents(
+            "which document is more relevant",
+            ["doc-a", "doc-b"],
+            "dev",
+            _effective(
+                reranking_enabled=True,
+                reranker_provider="cohere",
+                match_count=2,
+            ),
+        )
+
+    assert seen["ids"] == ["doc-b:0", "doc-b:1", "doc-a:0", "doc-a:1"]
+    assert [chunk.id for chunk in result.chunks] == ["doc-b:0", "doc-b:1"]
+    assert result.reranker_debug["fallback_reason"] == "timeout"
