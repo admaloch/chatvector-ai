@@ -491,7 +491,7 @@ event: token
 data: "Hello"
 
 event: complete
-data: {"type":"complete","session_id":"...","sources":[...],"latency_ms":1234,"request_latency_ms":1500,"model":"..."}
+data: {"type":"complete","session_id":"...","message_id":"...","sources":[...],"latency_ms":1234,"request_latency_ms":1500,"model":"..."}
 
 event: done
 data: [DONE]
@@ -506,8 +506,8 @@ data: {"type":"error","code":"llm_rate_limited","message":"..."}
 
 **Interruption behavior:** client disconnects, generator cancellation, and
 provider failures mid-stream stop the stream without persisting a partial
-assistant message. User and assistant messages are stored only after a
-successful `complete` event.
+assistant message. The user and assistant messages are stored after the
+answer finishes successfully and before `complete` is emitted.
 
 **Latency note:** `latency_ms` in the `complete` event measures LLM generation
 wall time for the stream, not retrieval or embedding time.
