@@ -54,6 +54,10 @@ const DOCUMENT_UNAVAILABLE_NOTICE =
   "The document attached to this session could not be checked. You can upload another.";
 const OPAQUE_RESTORE_NOTICE =
   "Could not restore the session document. You can upload a new one.";
+const SESSION_HISTORY_FAILED_NOTICE =
+  "This chat could not be loaded. You can upload a document and continue from here.";
+const SESSION_DETAILS_FAILED_NOTICE =
+  "This session could not be fully restored. You can upload a document to continue.";
 
 function sessionPayload(sessionId: string, documentIds: string[] = []) {
   return {
@@ -586,5 +590,56 @@ describe("useChat", () => {
     expect(result.current.sessionNotice).toBeNull();
     expect(mockGetDocumentStatus).toHaveBeenCalledTimes(1);
     expect(mockGetDocumentStatus).toHaveBeenCalledWith("/documents/doc-same/status");
+  });
+
+  it("shows a notice when session history cannot be loaded", async () => {
+    mockGetSessionHistory.mockRejectedValue(new Error("history failed"));
+    mockGetSession.mockResolvedValue(sessionPayload("session-a", ["doc-1"]));
+
+    const { result } = renderHook(() =>
+      useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+    );
+
+    await waitFor(() => expect(result.current.historyLoading).toBe(false));
+
+    expect(result.current.sessionNotice).toBe(SESSION_HISTORY_FAILED_NOTICE);
+    expect(result.current.messages.map((message) => message.text)).toEqual([WELCOME_TEXT]);
+    expect(result.current.attachment).toBeNull();
+    expect(result.current.inflight).toBe(false);
+    expect(mockGetDocumentStatus).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.setInput("Continue");
+    });
+    expect(result.current.sendDisabled).toBe(false);
+  });
+
+  it("keeps loaded history and shows a notice when the session cannot be loaded", async () => {
+    mockGetSessionHistory.mockResolvedValue({
+      messages: [{ id: "m-1", role: "user", content: "Saved question" }],
+    });
+    mockGetSession.mockRejectedValue(new Error("session failed"));
+
+    const { result } = renderHook(() =>
+      useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+    );
+
+    await waitFor(() => expect(result.current.historyLoading).toBe(false));
+
+    expect(result.current.sessionNotice).toBe(SESSION_DETAILS_FAILED_NOTICE);
+    expect(result.current.messages.map((message) => message.text)).toEqual([
+      "Saved question",
+    ]);
+    expect(result.current.messages.some((message) => message.text === WELCOME_TEXT)).toBe(
+      false,
+    );
+    expect(result.current.attachment).toBeNull();
+    expect(result.current.inflight).toBe(false);
+    expect(mockGetDocumentStatus).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.setInput("Continue");
+    });
+    expect(result.current.sendDisabled).toBe(false);
   });
 });
