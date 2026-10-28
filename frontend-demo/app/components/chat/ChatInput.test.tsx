@@ -46,6 +46,13 @@ describe("ChatInput", () => {
     expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
   });
 
+  it("shows typed markdown markers as plain text", () => {
+    renderChatInput({ input: "See **bold** and _emphasis_" });
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(
+      "See **bold** and _emphasis_"
+    );
+  });
+
   it("enables send when input has text and send is allowed", () => {
     renderChatInput({ sendDisabled: false, input: "Hello" });
     expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
