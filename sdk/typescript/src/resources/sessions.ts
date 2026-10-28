@@ -90,6 +90,7 @@ export class SessionsResource {
 }
 
 function mapSession(payload: Record<string, unknown>): Session {
+  const label = payload.display_label;
   return {
     id: stringValue(payload.id),
     tenantId: typeof payload.tenant_id === "string" ? payload.tenant_id : null,
@@ -101,6 +102,7 @@ function mapSession(payload: Record<string, unknown>): Session {
           (item): item is string => typeof item === "string",
         )
       : [],
+    displayLabel: typeof label === "string" && label.length > 0 ? label : "New session",
     _raw: payload,
   };
 }
