@@ -262,3 +262,66 @@ async def test_rerank_failure_packs_globally_ordered_head(retrieval_env):
     assert seen["ids"] == ["doc-b:0", "doc-b:1", "doc-a:0", "doc-a:1"]
     assert [chunk.id for chunk in result.chunks] == ["doc-b:0", "doc-b:1"]
     assert result.reranker_debug["fallback_reason"] == "timeout"
+
+
+@pytest.mark.asyncio
+async def test_hybrid_mode_orders_by_similarity_not_vector_score(retrieval_env):
+    """Hybrid comparable score is ChunkMatch.similarity (RRF), not vector_score."""
+    earlier = _chunk(
+        "doc-a",
+        0,
+        similarity=0.02,
+        score_type=SCORE_TYPE_HYBRID_RRF,
+    )
+    earlier.vector_score = 0.99
+    later = _chunk(
+        "doc-b",
+        0,
+        similarity=0.05,
+        score_type=SCORE_TYPE_HYBRID_RRF,
+    )
+    later.vector_score = 0.10
+    result, find_similar = await _retrieve(
+        ["doc-a", "doc-b"],
+        {"doc-a": [earlier], "doc-b": [later]},
+        fields={"reranking_enabled": False, "hybrid_enabled": True, "match_count": 5},
+    )
+
+    assert [chunk.id for chunk in result.chunks] == ["doc-b:0", "doc-a:0"]
+    assert all(chunk.score_type == SCORE_TYPE_HYBRID_RRF for chunk in result.chunks)
+    assert all(call.kwargs.get("hybrid_enabled") is True for call in find_similar.await_args_list)
+
+
+@pytest.mark.asyncio
+async def test_eval_caller_observes_same_order_and_bound(retrieval_env):
+    from services.eval_config import EffectiveRetrievalConfig as EvalArm
+    from services.eval_fixtures import EvalDataset, EvalQuery
+    from services.eval_service import run_eval
+
+    chunks_by_doc = _multi_doc_pool()
+    dataset = EvalDataset(
+        name="global-order-eval",
+        queries=[
+            EvalQuery(
+                query="which document is more relevant",
+                doc_ids=["doc-a", "doc-b"],
+                relevant_chunks=[("doc-b", 0)],
+            )
+        ],
+    )
+    arm = EvalArm(
+        label="non-rerank",
+        hybrid_retrieval_enabled=False,
+        enable_reranking=False,
+        match_count=2,
+    )
+
+    with (
+        patch("services.chat_service.get_embeddings", new=AsyncMock(return_value=[[0.1]])),
+        patch("services.chat_service.find_similar_chunks", new=_find_by_doc(chunks_by_doc)),
+    ):
+        result = await run_eval(dataset, [arm], tenant_id="dev")
+
+    candidates = result.arms[0].query_results[0].candidates
+    assert [row["id"] for row in candidates] == ["doc-b:0", "doc-b:1"]
+    assert len(candidates) == 2
