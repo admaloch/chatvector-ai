@@ -918,6 +918,61 @@ class ChatVectorClientTests(unittest.TestCase):
         self.assertEqual(len(history.messages), 1)
         self.assertEqual(history.messages[0].role, "user")
         self.assertEqual(history.messages[0].content, "Hello")
+        self.assertIsNone(history.messages[0].sources)
+
+    def test_get_session_history_parses_sources_and_keeps_extra_keys(self) -> None:
+        response = make_response(
+            200,
+            url="https://api.chatvector.test/sessions/sess-1/history",
+            json_data={
+                "messages": [
+                    {
+                        "id": "msg-user",
+                        "role": "user",
+                        "content": "Hello",
+                        "sources": None,
+                    },
+                    {
+                        "id": "msg-empty",
+                        "role": "assistant",
+                        "content": "No citations",
+                        "sources": [],
+                    },
+                    {
+                        "id": "msg-asst",
+                        "role": "assistant",
+                        "content": "Cited",
+                        "sources": [
+                            {
+                                "document_id": "doc-1",
+                                "file_name": "old.pdf",
+                                "page_number": 2,
+                                "chunk_index": 1,
+                                "page_end": 4,
+                            }
+                        ],
+                    },
+                ]
+            },
+        )
+
+        with patch.object(self.client._client, "request", return_value=response):
+            history = self.client.get_session_history("sess-1")
+
+        self.assertIsNone(history.messages[0].sources)
+        self.assertEqual(history.messages[1].sources, [])
+        self.assertEqual(
+            history.messages[2].sources,
+            [
+                {
+                    "document_id": "doc-1",
+                    "file_name": "old.pdf",
+                    "page_number": 2,
+                    "chunk_index": 1,
+                    "page_end": 4,
+                }
+            ],
+        )
 
 
 if __name__ == "__main__":

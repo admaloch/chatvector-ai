@@ -77,6 +77,7 @@ describe("SDK surface parity", () => {
       content: "Hello",
       createdAt: "2026-01-01T00:00:00Z",
     });
+    expect(history.messages[0]?.sources).toBeUndefined();
   });
 
   it("streamDocumentStatus parses terminal SSE status events", async () => {

@@ -143,6 +143,8 @@ export type SessionHistoryMessage = {
   role: string;
   content: string;
   createdAt?: string | null;
+  /** Answer-time citation snapshot. ``null``/omitted is a pre-snapshot row. */
+  sources?: Record<string, unknown>[] | null;
   _raw?: Record<string, unknown>;
 };
 
