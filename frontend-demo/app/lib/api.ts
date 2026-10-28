@@ -454,7 +454,18 @@ export type DocumentStatusPayload = {
    * be processed. Optional because non-queued responses omit the field.
    */
   queue_position?: number;
+  /**
+   * File name from the document row. Omitted when the payload has no
+   * non-blank name, so the chip can fall back without treating "" as a label.
+   */
+  file_name?: string;
 };
+
+function parseStatusFileName(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
 
 function parseChunks(raw: unknown): { total: number; processed: number } | undefined {
   if (raw == null || typeof raw !== "object") return undefined;
@@ -515,6 +526,7 @@ export async function getDocumentStatus(
   const createdAt = data?.created_at as string | null | undefined;
   const updatedAt = data?.updated_at as string | null | undefined;
   const queuePosition = parseQueuePosition(data?.queue_position);
+  const fileName = parseStatusFileName(data?.file_name);
   return {
     status,
     ...(stage !== undefined ? { stage } : {}),
@@ -523,6 +535,7 @@ export async function getDocumentStatus(
     ...(createdAt !== undefined ? { created_at: createdAt } : {}),
     ...(updatedAt !== undefined ? { updated_at: updatedAt } : {}),
     ...(queuePosition !== undefined ? { queue_position: queuePosition } : {}),
+    ...(fileName !== undefined ? { file_name: fileName } : {}),
   };
 }
 

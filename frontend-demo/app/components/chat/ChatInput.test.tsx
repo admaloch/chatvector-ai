@@ -11,6 +11,7 @@ const mockPoll = {
   awaitingProcessing: false,
   queuePosition: undefined,
   processingTime: undefined,
+  fileName: undefined,
   errorMessage: undefined,
   status: undefined,
 };
@@ -102,7 +103,8 @@ describe("ChatInput", () => {
     expect(
       screen.getByText("Document processing failed. Please remove it and upload again.")
     ).toBeInTheDocument();
-    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByText("guide.pdf")).toBeInTheDocument();
+    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove attachment" })).toBeEnabled();
     expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
   });

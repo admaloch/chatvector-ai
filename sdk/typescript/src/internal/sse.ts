@@ -475,6 +475,9 @@ function mapDocumentStatusPayload(
   if (isRecord(payload.metadata)) {
     result.metadata = payload.metadata;
   }
+  if (payload.file_name === null || typeof payload.file_name === "string") {
+    result.fileName = payload.file_name;
+  }
   return result;
 }
 

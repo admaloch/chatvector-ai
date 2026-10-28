@@ -60,6 +60,48 @@ describe("useDocumentPolling", () => {
     expect(mockGetDocumentStatus).toHaveBeenCalledWith("/documents/doc-1/status");
   });
 
+  it("exposes file_name from status and replaces it after cutover", async () => {
+    vi.useFakeTimers();
+
+    mockGetDocumentStatus
+      .mockResolvedValueOnce({
+        status: "embedding",
+        file_name: "notes.txt",
+      })
+      .mockResolvedValueOnce({
+        status: "embedding",
+        file_name: "   ",
+      })
+      .mockResolvedValueOnce({
+        status: "completed",
+        file_name: "notes-v2.txt",
+      });
+
+    const { result } = renderHook(() =>
+      useDocumentPolling("doc-name", "/documents/doc-name/status", "processing"),
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.fileName).toBe("notes.txt");
+    expect(result.current.status).toBe("processing");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500);
+    });
+
+    expect(result.current.fileName).toBe("notes.txt");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500);
+    });
+
+    expect(result.current.fileName).toBe("notes-v2.txt");
+    expect(result.current.status).toBe("ready");
+  });
+
   it("maps retrying as a non-terminal stage and transitions cleanly to failed", async () => {
     vi.useFakeTimers();
 
@@ -195,11 +237,12 @@ describe("useDocumentPolling", () => {
     };
 
     await act(async () => {
-      emitStatus({ status: "retrying" });
+      emitStatus({ status: "retrying", file_name: "notes.txt" });
     });
 
     expect(result.current.stage).toBe("retrying");
     expect(result.current.status).toBe("processing");
+    expect(result.current.fileName).toBe("notes.txt");
     expect(closeSpy).not.toHaveBeenCalled();
 
     await act(async () => {

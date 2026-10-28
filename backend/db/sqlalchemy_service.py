@@ -109,6 +109,7 @@ def _document_row_to_dict(document: Document) -> dict:
 def _document_status_payload(document: Document) -> dict:
     return {
         "document_id": str(document.id),
+        "file_name": document.file_name,
         "status": document.status,
         "status_detail": document.status_detail,
         "chunks": document.chunks,

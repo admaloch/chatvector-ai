@@ -460,8 +460,8 @@ fallback for simple integrations.
 **Stream:** `GET /documents/{document_id}/status/stream`
 Server-Sent Events (SSE). Requires `ENABLE_STREAMING=true` in
 `backend/.env` (see `backend/.env.example`). The event name is `status`;
-the payload shape matches the poll endpoint — same `status`, `chunks`,
-`error`, `timestamps`, and `queue_position` (when queued) fields.
+the payload shape matches the poll endpoint — same `status`, `file_name`,
+`chunks`, `error`, `timestamps`, and `queue_position` (when queued) fields.
 
 **Frontend demo behavior:** the demo client (`frontend-demo/app/lib/hooks/useDocumentPolling.ts`)
 tries the SSE stream first and falls back to polling automatically if the

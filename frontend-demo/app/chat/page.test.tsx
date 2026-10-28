@@ -67,6 +67,7 @@ vi.mock("../lib/hooks/useChat", () => ({
       awaitingProcessing: false,
       queuePosition: undefined,
       processingTime: undefined,
+      fileName: undefined,
       errorMessage: undefined,
       status: undefined,
     },
