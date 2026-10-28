@@ -99,6 +99,32 @@ describe("SDK surface parity", () => {
     expect(events).toEqual(["queued", "completed"]);
   });
 
+  it("streamDocumentStatus maps file_name when present and omits it when absent", async () => {
+    const named = {
+      document_id: DOCUMENT_ID,
+      status: "completed",
+      file_name: "notes.txt",
+    };
+    const unnamed = { document_id: DOCUMENT_ID, status: "queued" };
+    const body = [
+      "event: status",
+      `data: ${JSON.stringify(unnamed)}`,
+      "",
+      "event: status",
+      `data: ${JSON.stringify(named)}`,
+      "",
+    ].join("\n");
+    const fetch = createFetchMock(sseResponse(body));
+    const events = [];
+    for await (const event of makeClient(fetch).streamDocumentStatus(DOCUMENT_ID)) {
+      events.push(event);
+    }
+    expect(events[0]?.fileName).toBeUndefined();
+    expect(events[0]?.status).toBe("queued");
+    expect(events[1]?.fileName).toBe("notes.txt");
+    expect(events[1]?.status).toBe("completed");
+  });
+
   it("streamDocumentStatus types metadata and keeps unknown raw fields", async () => {
     const payload = {
       document_id: DOCUMENT_ID,

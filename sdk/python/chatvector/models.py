@@ -275,6 +275,7 @@ class DocumentStatus:
     status_detail: str | None = None
     job: JSONDict | None = None
     metadata: JSONDict | None = None
+    file_name: str | None = None
     raw: JSONDict = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -296,6 +297,7 @@ class DocumentStatus:
             status_detail=_optional_str(payload.get("status_detail")),
             job=dict(job) if isinstance(job, Mapping) else None,
             metadata=dict(metadata) if isinstance(metadata, Mapping) else None,
+            file_name=_optional_str(payload.get("file_name")),
             raw=raw,
         )
 
@@ -321,6 +323,8 @@ class DocumentStatus:
             payload["job"] = dict(self.job)
         if self.metadata is not None:
             payload["metadata"] = dict(self.metadata)
+        if self.file_name is not None:
+            payload["file_name"] = self.file_name
         return payload
 
 
