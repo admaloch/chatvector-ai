@@ -658,6 +658,7 @@ def _build_stream_complete_payload(
     model: str,
     retrieval_debug: dict | None = None,
     request_latency_ms: int | None = None,
+    message_id: str | None = None,
 ) -> dict:
     payload = {
         "type": "complete",
@@ -670,6 +671,9 @@ def _build_stream_complete_payload(
         payload["request_latency_ms"] = request_latency_ms
     if retrieval_debug is not None:
         payload["retrieval_debug"] = retrieval_debug
+    # Present only after the assistant row is stored. Omitted otherwise.
+    if message_id:
+        payload["message_id"] = message_id
     return payload
 
 
@@ -934,15 +938,18 @@ async def answer_question_stream_for_document(
         if not full_answer.strip():
             full_answer = "No response."
 
+        assistant_message_id: str | None = None
         if session_id:
             try:
                 import db
-                await db.store_chat_turn(
+                _user_message_id, raw_assistant_id = await db.store_chat_turn(
                     session_id=session_id,
                     question=question,
                     answer=full_answer,
                     tenant_id=tenant_id,
                 )
+                if isinstance(raw_assistant_id, str) and raw_assistant_id:
+                    assistant_message_id = raw_assistant_id
             except Exception as e:
                 logger.error(
                     f"Failed to store streaming chat turn for session {session_id}: {e}",
@@ -958,6 +965,7 @@ async def answer_question_stream_for_document(
                 model=model_name,
                 retrieval_debug=retrieval_debug,
                 request_latency_ms=request_latency_ms,
+                message_id=assistant_message_id,
             ),
         )
         # Legacy completion marker — deprecated; retained for backward compatibility.

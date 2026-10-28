@@ -563,7 +563,7 @@ async def test_stream_followup_uses_resolved_query(monkeypatch):
         patch("services.chat_service.generate_answer_stream", new=fake_stream),
         patch("services.providers.get_llm_provider", return_value=provider),
         patch("db.get_session_history", new=AsyncMock(return_value=list(_HISTORY))),
-        patch("db.store_chat_turn", new=AsyncMock()),
+        patch("db.store_chat_turn", new=AsyncMock(return_value=("user-msg", "assistant-msg"))),
     ):
         async for _event in answer_question_stream_for_document(
             _PRONOUN,

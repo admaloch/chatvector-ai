@@ -480,7 +480,7 @@ Requires `ENABLE_STREAMING=true` in `backend/.env`. The request body matches
 | Event | Payload | Notes |
 |---|---|---|
 | `token` | JSON string | Incremental answer text. Format unchanged for existing clients. |
-| `complete` | JSON object | Final metadata: `type`, `session_id`, `sources`, `latency_ms`, `request_latency_ms`, `model`. |
+| `complete` | JSON object | Final metadata: `type`, `session_id`, `sources`, `latency_ms`, `request_latency_ms`, `model`, and optional `message_id`. `message_id` is the persisted assistant message id and is present only after a successful store. Clients must accept a `complete` payload that omits it. |
 | `done` | `[DONE]` | **Deprecated.** Retained for backward compatibility; emitted after `complete`. |
 | `error` | JSON object | `type`, `code`, and `message`. Valid JSON — not a plain string. |
 
@@ -513,6 +513,9 @@ successful `complete` event.
 wall time for the stream, not retrieval or embedding time.
 `request_latency_ms` is the additive total from stream start through `complete`,
 including history resolution, query transformation, embedding, and retrieval.
+`message_id` on `complete` is optional. It is included only when the assistant
+message was stored, and a stream with no session or a failed store still emits
+`complete` without it.
 
 ### Citation score types
 
