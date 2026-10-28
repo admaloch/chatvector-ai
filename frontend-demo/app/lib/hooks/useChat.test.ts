@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { useChat } from "./useChat";
 import { DEFAULT_RETRIEVAL_SETTINGS } from "../retrievalSettings";
-import { StreamingDisabledError } from "../api";
+import { DocumentNotFoundError, StreamingDisabledError } from "../api";
 
 const mockSendMessageStream = vi.fn();
 const mockSendMessage = vi.fn();
 const mockGetSessionHistory = vi.fn();
 const mockGetSession = vi.fn();
+const mockGetDocumentStatus = vi.fn();
+const mockGetUploadedDocument = vi.fn();
 
 vi.mock("../api", () => ({
   deleteDocument: vi.fn(),
@@ -15,7 +17,7 @@ vi.mock("../api", () => ({
   sendMessageStream: (...args: unknown[]) => mockSendMessageStream(...args),
   getSessionHistory: (...args: unknown[]) => mockGetSessionHistory(...args),
   getSession: (...args: unknown[]) => mockGetSession(...args),
-  getDocumentStatus: vi.fn(),
+  getDocumentStatus: (...args: unknown[]) => mockGetDocumentStatus(...args),
   DocumentNotFoundError: class DocumentNotFoundError extends Error {},
   ChatError: class ChatError extends Error {
     code = "unexpected";
@@ -41,21 +43,33 @@ vi.mock("./useDocumentPolling", () => ({
 vi.mock("../documentStore", () => ({
   saveUploadedDocument: vi.fn(),
   removeUploadedDocument: vi.fn(),
-  getUploadedDocument: vi.fn(),
+  getUploadedDocument: (...args: unknown[]) => mockGetUploadedDocument(...args),
 }));
+
+const WELCOME_TEXT =
+  "Hello! I'm ChatVector. Upload a document and I'll help you find answers from it.";
+const DOCUMENT_GONE_NOTICE =
+  "The document attached to this session is no longer available. You can upload another.";
+
+function sessionPayload(sessionId: string, documentIds: string[] = []) {
+  return {
+    id: sessionId,
+    created_at: "2026-01-01T00:00:00Z",
+    last_active: "2026-01-01T00:00:00Z",
+    metadata: {},
+    document_ids: documentIds,
+  };
+}
 
 describe("useChat", () => {
   beforeEach(() => {
     mockSendMessageStream.mockReset();
     mockSendMessage.mockReset();
     mockGetSessionHistory.mockResolvedValue({ messages: [] });
-    mockGetSession.mockResolvedValue({
-      id: "session-a",
-      created_at: "2026-01-01T00:00:00Z",
-      last_active: "2026-01-01T00:00:00Z",
-      metadata: {},
-      document_ids: [],
-    });
+    mockGetSession.mockResolvedValue(sessionPayload("session-a"));
+    mockGetDocumentStatus.mockReset();
+    mockGetUploadedDocument.mockReset();
+    mockGetUploadedDocument.mockReturnValue(undefined);
   });
 
   it("ignores a second synchronous send while a stream is in flight", async () => {
@@ -430,5 +444,34 @@ describe("useChat", () => {
 
     rafSpy.mockRestore();
     cancelSpy.mockRestore();
+  });
+
+  it("restores a missing document as an empty attachment and keeps history", async () => {
+    mockGetSessionHistory.mockResolvedValue({
+      messages: [
+        { id: "m-1", role: "user", content: "Where is the appendix?" },
+        { id: "m-2", role: "assistant", content: "Page 4." },
+      ],
+    });
+    mockGetSession.mockResolvedValue(sessionPayload("session-a", ["doc-missing"]));
+    mockGetDocumentStatus.mockRejectedValue(new DocumentNotFoundError("missing"));
+
+    const { result } = renderHook(() =>
+      useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+    );
+
+    await waitFor(() => expect(result.current.historyLoading).toBe(false));
+
+    expect(result.current.attachment).toBeNull();
+    expect(result.current.sessionNotice).toBe(DOCUMENT_GONE_NOTICE);
+    expect(result.current.messages.map((message) => message.text)).toEqual([
+      "Where is the appendix?",
+      "Page 4.",
+    ]);
+    expect(result.current.messages.some((message) => message.text === WELCOME_TEXT)).toBe(
+      false,
+    );
+    expect(result.current.inflight).toBe(false);
+    expect(mockGetDocumentStatus).toHaveBeenCalledWith("/documents/doc-missing/status");
   });
 });
