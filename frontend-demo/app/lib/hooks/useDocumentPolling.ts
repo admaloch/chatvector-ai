@@ -16,6 +16,12 @@ function mapApiStatusToUi(apiStatus: string): PolledDocumentStatus {
   return "processing";
 }
 
+function statusFileName(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 /** Format a duration in milliseconds to a human-readable string. */
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)}ms`;
@@ -92,6 +98,8 @@ export function useDocumentPolling(
    * the upload-time value when the live one is not yet known.
    */
   queuePosition: number | undefined;
+  /** Latest non-blank file_name from a status payload. */
+  fileName: string | undefined;
 } {
   const [polledUiStatus, setPolledUiStatus] = useState<
     PolledDocumentStatus | undefined
@@ -105,6 +113,7 @@ export function useDocumentPolling(
   const [processingTime, setProcessingTime] = useState<string | undefined>(undefined);
   const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
   const [queuePosition, setQueuePosition] = useState<number | undefined>(undefined);
+  const [fileName, setFileName] = useState<string | undefined>(undefined);
 
   // A toggle for environments/situations where SSE fails
   const [useFallbackPolling, setUseFallbackPolling] = useState(false);
@@ -127,6 +136,7 @@ export function useDocumentPolling(
       setProcessingTime(undefined);
       setErrorMessage(undefined);
       setQueuePosition(undefined);
+      setFileName(undefined);
     }
   }, [docKey]);
 
@@ -194,6 +204,9 @@ export function useDocumentPolling(
           ) {
             setQueuePosition(payload.queue_position);
           }
+
+          const streamedFileName = statusFileName(payload.file_name);
+          if (streamedFileName) setFileName(streamedFileName);
 
           const ui = mapApiStatusToUi(payload.status);
           setPolledUiStatus(ui);
@@ -277,6 +290,9 @@ export function useDocumentPolling(
             setQueuePosition(payload.queue_position);
           }
 
+          const polledFileName = statusFileName(payload.file_name);
+          if (polledFileName) setFileName(polledFileName);
+
           const ui = mapApiStatusToUi(payload.status);
           setPolledUiStatus(ui);
 
@@ -328,5 +344,6 @@ export function useDocumentPolling(
     processingTime,
     errorMessage,
     queuePosition,
+    fileName,
   };
 }

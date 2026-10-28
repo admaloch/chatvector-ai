@@ -10,6 +10,17 @@ const mockGetSessionHistory = vi.fn();
 const mockGetSession = vi.fn();
 const mockGetDocumentStatus = vi.fn();
 const mockGetUploadedDocument = vi.fn();
+const mockPoll = vi.hoisted(() => ({
+  status: "ready" as "processing" | "ready" | "failed",
+  stage: "completed" as string | undefined,
+  completedStages: [] as string[],
+  chunks: undefined as { total: number; processed: number } | undefined,
+  awaitingProcessing: false,
+  processingTime: undefined as string | undefined,
+  errorMessage: undefined as string | undefined,
+  queuePosition: undefined as number | undefined,
+  fileName: undefined as string | undefined,
+}));
 
 vi.mock("../api", () => ({
   deleteDocument: vi.fn(),
@@ -28,16 +39,7 @@ vi.mock("../api", () => ({
 }));
 
 vi.mock("./useDocumentPolling", () => ({
-  useDocumentPolling: () => ({
-    status: "ready" as const,
-    stage: "completed",
-    completedStages: [],
-    chunks: undefined,
-    awaitingProcessing: false,
-    processingTime: undefined,
-    errorMessage: undefined,
-    queuePosition: undefined,
-  }),
+  useDocumentPolling: () => mockPoll,
 }));
 
 vi.mock("../documentStore", () => ({
@@ -78,6 +80,11 @@ describe("useChat", () => {
     mockGetDocumentStatus.mockReset();
     mockGetUploadedDocument.mockReset();
     mockGetUploadedDocument.mockReturnValue(undefined);
+    mockPoll.status = "ready";
+    mockPoll.stage = "completed";
+    mockPoll.fileName = undefined;
+    mockPoll.chunks = undefined;
+    mockPoll.processingTime = undefined;
   });
 
   it("ignores a second synchronous send while a stream is in flight", async () => {
@@ -452,6 +459,111 @@ describe("useChat", () => {
 
     rafSpy.mockRestore();
     cancelSpy.mockRestore();
+  });
+
+  it("restores the status file name when localStorage has no entry", async () => {
+    const documentId = "0a22a97f-1111-4111-8111-111111111111";
+    mockGetSession.mockResolvedValue(sessionPayload("session-a", [documentId]));
+    mockGetDocumentStatus.mockResolvedValue({
+      status: "completed",
+      file_name: "notes.txt",
+    });
+    mockGetUploadedDocument.mockReturnValue(undefined);
+
+    const { result } = renderHook(() =>
+      useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+    );
+
+    await waitFor(() => expect(result.current.attachment?.status).toBe("ready"));
+
+    expect(result.current.attachment).toMatchObject({
+      documentId,
+      fileName: "notes.txt",
+      status: "ready",
+    });
+    expect(result.current.attachment?.fileName).not.toBe(
+      `Document ${documentId.slice(0, 8)}`,
+    );
+    expect(mockGetUploadedDocument).toHaveBeenCalledWith(documentId);
+  });
+
+  it.each([
+    ["processing", "embedding", "processing"],
+    ["failed", "failed", "failed"],
+  ] as const)(
+    "restores a %s document name from status when localStorage is empty",
+    async (_label, apiStatus, attachmentStatus) => {
+      mockPoll.status = attachmentStatus;
+      mockGetSession.mockResolvedValue(sessionPayload("session-a", ["doc-notes"]));
+      mockGetDocumentStatus.mockResolvedValue({
+        status: apiStatus,
+        file_name: "notes.txt",
+      });
+      mockGetUploadedDocument.mockReturnValue(undefined);
+
+      const { result } = renderHook(() =>
+        useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+      );
+
+      await waitFor(() =>
+        expect(result.current.attachment?.status).toBe(attachmentStatus),
+      );
+      expect(result.current.attachment?.fileName).toBe("notes.txt");
+    },
+  );
+
+  it("prefers the status file name over a conflicting localStorage name", async () => {
+    mockGetSession.mockResolvedValue(sessionPayload("session-a", ["doc-1"]));
+    mockGetDocumentStatus.mockResolvedValue({
+      status: "completed",
+      file_name: "notes.txt",
+    });
+    mockGetUploadedDocument.mockReturnValue({
+      documentId: "doc-1",
+      fileName: "stale.pdf",
+      uploadedAt: 1,
+    });
+
+    const { result } = renderHook(() =>
+      useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+    );
+
+    await waitFor(() => expect(result.current.attachment?.fileName).toBe("notes.txt"));
+    expect(result.current.attachment?.fileName).not.toBe("stale.pdf");
+  });
+
+  it("uses the status file name after upload once polling has read it", async () => {
+    mockPoll.status = "processing";
+    mockPoll.fileName = undefined;
+
+    const { result, rerender } = renderHook(() =>
+      useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+    );
+
+    await waitFor(() => expect(result.current.historyLoading).toBe(false));
+
+    act(() => {
+      result.current.handleUploadAccepted({
+        fileName: "selected.pdf",
+        documentId: "doc-1",
+        statusEndpoint: "/documents/doc-1/status",
+      });
+    });
+
+    expect(result.current.attachment).toMatchObject({
+      fileName: "selected.pdf",
+      status: "processing",
+    });
+
+    mockPoll.fileName = "notes.txt";
+    rerender();
+
+    await waitFor(() =>
+      expect(result.current.attachment).toMatchObject({
+        fileName: "notes.txt",
+        status: "processing",
+      }),
+    );
   });
 
   it("restores a missing document as an empty attachment and keeps history", async () => {

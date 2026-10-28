@@ -73,18 +73,33 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
+function restoredAttachmentFileName(
+  documentId: string,
+  statusFileName: string | undefined,
+  storedFileName: string | undefined,
+): string {
+  const fromStatus = statusFileName?.trim();
+  if (fromStatus) return fromStatus;
+  const fromStore = storedFileName?.trim();
+  if (fromStore) return fromStore;
+  return `Document ${documentId.slice(0, 8)}`;
+}
+
 async function restoreSessionAttachment(
   documentId: string
 ): Promise<{ attachment: AttachmentState | null; notice: string | null }> {
   const statusEndpoint = documentStatusEndpoint(documentId);
   const stored = getUploadedDocument(documentId);
-  const fileName = stored?.fileName ?? `Document ${documentId.slice(0, 8)}`;
 
   try {
     const status = await getDocumentStatus(statusEndpoint);
     return {
       attachment: {
-        fileName,
+        fileName: restoredAttachmentFileName(
+          documentId,
+          status.file_name,
+          stored?.fileName,
+        ),
         documentId,
         statusEndpoint,
         status: mapApiStatusToAttachmentStatus(status.status),
@@ -300,6 +315,15 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
   }, [attachment?.documentId]);
 
   useEffect(() => {
+    const statusName = poll.fileName?.trim();
+    if (!statusName) return;
+    setAttachment((curr) => {
+      if (!curr || curr.fileName === statusName) return curr;
+      return { ...curr, fileName: statusName };
+    });
+  }, [poll.fileName]);
+
+  useEffect(() => {
     if (poll.status !== "ready" || !attachment || attachment.status !== "processing") {
       return;
     }
@@ -308,13 +332,15 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
       return;
     }
     readyAnnouncedForDocRef.current = docId;
-    const name = attachment.fileName;
+    const statusName = poll.fileName?.trim();
+    const name = statusName || attachment.fileName;
     setAttachment((curr) => {
       if (!curr || curr.documentId !== docId || curr.status !== "processing") {
         return curr;
       }
       return {
         ...curr,
+        fileName: statusName || curr.fileName,
         status: "ready",
         stage: "completed",
         chunks: poll.chunks,
@@ -329,17 +355,20 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
         text: `Document "${name}" is ready. You can ask questions about it.`,
       },
     ]);
-  }, [poll.status, poll.chunks, poll.processingTime, attachment]);
+  }, [poll.status, poll.chunks, poll.processingTime, poll.fileName, attachment]);
 
   useEffect(() => {
     if (poll.status !== "failed" || !attachment || attachment.status !== "processing") {
       return;
     }
     const docId = attachment.documentId;
+    const statusName = poll.fileName?.trim();
     setAttachment((curr) =>
-      curr?.documentId === docId ? { ...curr, status: "failed" } : curr
+      curr?.documentId === docId
+        ? { ...curr, fileName: statusName || curr.fileName, status: "failed" }
+        : curr
     );
-  }, [poll.status, attachment]);
+  }, [poll.status, poll.fileName, attachment]);
 
   useEffect(() => {
     return () => {

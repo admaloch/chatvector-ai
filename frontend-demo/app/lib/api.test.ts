@@ -758,6 +758,44 @@ describe("getDocumentStatus", () => {
     });
   });
 
+  it("returns file_name when the status payload includes one", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: "completed",
+          file_name: "notes.txt",
+          chunks: { processed: 1, total: 1 },
+        }),
+        { status: 200 }
+      )
+    );
+
+    await expect(getDocumentStatus("/documents/doc-123/status")).resolves.toEqual({
+      status: "completed",
+      file_name: "notes.txt",
+      chunks: { processed: 1, total: 1 },
+    });
+  });
+
+  it("omits a missing or blank file_name", async () => {
+    for (const fileName of [undefined, "", "   "]) {
+      vi.mocked(globalThis.fetch).mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            status: "embedding",
+            stage: "embedding",
+            ...(fileName === undefined ? {} : { file_name: fileName }),
+          }),
+          { status: 200 }
+        )
+      );
+
+      const result = await getDocumentStatus("/documents/doc-123/status");
+      expect(result.file_name).toBeUndefined();
+      expect(result.status).toBe("embedding");
+    }
+  });
+
   it("drops queue_position when absent so non-queued responses stay clean", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       new Response(

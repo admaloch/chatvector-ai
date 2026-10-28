@@ -82,7 +82,7 @@ describe("IngestionPipeline", () => {
 });
 
 describe("AttachmentChip retrying state", () => {
-  it("shows Retrying while status is processing and Failed only when terminal", () => {
+  it("shows Retrying while status is processing and the file name when terminal", () => {
     const { rerender } = render(
       <AttachmentChip
         fileName="report.pdf"
@@ -92,6 +92,7 @@ describe("AttachmentChip retrying state", () => {
       />
     );
 
+    expect(screen.getByText("report.pdf")).toBeInTheDocument();
     expect(screen.getByText("Retrying")).toBeInTheDocument();
     expect(screen.queryByText("Failed")).not.toBeInTheDocument();
 
@@ -104,6 +105,35 @@ describe("AttachmentChip retrying state", () => {
       />
     );
 
-    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByText("report.pdf")).toBeInTheDocument();
+    expect(screen.queryByText("Retrying")).not.toBeInTheDocument();
+    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+  });
+
+  it("keeps notes.txt visible for processing, ready, and failed chips", () => {
+    const { rerender } = render(
+      <AttachmentChip
+        fileName="notes.txt"
+        status="processing"
+        stage="embedding"
+        chunks={{ total: 3, processed: 1 }}
+        onRemove={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("notes.txt")).toBeInTheDocument();
+    expect(screen.getByText("Embedding (3 chunks)")).toBeInTheDocument();
+
+    rerender(
+      <AttachmentChip fileName="notes.txt" status="ready" onRemove={vi.fn()} />
+    );
+    expect(screen.getByText("notes.txt")).toBeInTheDocument();
+    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+
+    rerender(
+      <AttachmentChip fileName="notes.txt" status="failed" onRemove={vi.fn()} />
+    );
+    expect(screen.getByText("notes.txt")).toBeInTheDocument();
+    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
   });
 });
