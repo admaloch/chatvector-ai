@@ -150,6 +150,24 @@ def test_gate_topic_switch_does_not_override_which_one():
     ) == (True, None)
 
 
+def test_gate_skips_short_questions_that_name_a_subject():
+    assert question_needs_history_resolution(
+        "Explain the indemnification clause.",
+        _HISTORY,
+    ) == (False, "standalone_question")
+    assert question_needs_history_resolution(
+        "Who approves expenses?",
+        _HISTORY,
+    ) == (False, "standalone_question")
+
+
+def test_gate_keeps_length_thresholds_for_fragments_without_a_subject():
+    """Bare fragments still resolve. The 6-word and 4-word cutoffs stay."""
+    assert question_needs_history_resolution("Why not now?", _HISTORY) == (True, None)
+    assert question_needs_history_resolution("How much?", _HISTORY) == (True, None)
+    assert question_needs_history_resolution("Can you tell me", _HISTORY) == (True, None)
+
+
 @pytest.mark.asyncio
 async def test_history_preview_is_truncated(monkeypatch):
     long_history = [{"role": "user", "content": "x" * 400}]
