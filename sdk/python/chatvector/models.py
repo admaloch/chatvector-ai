@@ -677,6 +677,7 @@ class StreamChatEvent:
     latency_ms: int = 0
     model: str = ""
     retrieval_debug: RetrievalDebugMetadata | None = None
+    message_id: str | None = None
 
     @classmethod
     def token(cls, content: str) -> "StreamChatEvent":
@@ -692,8 +693,14 @@ class StreamChatEvent:
         latency_ms: int,
         model: str,
         retrieval_debug: RetrievalDebugMetadata | None = None,
+        message_id: str | None = None,
     ) -> "StreamChatEvent":
-        """Build a structured completion event."""
+        """Build a structured completion event.
+
+        ``message_id`` is optional. It is the persisted assistant message id
+        when the server stored the turn, and ``None`` when the payload omits
+        it. A missing id is not an error.
+        """
         return cls(
             type="complete",
             session_id=session_id,
@@ -701,6 +708,7 @@ class StreamChatEvent:
             latency_ms=latency_ms,
             model=model,
             retrieval_debug=retrieval_debug,
+            message_id=message_id,
         )
 
 
