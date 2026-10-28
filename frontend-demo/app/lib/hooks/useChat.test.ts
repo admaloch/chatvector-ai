@@ -506,4 +506,55 @@ describe("useChat", () => {
       expect(result.current.inflight).toBe(false);
     },
   );
+
+  it("keeps a failed document attached and does not explain it only after send", async () => {
+    mockGetSessionHistory.mockResolvedValue({
+      messages: [{ id: "m-1", role: "assistant", content: "Earlier answer" }],
+    });
+    mockGetSession.mockResolvedValue(sessionPayload("session-a", ["doc-failed"]));
+    mockGetDocumentStatus.mockResolvedValue({ status: "failed" });
+    mockGetUploadedDocument.mockReturnValue({
+      documentId: "doc-failed",
+      fileName: "broken.pdf",
+      uploadedAt: 1,
+    });
+
+    const { result } = renderHook(() =>
+      useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+    );
+
+    await waitFor(() => expect(result.current.attachment?.status).toBe("failed"));
+
+    expect(result.current.attachment).toMatchObject({
+      documentId: "doc-failed",
+      fileName: "broken.pdf",
+      status: "failed",
+    });
+    expect(result.current.sessionNotice).toBeNull();
+    expect(result.current.messages.map((message) => message.text)).toEqual([
+      "Earlier answer",
+    ]);
+    expect(
+      result.current.messages.some((message) =>
+        message.text.includes("Document processing failed"),
+      ),
+    ).toBe(false);
+    expect(mockSendMessageStream).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.setInput("Try anyway");
+    });
+    await act(async () => {
+      await result.current.handleSend();
+    });
+
+    expect(result.current.attachment?.status).toBe("failed");
+    expect(
+      result.current.messages.some(
+        (message) =>
+          message.text ===
+          "Document processing failed. Please remove it and upload again.",
+      ),
+    ).toBe(true);
+  });
 });
