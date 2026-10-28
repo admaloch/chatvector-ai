@@ -219,7 +219,8 @@ async def _resolve_to_standalone(question: str, history: list[dict]) -> str:
 # - the question is already standalone: no unresolved anaphora or elliptical
 #   follow-up, and it is long enough to be a full query
 # - an explicit topic-switch cue is present and the question is otherwise
-#   standalone (cues do not override pronouns or elliptical patterns)
+#   standalone (cues do not override pronouns, demonstratives, elliptical
+#   patterns, or other referential cues)
 #
 # Unresolved references (case-insensitive, word boundaries):
 # - pronouns: it, they, them, their, theirs, he, she, him, her, his, hers, its
@@ -228,6 +229,9 @@ async def _resolve_to_standalone(question: str, history: list[dict]) -> str:
 # - elliptical patterns: "what about …", "how about …", "and the …",
 #   "and what …", "and how …", "what else …", "tell me more …",
 #   "more about …", and "how much was that"
+# - one-anaphora and discourse cues: "which one", "second one", "other one",
+#   "the latter", "the former", "going back", and "I meant".
+#   The substring "second" inside "secondary" is not a cue.
 #
 # Topic-switch cues (conservative; ignored when a reference is also present):
 # new topic, switch/switching topic(s), change of subject, changing the
@@ -247,6 +251,18 @@ _DEMONSTRATIVE_RE = re.compile(
 _ELLIPTICAL_RE = re.compile(
     r"(?:^(?:what about|how about|and the|and what|and how|what else|tell me more|more about)\b"
     r"|\bhow much was that\b)",
+    re.IGNORECASE,
+)
+# Referential follow-ups that are not pronouns, demonstratives, or ellipsis.
+# Word boundaries keep "secondary" from matching "second".
+_REFERENTIAL_RE = re.compile(
+    r"\bwhich\s+ones?\b"
+    r"|\bsecond\s+ones?\b"
+    r"|\bother\s+ones?\b"
+    r"|\bthe\s+latter\b"
+    r"|\bthe\s+former\b"
+    r"|\bgoing\s+back\b"
+    r"|\bi\s+meant\b",
     re.IGNORECASE,
 )
 _TOPIC_SWITCH_RE = re.compile(
@@ -278,6 +294,7 @@ def question_needs_history_resolution(question: str, history: list[dict]) -> tup
         _ANAPHORA_RE.search(text)
         or _has_unresolved_demonstrative(text)
         or _ELLIPTICAL_RE.search(text)
+        or _REFERENTIAL_RE.search(text)
     )
     if has_reference:
         return True, None
