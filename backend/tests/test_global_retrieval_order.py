@@ -126,3 +126,48 @@ async def test_missing_similarity_sorts_last(retrieval_env):
     )
 
     assert [chunk.id for chunk in result.chunks] == ["doc-b:0", "doc-a:0"]
+
+
+@pytest.mark.asyncio
+async def test_non_rerank_path_cuts_to_match_count_before_context(retrieval_env):
+    chunks_by_doc = {
+        "doc-a": [
+            _chunk("doc-a", 0, similarity=0.50),
+            _chunk("doc-a", 1, similarity=0.40),
+        ],
+        "doc-b": [
+            _chunk("doc-b", 0, similarity=0.90),
+            _chunk("doc-b", 1, similarity=0.80),
+        ],
+        "doc-c": [
+            _chunk("doc-c", 0, similarity=0.30),
+            _chunk("doc-c", 1, similarity=0.20),
+        ],
+    }
+    seen_context_input: list[list[str]] = []
+
+    def capture_context(chunks, session_context=None, **kwargs):
+        seen_context_input.append([chunk.id for chunk in chunks])
+        from services.context_service import build_context_from_chunks
+
+        return build_context_from_chunks(
+            chunks, session_context=session_context, **kwargs
+        )
+
+    find_similar = _find_by_doc(chunks_by_doc)
+    with (
+        patch("services.chat_service.get_embeddings", new=AsyncMock(return_value=[[0.1]])),
+        patch("services.chat_service.find_similar_chunks", new=find_similar),
+        patch("services.chat_service.build_context_from_chunks", side_effect=capture_context),
+    ):
+        result = await retrieve_for_documents(
+            "which document is more relevant",
+            ["doc-a", "doc-b", "doc-c"],
+            "dev",
+            _effective(reranking_enabled=False, match_count=2),
+        )
+
+    assert [chunk.id for chunk in result.chunks] == ["doc-b:0", "doc-b:1"]
+    assert seen_context_input == [["doc-b:0", "doc-b:1"]]
+    assert all(call.kwargs["match_count"] == 2 for call in find_similar.await_args_list)
+    assert find_similar.await_count == 3

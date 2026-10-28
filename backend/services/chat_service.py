@@ -489,6 +489,8 @@ async def retrieve_for_documents(
         **_rerank_overrides(effective_retrieval_config),
     )
     rerank_ms = int((time.perf_counter() - rerank_started) * 1000)
+    if reranker_debug is None:
+        matching_chunks = matching_chunks[: effective_retrieval_config.match_count]
 
     context_started = time.perf_counter()
     context_kwargs = {}
