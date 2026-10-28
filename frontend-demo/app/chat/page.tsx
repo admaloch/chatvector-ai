@@ -26,6 +26,9 @@ export default function ChatPage() {
     error: sessionError,
     isCreating,
     deletingSessionId,
+    noteUserQuestion,
+    noteDocumentAttached,
+    noteSessionHistory,
   } = useSessionManager();
   const { settings, setScope, setMatchCount, loaded: retrievalLoaded } = useRetrievalSettings();
 
@@ -48,7 +51,11 @@ export default function ChatPage() {
     handleUploadAccepted,
     handleRemoveAttachment,
     stopStreaming,
-  } = useChat(activeSessionId, settings);
+  } = useChat(activeSessionId, settings, {
+    onUserQuestion: noteUserQuestion,
+    onDocumentAttached: noteDocumentAttached,
+    onHistoryLoaded: noteSessionHistory,
+  });
 
   if (!isLoaded || !retrievalLoaded) {
     return (

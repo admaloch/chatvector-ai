@@ -1013,6 +1013,7 @@ describe("session API", () => {
     last_active: "2026-01-01T00:00:00Z",
     metadata: {},
     document_ids: [],
+    display_label: "Who approves expenses?",
   };
 
   beforeEach(() => {
@@ -1038,6 +1039,17 @@ describe("session API", () => {
         body: JSON.stringify({}),
       })
     );
+  });
+
+  it("defaults a missing display_label to New session", async () => {
+    const { display_label: _label, ...withoutLabel } = SESSION_PAYLOAD;
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(JSON.stringify(withoutLabel), { status: 200 })
+    );
+
+    const result = await getSession("session-abc");
+
+    expect(result.display_label).toBe("New session");
   });
 
   it("listSessions returns parsed sessions array", async () => {

@@ -122,7 +122,24 @@ async function restoreSessionAttachment(
 
 type ResetTurnMode = "stop" | "session" | "unmount";
 
-export function useChat(sessionId: string | null, retrievalSettings: RetrievalSettings) {
+export type ChatLabelEvents = {
+  onUserQuestion?: (sessionId: string, text: string) => void;
+  onDocumentAttached?: (sessionId: string, fileName: string) => void;
+  onHistoryLoaded?: (sessionId: string, hasUsefulUserQuestion: boolean) => void;
+};
+
+function hasUsefulUserQuestion(messages: SessionHistoryMessage[]): boolean {
+  return messages.some(
+    (message) =>
+      message.role === "user" && message.content.trim().replace(/\s+/g, " ").length > 0
+  );
+}
+
+export function useChat(
+  sessionId: string | null,
+  retrievalSettings: RetrievalSettings,
+  labelEvents?: ChatLabelEvents,
+) {
   const [messages, setMessages] = useState<Message[]>(welcomeMessages);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [input, setInput] = useState("");
@@ -142,6 +159,12 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
   const rafIdRef = useRef<number | null>(null);
   const streamingMsgIdRef = useRef<number | null>(null);
   const tokenFlushEpochRef = useRef<number | null>(null);
+  const labelEventsRef = useRef(labelEvents);
+  labelEventsRef.current = labelEvents;
+  const questionLockedRef = useRef(false);
+  const historyReadyRef = useRef(false);
+  const pendingQuestionRef = useRef<string | null>(null);
+  const pendingFileRef = useRef<string | null>(null);
 
   const resetTurn = useCallback((mode: ResetTurnMode) => {
     abortControllerRef.current?.abort();
@@ -220,6 +243,10 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
     const requestId = historyRequestRef.current + 1;
     historyRequestRef.current = requestId;
     chatEpochRef.current += 1;
+    questionLockedRef.current = false;
+    historyReadyRef.current = false;
+    pendingQuestionRef.current = null;
+    pendingFileRef.current = null;
     resetTurn("session");
 
     setInput("");
@@ -258,6 +285,27 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
             ? mapHistoryToMessages(historyResult.messages)
             : welcomeMessages
         );
+
+        historyReadyRef.current = true;
+        const historyHasQuestion = hasUsefulUserQuestion(historyResult.messages);
+        if (historyHasQuestion) {
+          questionLockedRef.current = true;
+          pendingQuestionRef.current = null;
+          pendingFileRef.current = null;
+          labelEventsRef.current?.onHistoryLoaded?.(sessionId, true);
+        } else {
+          labelEventsRef.current?.onHistoryLoaded?.(sessionId, false);
+          const pendingQuestion = pendingQuestionRef.current;
+          const pendingFile = pendingFileRef.current;
+          pendingQuestionRef.current = null;
+          pendingFileRef.current = null;
+          if (pendingQuestion) {
+            questionLockedRef.current = true;
+            labelEventsRef.current?.onUserQuestion?.(sessionId, pendingQuestion);
+          } else if (pendingFile) {
+            labelEventsRef.current?.onDocumentAttached?.(sessionId, pendingFile);
+          }
+        }
 
         let sessionResult: Awaited<ReturnType<typeof getSession>>;
         try {
@@ -558,6 +606,15 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
       return;
     }
 
+    if (sessionId && !questionLockedRef.current) {
+      if (!historyReadyRef.current) {
+        pendingQuestionRef.current = text;
+      } else {
+        questionLockedRef.current = true;
+        labelEventsRef.current?.onUserQuestion?.(sessionId, text);
+      }
+    }
+
     const base = Date.now();
     setMessages((prev) => [
       ...prev,
@@ -688,6 +745,14 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
     statusEndpoint: string;
     queuePosition?: number;
   }) => {
+    const fileName = payload.fileName.trim();
+    if (sessionId && fileName && !questionLockedRef.current) {
+      if (!historyReadyRef.current) {
+        pendingFileRef.current = fileName;
+      } else {
+        labelEventsRef.current?.onDocumentAttached?.(sessionId, fileName);
+      }
+    }
     setRemoveError(null);
     setSessionNotice(null);
     saveUploadedDocument({
