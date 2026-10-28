@@ -32,6 +32,15 @@ const welcomeMessages: Message[] = [
   },
 ];
 
+const DOCUMENT_GONE_NOTICE =
+  "The document attached to this session is no longer available. You can upload another.";
+const DOCUMENT_UNAVAILABLE_NOTICE =
+  "The document attached to this session could not be checked. You can upload another.";
+const SESSION_HISTORY_FAILED_NOTICE =
+  "This chat could not be loaded. You can upload a document and continue from here.";
+const SESSION_DETAILS_FAILED_NOTICE =
+  "This session could not be fully restored. You can upload a document to continue.";
+
 function mapHistoryToMessages(history: SessionHistoryMessage[]): Message[] {
   return history.map((entry, index) => ({
     id: index + 1,
@@ -86,12 +95,12 @@ async function restoreSessionAttachment(
     if (error instanceof DocumentNotFoundError) {
       return {
         attachment: null,
-        notice: "The document attached to this session is no longer available.",
+        notice: DOCUMENT_GONE_NOTICE,
       };
     }
     return {
       attachment: null,
-      notice: "Could not restore the session document. You can upload a new one.",
+      notice: DOCUMENT_UNAVAILABLE_NOTICE,
     };
   }
 }
@@ -208,12 +217,26 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
     setMessages([]);
 
     void (async () => {
+      const historyPromise = getSessionHistory(sessionId);
+      const sessionPromise = getSession(sessionId);
+
       try {
-        const [historyResult, sessionResult] = await Promise.all([
-          getSessionHistory(sessionId),
-          getSession(sessionId),
-        ]);
-        if (historyRequestRef.current !== requestId) return;
+        let historyResult: Awaited<ReturnType<typeof getSessionHistory>>;
+        try {
+          historyResult = await historyPromise;
+        } catch {
+          await sessionPromise.catch(() => undefined);
+          if (historyRequestRef.current !== requestId) return;
+          setMessages(welcomeMessages);
+          setAttachment(null);
+          setSessionNotice(SESSION_HISTORY_FAILED_NOTICE);
+          return;
+        }
+
+        if (historyRequestRef.current !== requestId) {
+          void sessionPromise.catch(() => undefined);
+          return;
+        }
 
         setMessages(
           historyResult.messages.length > 0
@@ -221,23 +244,39 @@ export function useChat(sessionId: string | null, retrievalSettings: RetrievalSe
             : welcomeMessages
         );
 
+        let sessionResult: Awaited<ReturnType<typeof getSession>>;
+        try {
+          sessionResult = await sessionPromise;
+        } catch {
+          if (historyRequestRef.current !== requestId) return;
+          setAttachment(null);
+          setSessionNotice(SESSION_DETAILS_FAILED_NOTICE);
+          return;
+        }
+
+        if (historyRequestRef.current !== requestId) return;
+
         const documentIds = sessionResult.document_ids;
         if (documentIds.length === 0) return;
 
         const documentId = documentIds[documentIds.length - 1];
-        const restored = await restoreSessionAttachment(documentId);
-        if (historyRequestRef.current !== requestId) return;
+        try {
+          const restored = await restoreSessionAttachment(documentId);
+          if (historyRequestRef.current !== requestId) return;
 
-        if (restored.attachment) {
-          setAttachment(restored.attachment);
-          setSessionNotice(null);
-        } else if (restored.notice) {
+          if (restored.attachment) {
+            setAttachment(restored.attachment);
+            setSessionNotice(null);
+          } else if (restored.notice) {
+            setAttachment(null);
+            setSessionNotice(restored.notice);
+          }
+        } catch {
+          // A document-restore failure must not replace a transcript that already loaded.
+          if (historyRequestRef.current !== requestId) return;
           setAttachment(null);
-          setSessionNotice(restored.notice);
+          setSessionNotice(DOCUMENT_UNAVAILABLE_NOTICE);
         }
-      } catch {
-        if (historyRequestRef.current !== requestId) return;
-        setMessages(welcomeMessages);
       } finally {
         if (historyRequestRef.current === requestId) {
           setHistoryLoading(false);

@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { useChat } from "./useChat";
 import { DEFAULT_RETRIEVAL_SETTINGS } from "../retrievalSettings";
-import { StreamingDisabledError } from "../api";
+import { DocumentNotFoundError, StreamingDisabledError } from "../api";
 
 const mockSendMessageStream = vi.fn();
 const mockSendMessage = vi.fn();
 const mockGetSessionHistory = vi.fn();
 const mockGetSession = vi.fn();
+const mockGetDocumentStatus = vi.fn();
+const mockGetUploadedDocument = vi.fn();
 
 vi.mock("../api", () => ({
   deleteDocument: vi.fn(),
@@ -15,7 +17,7 @@ vi.mock("../api", () => ({
   sendMessageStream: (...args: unknown[]) => mockSendMessageStream(...args),
   getSessionHistory: (...args: unknown[]) => mockGetSessionHistory(...args),
   getSession: (...args: unknown[]) => mockGetSession(...args),
-  getDocumentStatus: vi.fn(),
+  getDocumentStatus: (...args: unknown[]) => mockGetDocumentStatus(...args),
   DocumentNotFoundError: class DocumentNotFoundError extends Error {},
   ChatError: class ChatError extends Error {
     code = "unexpected";
@@ -41,21 +43,41 @@ vi.mock("./useDocumentPolling", () => ({
 vi.mock("../documentStore", () => ({
   saveUploadedDocument: vi.fn(),
   removeUploadedDocument: vi.fn(),
-  getUploadedDocument: vi.fn(),
+  getUploadedDocument: (...args: unknown[]) => mockGetUploadedDocument(...args),
 }));
+
+const WELCOME_TEXT =
+  "Hello! I'm ChatVector. Upload a document and I'll help you find answers from it.";
+const DOCUMENT_GONE_NOTICE =
+  "The document attached to this session is no longer available. You can upload another.";
+const DOCUMENT_UNAVAILABLE_NOTICE =
+  "The document attached to this session could not be checked. You can upload another.";
+const OPAQUE_RESTORE_NOTICE =
+  "Could not restore the session document. You can upload a new one.";
+const SESSION_HISTORY_FAILED_NOTICE =
+  "This chat could not be loaded. You can upload a document and continue from here.";
+const SESSION_DETAILS_FAILED_NOTICE =
+  "This session could not be fully restored. You can upload a document to continue.";
+
+function sessionPayload(sessionId: string, documentIds: string[] = []) {
+  return {
+    id: sessionId,
+    created_at: "2026-01-01T00:00:00Z",
+    last_active: "2026-01-01T00:00:00Z",
+    metadata: {},
+    document_ids: documentIds,
+  };
+}
 
 describe("useChat", () => {
   beforeEach(() => {
     mockSendMessageStream.mockReset();
     mockSendMessage.mockReset();
     mockGetSessionHistory.mockResolvedValue({ messages: [] });
-    mockGetSession.mockResolvedValue({
-      id: "session-a",
-      created_at: "2026-01-01T00:00:00Z",
-      last_active: "2026-01-01T00:00:00Z",
-      metadata: {},
-      document_ids: [],
-    });
+    mockGetSession.mockResolvedValue(sessionPayload("session-a"));
+    mockGetDocumentStatus.mockReset();
+    mockGetUploadedDocument.mockReset();
+    mockGetUploadedDocument.mockReturnValue(undefined);
   });
 
   it("ignores a second synchronous send while a stream is in flight", async () => {
@@ -430,5 +452,350 @@ describe("useChat", () => {
 
     rafSpy.mockRestore();
     cancelSpy.mockRestore();
+  });
+
+  it("restores a missing document as an empty attachment and keeps history", async () => {
+    mockGetSessionHistory.mockResolvedValue({
+      messages: [
+        { id: "m-1", role: "user", content: "Where is the appendix?" },
+        { id: "m-2", role: "assistant", content: "Page 4." },
+      ],
+    });
+    mockGetSession.mockResolvedValue(sessionPayload("session-a", ["doc-missing"]));
+    mockGetDocumentStatus.mockRejectedValue(new DocumentNotFoundError("missing"));
+
+    const { result } = renderHook(() =>
+      useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+    );
+
+    await waitFor(() => expect(result.current.historyLoading).toBe(false));
+
+    expect(result.current.attachment).toBeNull();
+    expect(result.current.sessionNotice).toBe(DOCUMENT_GONE_NOTICE);
+    expect(result.current.messages.map((message) => message.text)).toEqual([
+      "Where is the appendix?",
+      "Page 4.",
+    ]);
+    expect(result.current.messages.some((message) => message.text === WELCOME_TEXT)).toBe(
+      false,
+    );
+    expect(result.current.inflight).toBe(false);
+    expect(mockGetDocumentStatus).toHaveBeenCalledWith("/documents/doc-missing/status");
+  });
+
+  it.each([
+    ["non-404 status error", new Error("Status check failed: 500")],
+    ["network error", new TypeError("Failed to fetch")],
+  ])(
+    "restores an unfetchable document (%s) without the opaque restore sentence",
+    async (_label, error) => {
+      mockGetSessionHistory.mockResolvedValue({
+        messages: [{ id: "m-1", role: "user", content: "Earlier question" }],
+      });
+      mockGetSession.mockResolvedValue(sessionPayload("session-a", ["doc-down"]));
+      mockGetDocumentStatus.mockRejectedValue(error);
+
+      const { result } = renderHook(() =>
+        useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+      );
+
+      await waitFor(() => expect(result.current.historyLoading).toBe(false));
+
+      expect(result.current.attachment).toBeNull();
+      expect(result.current.sessionNotice).toBe(DOCUMENT_UNAVAILABLE_NOTICE);
+      expect(result.current.sessionNotice).not.toBe(OPAQUE_RESTORE_NOTICE);
+      expect(result.current.messages.map((message) => message.text)).toEqual([
+        "Earlier question",
+      ]);
+      expect(result.current.inflight).toBe(false);
+    },
+  );
+
+  it("keeps a failed document attached and does not explain it only after send", async () => {
+    mockGetSessionHistory.mockResolvedValue({
+      messages: [{ id: "m-1", role: "assistant", content: "Earlier answer" }],
+    });
+    mockGetSession.mockResolvedValue(sessionPayload("session-a", ["doc-failed"]));
+    mockGetDocumentStatus.mockResolvedValue({ status: "failed" });
+    mockGetUploadedDocument.mockReturnValue({
+      documentId: "doc-failed",
+      fileName: "broken.pdf",
+      uploadedAt: 1,
+    });
+
+    const { result } = renderHook(() =>
+      useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+    );
+
+    await waitFor(() => expect(result.current.attachment?.status).toBe("failed"));
+
+    expect(result.current.attachment).toMatchObject({
+      documentId: "doc-failed",
+      fileName: "broken.pdf",
+      status: "failed",
+    });
+    expect(result.current.sessionNotice).toBeNull();
+    expect(result.current.messages.map((message) => message.text)).toEqual([
+      "Earlier answer",
+    ]);
+    expect(
+      result.current.messages.some((message) =>
+        message.text.includes("Document processing failed"),
+      ),
+    ).toBe(false);
+    expect(mockSendMessageStream).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.setInput("Try anyway");
+    });
+    await act(async () => {
+      await result.current.handleSend();
+    });
+
+    expect(result.current.attachment?.status).toBe("failed");
+    expect(
+      result.current.messages.some(
+        (message) =>
+          message.text ===
+          "Document processing failed. Please remove it and upload again.",
+      ),
+    ).toBe(true);
+  });
+
+  it("restores a replaced document that status still reports as completed", async () => {
+    mockGetSession.mockResolvedValue(
+      sessionPayload("session-a", ["doc-previous", "doc-same"]),
+    );
+    mockGetDocumentStatus.mockResolvedValue({
+      status: "completed",
+      status_detail: "replacing",
+    });
+    mockGetUploadedDocument.mockImplementation((documentId: string) =>
+      documentId === "doc-same"
+        ? { documentId, fileName: "current.pdf", uploadedAt: 1 }
+        : undefined,
+    );
+
+    const { result } = renderHook(() =>
+      useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+    );
+
+    await waitFor(() => expect(result.current.attachment?.status).toBe("ready"));
+
+    expect(result.current.attachment).toMatchObject({
+      documentId: "doc-same",
+      fileName: "current.pdf",
+      status: "ready",
+    });
+    expect(result.current.sessionNotice).toBeNull();
+    expect(mockGetDocumentStatus).toHaveBeenCalledTimes(1);
+    expect(mockGetDocumentStatus).toHaveBeenCalledWith("/documents/doc-same/status");
+  });
+
+  it("shows a notice when session history cannot be loaded", async () => {
+    mockGetSessionHistory.mockRejectedValue(new Error("history failed"));
+    mockGetSession.mockResolvedValue(sessionPayload("session-a", ["doc-1"]));
+
+    const { result } = renderHook(() =>
+      useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+    );
+
+    await waitFor(() => expect(result.current.historyLoading).toBe(false));
+
+    expect(result.current.sessionNotice).toBe(SESSION_HISTORY_FAILED_NOTICE);
+    expect(result.current.messages.map((message) => message.text)).toEqual([WELCOME_TEXT]);
+    expect(result.current.attachment).toBeNull();
+    expect(result.current.inflight).toBe(false);
+    expect(mockGetDocumentStatus).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.setInput("Continue");
+    });
+    expect(result.current.sendDisabled).toBe(false);
+  });
+
+  it("keeps loaded history and shows a notice when the session cannot be loaded", async () => {
+    mockGetSessionHistory.mockResolvedValue({
+      messages: [{ id: "m-1", role: "user", content: "Saved question" }],
+    });
+    mockGetSession.mockRejectedValue(new Error("session failed"));
+
+    const { result } = renderHook(() =>
+      useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+    );
+
+    await waitFor(() => expect(result.current.historyLoading).toBe(false));
+
+    expect(result.current.sessionNotice).toBe(SESSION_DETAILS_FAILED_NOTICE);
+    expect(result.current.messages.map((message) => message.text)).toEqual([
+      "Saved question",
+    ]);
+    expect(result.current.messages.some((message) => message.text === WELCOME_TEXT)).toBe(
+      false,
+    );
+    expect(result.current.attachment).toBeNull();
+    expect(result.current.inflight).toBe(false);
+    expect(mockGetDocumentStatus).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.setInput("Continue");
+    });
+    expect(result.current.sendDisabled).toBe(false);
+  });
+
+  it("restores the stored session on load and the next session on switch", async () => {
+    mockGetSessionHistory.mockImplementation(async (sessionId: string) => ({
+      messages:
+        sessionId === "session-b"
+          ? [{ id: "b", role: "assistant", content: "History for B" }]
+          : [{ id: "a", role: "user", content: "History for A" }],
+    }));
+    mockGetSession.mockImplementation(async (sessionId: string) =>
+      sessionPayload(sessionId, sessionId === "session-b" ? ["doc-b"] : ["doc-a"]),
+    );
+    mockGetDocumentStatus.mockResolvedValue({ status: "completed" });
+    mockGetUploadedDocument.mockImplementation((documentId: string) => ({
+      documentId,
+      fileName: documentId === "doc-b" ? "notes.pdf" : "report.pdf",
+      uploadedAt: 1,
+    }));
+
+    const { result, rerender } = renderHook(
+      ({ sessionId }) => useChat(sessionId, DEFAULT_RETRIEVAL_SETTINGS),
+      { initialProps: { sessionId: "session-a" } },
+    );
+
+    await waitFor(() =>
+      expect(result.current.attachment).toMatchObject({
+        documentId: "doc-a",
+        fileName: "report.pdf",
+        status: "ready",
+      }),
+    );
+    expect(result.current.messages.map((message) => message.text)).toEqual([
+      "History for A",
+    ]);
+    expect(result.current.sessionNotice).toBeNull();
+
+    rerender({ sessionId: "session-b" });
+
+    await waitFor(() =>
+      expect(result.current.attachment).toMatchObject({
+        documentId: "doc-b",
+        fileName: "notes.pdf",
+        status: "ready",
+      }),
+    );
+    expect(result.current.messages.map((message) => message.text)).toEqual([
+      "History for B",
+    ]);
+    expect(result.current.sessionNotice).toBeNull();
+    expect(result.current.inflight).toBe(false);
+    expect(result.current.historyLoading).toBe(false);
+    expect(mockGetDocumentStatus).toHaveBeenCalledWith("/documents/doc-a/status");
+    expect(mockGetDocumentStatus).toHaveBeenCalledWith("/documents/doc-b/status");
+  });
+
+  it("keeps stop and an in-flight session switch from showing a restore error", async () => {
+    mockSendMessageStream.mockImplementation(async function* (
+      _text: string,
+      _documentId: string,
+      options: { signal?: AbortSignal },
+    ) {
+      const signal = options?.signal;
+      await new Promise<void>((_resolve, reject) => {
+        const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
+        if (signal?.aborted) {
+          onAbort();
+          return;
+        }
+        signal?.addEventListener("abort", onAbort, { once: true });
+      });
+      yield { type: "token" as const, text: "partial" };
+    });
+
+    mockGetSessionHistory.mockImplementation(async (sessionId: string) => ({
+      messages:
+        sessionId === "session-b"
+          ? [{ id: "b", role: "assistant", content: "History for B" }]
+          : [],
+    }));
+    mockGetSession.mockImplementation(async (sessionId: string) =>
+      sessionPayload(sessionId, sessionId === "session-b" ? ["doc-b"] : ["doc-a"]),
+    );
+    mockGetDocumentStatus.mockResolvedValue({ status: "completed" });
+    mockGetUploadedDocument.mockImplementation((documentId: string) => ({
+      documentId,
+      fileName: documentId === "doc-b" ? "notes.pdf" : "report.pdf",
+      uploadedAt: 1,
+    }));
+
+    const { result, rerender } = renderHook(
+      ({ sessionId }) => useChat(sessionId, DEFAULT_RETRIEVAL_SETTINGS),
+      { initialProps: { sessionId: "session-a" } },
+    );
+
+    await waitFor(() =>
+      expect(result.current.attachment).toMatchObject({
+        documentId: "doc-a",
+        status: "ready",
+      }),
+    );
+
+    act(() => {
+      result.current.setInput("Question");
+    });
+    await act(async () => {
+      void result.current.handleSend();
+    });
+    await waitFor(() => expect(result.current.streaming).toBe(true));
+
+    await act(async () => {
+      result.current.stopStreaming();
+    });
+
+    await waitFor(() => expect(result.current.inflight).toBe(false));
+    expect(result.current.streaming).toBe(false);
+    expect(result.current.sessionNotice).toBeNull();
+    expect(
+      result.current.messages.some((message) =>
+        message.text.includes("Could not restore"),
+      ),
+    ).toBe(false);
+
+    act(() => {
+      result.current.setInput("Still here");
+    });
+    expect(result.current.sendDisabled).toBe(false);
+
+    await act(async () => {
+      void result.current.handleSend();
+    });
+    await waitFor(() => expect(result.current.streaming).toBe(true));
+
+    rerender({ sessionId: "session-b" });
+
+    await waitFor(() =>
+      expect(result.current.attachment).toMatchObject({
+        documentId: "doc-b",
+        fileName: "notes.pdf",
+        status: "ready",
+      }),
+    );
+    expect(result.current.messages.map((message) => message.text)).toEqual([
+      "History for B",
+    ]);
+    expect(result.current.sessionNotice).toBeNull();
+    expect(result.current.inflight).toBe(false);
+    expect(result.current.streaming).toBe(false);
+    expect(result.current.historyLoading).toBe(false);
+    expect(
+      result.current.messages.some((message) => message.text.includes("partial")),
+    ).toBe(false);
+
+    act(() => {
+      result.current.setInput("Ask B");
+    });
+    expect(result.current.sendDisabled).toBe(false);
   });
 });

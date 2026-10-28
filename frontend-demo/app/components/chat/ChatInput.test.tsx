@@ -87,6 +87,26 @@ describe("ChatInput", () => {
     ).toBeInTheDocument();
   });
 
+  it("explains a failed attachment before the user sends", () => {
+    renderChatInput({
+      input: "",
+      sendDisabled: true,
+      attachment: {
+        fileName: "guide.pdf",
+        documentId: "doc-1",
+        statusEndpoint: "/documents/doc-1/status",
+        status: "failed",
+      },
+    });
+
+    expect(
+      screen.getByText("Document processing failed. Please remove it and upload again.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove attachment" })).toBeEnabled();
+    expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
+  });
+
   it("shows the selected document name for session scope when a document is attached", () => {
     renderChatInput({
       scope: "session",
