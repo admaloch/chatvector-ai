@@ -523,6 +523,22 @@ def _build_sources(chunks: list) -> list[dict]:
     return sources
 
 
+def _build_source_snapshot(chunks: list) -> list[dict]:
+    """Copy display and provenance fields stored on the assistant message.
+
+    Live ``_build_sources`` omits ``document_id``. The stored copy includes it
+    so a later reader can render the citation without looking the document up.
+    """
+    snapshot: list[dict] = []
+    for chunk, source in zip(chunks, _build_sources(chunks)):
+        item = dict(source)
+        document_id = getattr(chunk, "document_id", None)
+        if document_id is not None:
+            item["document_id"] = str(document_id)
+        snapshot.append(item)
+    return snapshot
+
+
 def _is_compare_style_batch_query(doc_ids: list[str]) -> bool:
     """Single-document batch items are compare-style and isolate from session history."""
     return len(doc_ids) == 1
@@ -804,6 +820,7 @@ async def answer_question_for_document(
                 question=question,
                 answer=answer,
                 tenant_id=tenant_id,
+                sources=_build_source_snapshot(matching_chunks),
             )
         except Exception as e:
             logger.error(f"Failed to store chat turn for session {session_id}: {e}", exc_info=True)
@@ -947,6 +964,7 @@ async def answer_question_stream_for_document(
                     question=question,
                     answer=full_answer,
                     tenant_id=tenant_id,
+                    sources=_build_source_snapshot(matching_chunks),
                 )
                 if isinstance(raw_assistant_id, str) and raw_assistant_id:
                     assistant_message_id = raw_assistant_id
@@ -1252,6 +1270,7 @@ async def answer_questions_for_documents_batch(
                         question=query["question"],
                         answer=answer,
                         tenant_id=tenant_id,
+                        sources=_build_source_snapshot(matching_chunks),
                     )
                 except Exception as e:
                     logger.error(
