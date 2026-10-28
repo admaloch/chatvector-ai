@@ -121,6 +121,27 @@ def test_build_source_snapshot_empty_chunks_is_empty_list():
     assert _build_source_snapshot([]) == []
 
 
+def test_build_source_snapshot_reuses_live_sources_without_rebuilding():
+    chunk = ChunkMatch(
+        id="c1",
+        chunk_text="cited text",
+        document_id="doc-1",
+        file_name="notes.pdf",
+        page_number=1,
+        chunk_index=0,
+        similarity=0.5,
+        score_type="vector",
+    )
+    live = _build_sources([chunk])
+    live[0]["page_end"] = 3
+
+    snapshot = _build_source_snapshot([chunk], live)
+
+    assert snapshot[0]["page_end"] == 3
+    assert snapshot[0]["document_id"] == "doc-1"
+    assert "document_id" not in live[0]
+
+
 @pytest.mark.asyncio
 async def test_store_chat_turn_writes_assistant_snapshot_and_null_user(svc):
     session_id = f"src-{uuid.uuid4()}"

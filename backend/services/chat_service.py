@@ -523,14 +523,19 @@ def _build_sources(chunks: list) -> list[dict]:
     return sources
 
 
-def _build_source_snapshot(chunks: list) -> list[dict]:
+def _build_source_snapshot(
+    chunks: list, sources: list[dict] | None = None
+) -> list[dict]:
     """Copy display and provenance fields stored on the assistant message.
 
     Live ``_build_sources`` omits ``document_id``. The stored copy includes it
     so a later reader can render the citation without looking the document up.
+    Pass the already-built live ``sources`` so display fields cannot drift and
+    ``_build_sources`` is not run twice.
     """
+    live_sources = sources if sources is not None else _build_sources(chunks)
     snapshot: list[dict] = []
-    for chunk, source in zip(chunks, _build_sources(chunks)):
+    for chunk, source in zip(chunks, live_sources):
         item = dict(source)
         document_id = getattr(chunk, "document_id", None)
         if document_id is not None:
@@ -788,12 +793,13 @@ async def answer_question_for_document(
     context = retrieval.context
     retrieval_debug = retrieval.to_debug_dict() if debug_retrieval else None
     answer, latency_ms, model_name = await generate_answer(question, context)
+    sources = _build_sources(matching_chunks)
     base: dict = {
         "question": question,
         "doc_id": doc_id,
         "chunks": len(matching_chunks),
         "answer": answer,
-        "sources": _build_sources(matching_chunks),
+        "sources": sources,
         "latency_ms": latency_ms,
         "model": model_name,
         "session_id": session_id,
@@ -820,7 +826,7 @@ async def answer_question_for_document(
                 question=question,
                 answer=answer,
                 tenant_id=tenant_id,
-                sources=_build_source_snapshot(matching_chunks),
+                sources=_build_source_snapshot(matching_chunks, sources),
             )
         except Exception as e:
             logger.error(f"Failed to store chat turn for session {session_id}: {e}", exc_info=True)
@@ -964,7 +970,7 @@ async def answer_question_stream_for_document(
                     question=question,
                     answer=full_answer,
                     tenant_id=tenant_id,
-                    sources=_build_source_snapshot(matching_chunks),
+                    sources=_build_source_snapshot(matching_chunks, sources),
                 )
                 if isinstance(raw_assistant_id, str) and raw_assistant_id:
                     assistant_message_id = raw_assistant_id
@@ -1270,7 +1276,7 @@ async def answer_questions_for_documents_batch(
                         question=query["question"],
                         answer=answer,
                         tenant_id=tenant_id,
-                        sources=_build_source_snapshot(matching_chunks),
+                        sources=_build_source_snapshot(matching_chunks, sources),
                     )
                 except Exception as e:
                     logger.error(
