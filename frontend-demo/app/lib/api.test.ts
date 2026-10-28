@@ -1042,7 +1042,9 @@ describe("session API", () => {
   });
 
   it("defaults a missing display_label to New session", async () => {
-    const { display_label: _label, ...withoutLabel } = SESSION_PAYLOAD;
+    const withoutLabel = Object.fromEntries(
+      Object.entries(SESSION_PAYLOAD).filter(([key]) => key !== "display_label")
+    );
     vi.mocked(globalThis.fetch).mockResolvedValue(
       new Response(JSON.stringify(withoutLabel), { status: 200 })
     );
