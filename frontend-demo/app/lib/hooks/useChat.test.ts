@@ -642,4 +642,57 @@ describe("useChat", () => {
     });
     expect(result.current.sendDisabled).toBe(false);
   });
+
+  it("restores the stored session on load and the next session on switch", async () => {
+    mockGetSessionHistory.mockImplementation(async (sessionId: string) => ({
+      messages:
+        sessionId === "session-b"
+          ? [{ id: "b", role: "assistant", content: "History for B" }]
+          : [{ id: "a", role: "user", content: "History for A" }],
+    }));
+    mockGetSession.mockImplementation(async (sessionId: string) =>
+      sessionPayload(sessionId, sessionId === "session-b" ? ["doc-b"] : ["doc-a"]),
+    );
+    mockGetDocumentStatus.mockResolvedValue({ status: "completed" });
+    mockGetUploadedDocument.mockImplementation((documentId: string) => ({
+      documentId,
+      fileName: documentId === "doc-b" ? "notes.pdf" : "report.pdf",
+      uploadedAt: 1,
+    }));
+
+    const { result, rerender } = renderHook(
+      ({ sessionId }) => useChat(sessionId, DEFAULT_RETRIEVAL_SETTINGS),
+      { initialProps: { sessionId: "session-a" } },
+    );
+
+    await waitFor(() =>
+      expect(result.current.attachment).toMatchObject({
+        documentId: "doc-a",
+        fileName: "report.pdf",
+        status: "ready",
+      }),
+    );
+    expect(result.current.messages.map((message) => message.text)).toEqual([
+      "History for A",
+    ]);
+    expect(result.current.sessionNotice).toBeNull();
+
+    rerender({ sessionId: "session-b" });
+
+    await waitFor(() =>
+      expect(result.current.attachment).toMatchObject({
+        documentId: "doc-b",
+        fileName: "notes.pdf",
+        status: "ready",
+      }),
+    );
+    expect(result.current.messages.map((message) => message.text)).toEqual([
+      "History for B",
+    ]);
+    expect(result.current.sessionNotice).toBeNull();
+    expect(result.current.inflight).toBe(false);
+    expect(result.current.historyLoading).toBe(false);
+    expect(mockGetDocumentStatus).toHaveBeenCalledWith("/documents/doc-a/status");
+    expect(mockGetDocumentStatus).toHaveBeenCalledWith("/documents/doc-b/status");
+  });
 });
