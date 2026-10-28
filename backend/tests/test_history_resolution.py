@@ -69,6 +69,10 @@ def test_gate_runs_for_pronouns_and_elliptical_followups():
     assert question_needs_history_resolution(_WHAT_ABOUT, _HISTORY) == (True, None)
     assert question_needs_history_resolution("How much was that?", _HISTORY) == (True, None)
     assert question_needs_history_resolution("And the termination clause?", _HISTORY) == (True, None)
+    assert question_needs_history_resolution(
+        "What does she require of the customer?",
+        _HISTORY,
+    ) == (True, None)
 
 
 def test_gate_runs_for_demonstrative_followups():
@@ -100,6 +104,68 @@ def test_gate_skips_standalone_topic_switch_and_empty_history():
     # A topic cue does not override an unresolved pronoun.
     mixed = "New topic: what does it say about fees?"
     assert question_needs_history_resolution(mixed, _HISTORY)[0] is True
+
+
+def test_gate_runs_for_referential_followups():
+    referential = (
+        "What does the second one require?",
+        "Which one has the lower cancellation penalty?",
+        "What does the latter agreement require of the customer?",
+        "What does the former agreement require of the customer?",
+        "What does the other one require from the customer?",
+        "Going back to the renewal clause, what is the notice period?",
+        "No, I meant the enterprise agreement.",
+        "Why?",
+    )
+    for question in referential:
+        assert question_needs_history_resolution(question, _HISTORY) == (True, None)
+
+
+def test_gate_does_not_treat_secondary_substring_as_a_reference():
+    assert question_needs_history_resolution(
+        "What is the secondary liability cap in the master services agreement?",
+        _HISTORY,
+    ) == (False, "standalone_question")
+    assert question_needs_history_resolution(_STANDALONE, _HISTORY) == (
+        False,
+        "standalone_question",
+    )
+
+
+def test_gate_empty_history_skips_referential_question():
+    assert question_needs_history_resolution(
+        "Which one has the lower cancellation penalty?",
+        [],
+    ) == (False, "empty_history")
+    assert question_needs_history_resolution("No, I meant the enterprise agreement.", []) == (
+        False,
+        "empty_history",
+    )
+
+
+def test_gate_topic_switch_does_not_override_which_one():
+    assert question_needs_history_resolution(
+        "New topic: which one is cheaper?",
+        _HISTORY,
+    ) == (True, None)
+
+
+def test_gate_skips_short_questions_that_name_a_subject():
+    assert question_needs_history_resolution(
+        "Explain the indemnification clause.",
+        _HISTORY,
+    ) == (False, "standalone_question")
+    assert question_needs_history_resolution(
+        "Who approves expenses?",
+        _HISTORY,
+    ) == (False, "standalone_question")
+
+
+def test_gate_keeps_length_thresholds_for_fragments_without_a_subject():
+    """Bare fragments still resolve. The 6-word and 4-word cutoffs stay."""
+    assert question_needs_history_resolution("Why not now?", _HISTORY) == (True, None)
+    assert question_needs_history_resolution("How much?", _HISTORY) == (True, None)
+    assert question_needs_history_resolution("Can you tell me", _HISTORY) == (True, None)
 
 
 @pytest.mark.asyncio
