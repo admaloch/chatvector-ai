@@ -119,6 +119,11 @@ function mapSessionHistoryMessage(
   if (payload.created_at === null || typeof payload.created_at === "string") {
     result.createdAt = payload.created_at;
   }
+  if (payload.sources === null) {
+    result.sources = null;
+  } else if (Array.isArray(payload.sources)) {
+    result.sources = payload.sources.filter(isRecord);
+  }
   return result;
 }
 

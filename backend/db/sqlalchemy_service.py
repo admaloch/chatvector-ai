@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import asyncio
@@ -1120,8 +1121,11 @@ class SQLAlchemyService(DatabaseService):
         question: str,
         answer: str,
         tenant_id: str,
+        *,
+        sources: Optional[list] = None,
     ) -> tuple[str, str]:
         tenant_id = require_tenant_id(tenant_id, method="store_chat_turn")
+        assistant_sources = copy.deepcopy(sources) if sources is not None else None
         async with self.async_session() as session:
             from core.models import ChatMessage
 
@@ -1144,6 +1148,7 @@ class SQLAlchemyService(DatabaseService):
                         tenant_id=tenant_id,
                         role="assistant",
                         content=answer,
+                        sources=assistant_sources,
                     )
                 )
             logger.debug(
@@ -1186,6 +1191,7 @@ class SQLAlchemyService(DatabaseService):
                     "role": msg.role,
                     "content": msg.content,
                     "created_at": str(msg.created_at) if msg.created_at else None,
+                    "sources": msg.sources,
                 }
                 for msg in reversed(messages)
             ]

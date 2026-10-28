@@ -44,6 +44,7 @@ class SessionHistoryMessageResponse(BaseModel):
     role: str
     content: str
     created_at: Optional[str] = None
+    sources: Optional[list] = None
 
 
 class SessionHistoryResponse(BaseModel):
@@ -152,6 +153,7 @@ async def get_session_history(session_id: str, auth: AuthContext = Depends(requi
                 role=message["role"],
                 content=message["content"],
                 created_at=message.get("created_at"),
+                sources=message.get("sources"),
             )
             for message in messages
         ]

@@ -472,6 +472,7 @@ class SessionHistoryMessage:
     role: str
     content: str
     created_at: str | None = None
+    sources: list[JSONDict] | None = None
     raw: JSONDict = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -483,6 +484,7 @@ class SessionHistoryMessage:
             role=str(payload.get("role", "")),
             content=str(payload.get("content", "")),
             created_at=_optional_str(payload.get("created_at")),
+            sources=_parse_history_sources(payload.get("sources")),
             raw=raw,
         )
 
@@ -492,6 +494,7 @@ class SessionHistoryMessage:
             "id": self.id,
             "role": self.role,
             "content": self.content,
+            "sources": self.sources,
         }
         if self.created_at is not None:
             payload["created_at"] = self.created_at
@@ -946,6 +949,19 @@ def _parse_sources(value: Any) -> list[ChatSource]:
     if not isinstance(value, list):
         return []
     return [ChatSource.from_dict(item) for item in value if isinstance(item, Mapping)]
+
+
+def _parse_history_sources(value: Any) -> list[JSONDict] | None:
+    """Parse a stored history snapshot, keeping ``None`` distinct from ``[]``.
+
+    Extra location keys such as ``page_end`` are copied through rather than
+    stripped so a later reader can render the citation from this JSON alone.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        return None
+    return [dict(item) for item in value if isinstance(item, Mapping)]
 
 
 def _parse_retrieval_debug(value: Any) -> RetrievalDebugMetadata | None:

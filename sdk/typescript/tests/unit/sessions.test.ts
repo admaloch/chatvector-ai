@@ -135,6 +135,59 @@ describe("session methods", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("maps history sources and accepts a payload that omits them", async () => {
+    const fetch = createFetchMock(
+      jsonResponse({
+        messages: [
+          {
+            id: "msg-omitted",
+            role: "user",
+            content: "Hello",
+          },
+          {
+            id: "msg-null",
+            role: "assistant",
+            content: "Old row",
+            sources: null,
+          },
+          {
+            id: "msg-empty",
+            role: "assistant",
+            content: "No citations",
+            sources: [],
+          },
+          {
+            id: "msg-asst",
+            role: "assistant",
+            content: "Cited",
+            sources: [
+              {
+                document_id: "doc-1",
+                file_name: "old.pdf",
+                page_number: 2,
+                chunk_index: 1,
+                page_end: 4,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const history = await makeClient(fetch).getSessionHistory(SESSION_ID);
+    expect(history.messages[0]?.sources).toBeUndefined();
+    expect(history.messages[1]?.sources).toBeNull();
+    expect(history.messages[2]?.sources).toEqual([]);
+    expect(history.messages[3]?.sources).toEqual([
+      {
+        document_id: "doc-1",
+        file_name: "old.pdf",
+        page_number: 2,
+        chunk_index: 1,
+        page_end: 4,
+      },
+    ]);
+  });
+
   it("does not retry session creation or deletion", async () => {
     const createFetch = createFetchMock(
       jsonResponse({ detail: "busy" }, { status: 503 }),
