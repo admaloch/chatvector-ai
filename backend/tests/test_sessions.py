@@ -81,7 +81,11 @@ async def test_list_sessions():
         "routes.sessions.session_service.list_sessions",
         new=AsyncMock(
             return_value=[
-                Session(id="test-id-1", tenant_id="tenant-1"),
+                Session(
+                    id="test-id-1",
+                    tenant_id="tenant-1",
+                    display_label="Who approves expenses?",
+                ),
                 Session(id="test-id-2", tenant_id="tenant-1"),
             ]
         ),
@@ -91,6 +95,8 @@ async def test_list_sessions():
         assert isinstance(result, SessionListResponse)
         assert len(result.sessions) == 2
         assert result.sessions[0].id == "test-id-1"
+        assert result.sessions[0].display_label == "Who approves expenses?"
+        assert result.sessions[1].display_label == "New session"
         mock_list.assert_awaited_once_with(tenant_id="tenant-1")
 
 

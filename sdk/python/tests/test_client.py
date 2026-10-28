@@ -581,6 +581,7 @@ class ChatVectorClientTests(unittest.TestCase):
                 "last_active": "2026-01-02T00:00:00",
                 "metadata": {"source": "sdk"},
                 "document_ids": ["doc-123"],
+                "display_label": "Who approves expenses?",
             },
         )
 
@@ -590,6 +591,8 @@ class ChatVectorClientTests(unittest.TestCase):
         self.assertEqual(session.id, "sess-1")
         self.assertEqual(session.metadata, {"source": "sdk"})
         self.assertEqual(session.document_ids, ["doc-123"])
+        self.assertEqual(session.display_label, "Who approves expenses?")
+        self.assertEqual(session.to_dict()["display_label"], "Who approves expenses?")
 
     def test_list_sessions_returns_typed_list_response(self) -> None:
         """Listing sessions should deserialize into a typed list response."""
@@ -624,6 +627,8 @@ class ChatVectorClientTests(unittest.TestCase):
         self.assertIsInstance(result, SessionListResponse)
         self.assertEqual(len(result.sessions), 2)
         self.assertEqual(result.sessions[1].document_ids, ["doc-456"])
+        self.assertEqual(result.sessions[0].display_label, "New session")
+        self.assertEqual(result.sessions[1].display_label, "New session")
 
     def test_delete_session_sends_delete_request(self) -> None:
         """Deleting a session should issue a DELETE request and accept 204 responses."""

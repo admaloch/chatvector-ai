@@ -88,19 +88,26 @@ export default function SessionSidebar({
                   onClick={() => onSwitchSession(session.id)}
                   aria-current={isActive ? "true" : undefined}
                   disabled={isDeleting}
-                  className={`min-w-0 flex-1 text-left px-3 py-2 text-sm transition-colors truncate ${
+                  title={session.displayLabel}
+                  className={`min-w-0 flex-1 text-left px-3 py-2 text-sm transition-colors ${
                     isActive
                       ? "text-accent-text font-medium"
                       : "text-muted hover:text-foreground"
                   } disabled:opacity-60`}
                 >
-                  Session {session.id.substring(0, 8)}
+                  <span className="block truncate">{session.displayLabel}</span>
+                  <span
+                    className="block truncate text-xs font-normal opacity-70"
+                    aria-hidden="true"
+                  >
+                    {session.id.substring(0, 8)}
+                  </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => void onDeleteSession(session.id)}
                   disabled={isDeleting || deletingSessionId !== null}
-                  aria-label={`Delete session ${session.id.substring(0, 8)}`}
+                  aria-label={`Delete ${session.displayLabel}`}
                   className="mr-1 rounded-md p-1.5 text-muted opacity-100 md:opacity-0 transition hover:bg-background hover:text-red-400 group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Trash2 size={14} aria-hidden />

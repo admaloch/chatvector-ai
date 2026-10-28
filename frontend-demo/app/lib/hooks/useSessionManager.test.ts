@@ -90,4 +90,56 @@ describe("useSessionManager", () => {
       ...previousIds,
     ]);
   });
+
+  it("shows New session until the first useful question, then keeps that label", async () => {
+    mockListSessions.mockResolvedValue({
+      sessions: [
+        {
+          id: "session-1",
+          created_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+    });
+
+    const { result, unmount } = renderHook(() => useSessionManager());
+    await waitFor(() => expect(result.current.isLoaded).toBe(true));
+    expect(result.current.sessions[0]?.displayLabel).toBe("New session");
+
+    act(() => {
+      result.current.noteDocumentAttached("session-1", "  notes.txt  ");
+    });
+    expect(result.current.sessions[0]?.displayLabel).toBe("notes.txt");
+
+    act(() => {
+      result.current.noteUserQuestion("session-1", "   \n\t  ");
+    });
+    expect(result.current.sessions[0]?.displayLabel).toBe("notes.txt");
+
+    act(() => {
+      result.current.noteUserQuestion("session-1", "Who\napproves   expenses?");
+    });
+    expect(result.current.sessions[0]?.displayLabel).toBe("Who approves expenses?");
+
+    act(() => {
+      result.current.noteUserQuestion("session-1", "What about travel?");
+      result.current.noteDocumentAttached("session-1", "other.txt");
+    });
+    expect(result.current.sessions[0]?.displayLabel).toBe("Who approves expenses?");
+
+    unmount();
+    mockListSessions.mockResolvedValue({
+      sessions: [
+        {
+          id: "session-1",
+          created_at: "2026-01-01T00:00:00Z",
+          display_label: "Who approves expenses?",
+        },
+      ],
+    });
+    const reloaded = renderHook(() => useSessionManager());
+    await waitFor(() => expect(reloaded.result.current.isLoaded).toBe(true));
+    expect(reloaded.result.current.sessions[0]?.displayLabel).toBe(
+      "Who approves expenses?"
+    );
+  });
 });

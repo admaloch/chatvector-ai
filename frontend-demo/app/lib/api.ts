@@ -699,11 +699,16 @@ export type SessionResponse = {
   last_active: string;
   metadata: Record<string, unknown>;
   document_ids: string[];
+  display_label: string;
 };
 
 export type SessionListResponse = {
   sessions: SessionResponse[];
 };
+
+function parseDisplayLabel(value: unknown): string {
+  return typeof value === "string" && value.length > 0 ? value : "New session";
+}
 
 function parseSessionResponse(data: unknown): SessionResponse {
   if (!data || typeof data !== "object") {
@@ -728,6 +733,7 @@ function parseSessionResponse(data: unknown): SessionResponse {
     document_ids: Array.isArray(record.document_ids)
       ? record.document_ids.filter((item): item is string => typeof item === "string")
       : [],
+    display_label: parseDisplayLabel(record.display_label),
   };
 }
 

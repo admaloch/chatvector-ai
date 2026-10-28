@@ -40,6 +40,7 @@ describe("session methods", () => {
       lastActive: "2026-07-14T10:01:00+00:00",
       metadata: { source: "sdk" },
       documentIds: [sessionPayload.document_ids[0]],
+      displayLabel: "Who approves expenses?",
       _raw: sessionPayload,
     });
   });
@@ -83,6 +84,7 @@ describe("session methods", () => {
       tenantId: null,
       metadata: {},
       documentIds: [],
+      displayLabel: "New session",
       _raw: secondSessionPayload,
     });
     expect(result._raw).toEqual(payload);
@@ -107,6 +109,7 @@ describe("session methods", () => {
       lastActive: "",
       metadata: {},
       documentIds: ["doc-1"],
+      displayLabel: "New session",
     });
   });
 

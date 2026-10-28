@@ -85,7 +85,7 @@ describe("ChatPage scope indicator", () => {
     vi.clearAllMocks();
     mockInitialScope = "session";
     mockActiveSessionId = "session-1";
-    mockSessions = [{ id: "session-1", createdAt: 1 }];
+    mockSessions = [{ id: "session-1", createdAt: 1, displayLabel: "New session" }];
     mockAttachment = {
       fileName: "notes.txt",
       documentId: "doc-1",
@@ -139,8 +139,16 @@ describe("ChatPage session navigation", () => {
     mockAttachment = null;
     mockActiveSessionId = "11111111-aaaa-bbbb-cccc-000000000001";
     mockSessions = [
-      { id: "11111111-aaaa-bbbb-cccc-000000000001", createdAt: 2 },
-      { id: "22222222-aaaa-bbbb-cccc-000000000002", createdAt: 1 },
+      {
+        id: "11111111-aaaa-bbbb-cccc-000000000001",
+        createdAt: 2,
+        displayLabel: "Who approves expenses?",
+      },
+      {
+        id: "22222222-aaaa-bbbb-cccc-000000000002",
+        createdAt: 1,
+        displayLabel: "notes.txt",
+      },
     ];
   });
 
@@ -169,13 +177,13 @@ describe("ChatPage session navigation", () => {
     await user.click(screen.getByRole("button", { name: /New Session/i }));
     expect(mockCreateNewSession).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole("button", { name: "Session 22222222" }));
+    await user.click(screen.getByRole("button", { name: "notes.txt" }));
     expect(mockSwitchSession).toHaveBeenCalledWith(
       "22222222-aaaa-bbbb-cccc-000000000002"
     );
 
     await user.click(
-      screen.getByRole("button", { name: "Delete session 22222222" })
+      screen.getByRole("button", { name: "Delete notes.txt" })
     );
     expect(mockDeleteSession).toHaveBeenCalledWith(
       "22222222-aaaa-bbbb-cccc-000000000002"
@@ -199,13 +207,13 @@ describe("ChatPage session navigation", () => {
     await user.click(screen.getByRole("button", { name: /New Session/i }));
     expect(mockCreateNewSession).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole("button", { name: "Session 22222222" }));
+    await user.click(screen.getByRole("button", { name: "notes.txt" }));
     expect(mockSwitchSession).toHaveBeenCalledWith(
       "22222222-aaaa-bbbb-cccc-000000000002"
     );
 
     await user.click(
-      screen.getByRole("button", { name: "Delete session 11111111" })
+      screen.getByRole("button", { name: "Delete Who approves expenses?" })
     );
     expect(mockDeleteSession).toHaveBeenCalledWith(
       "11111111-aaaa-bbbb-cccc-000000000001"

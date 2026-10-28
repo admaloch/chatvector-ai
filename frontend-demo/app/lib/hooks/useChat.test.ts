@@ -910,4 +910,54 @@ describe("useChat", () => {
     });
     expect(result.current.sendDisabled).toBe(false);
   });
+
+  it("reports the first useful question and attached file name, and ignores a later question", async () => {
+    mockSendMessageStream.mockImplementation(async function* () {
+      yield { type: "token", text: "Answer" };
+      yield { type: "complete", sources: [], latency_ms: 1, model: "m", _raw: {} };
+    });
+    const onUserQuestion = vi.fn();
+    const onDocumentAttached = vi.fn();
+    const onHistoryLoaded = vi.fn();
+
+    const { result } = renderHook(() =>
+      useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS, {
+        onUserQuestion,
+        onDocumentAttached,
+        onHistoryLoaded,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.historyLoading).toBe(false));
+    expect(onHistoryLoaded).toHaveBeenCalledWith("session-a", false);
+
+    act(() => {
+      result.current.handleUploadAccepted({
+        fileName: "  notes.txt  ",
+        documentId: "doc-1",
+        statusEndpoint: "/documents/doc-1/status",
+      });
+    });
+    expect(onDocumentAttached).toHaveBeenCalledWith("session-a", "notes.txt");
+
+    await waitFor(() => expect(result.current.attachment?.status).toBe("ready"));
+
+    act(() => {
+      result.current.setInput("Who\napproves   expenses?");
+    });
+    await act(async () => {
+      await result.current.handleSend();
+    });
+    expect(onUserQuestion).toHaveBeenCalledTimes(1);
+    expect(onUserQuestion).toHaveBeenCalledWith("session-a", "Who\napproves   expenses?");
+
+    act(() => {
+      result.current.setInput("What about travel?");
+    });
+    await act(async () => {
+      await result.current.handleSend();
+    });
+    expect(onUserQuestion).toHaveBeenCalledTimes(1);
+    expect(onDocumentAttached).toHaveBeenCalledTimes(1);
+  });
 });

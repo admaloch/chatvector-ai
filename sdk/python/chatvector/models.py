@@ -532,6 +532,7 @@ class Session:
     last_active: str
     metadata: JSONDict
     document_ids: list[str]
+    display_label: str = "New session"
     raw: JSONDict = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -539,6 +540,7 @@ class Session:
         """Build a session model from an API response payload."""
         raw = dict(payload)
         metadata = payload.get("metadata")
+        label = payload.get("display_label")
         return cls(
             id=str(payload.get("id", "")),
             tenant_id=_optional_str(payload.get("tenant_id")),
@@ -546,6 +548,7 @@ class Session:
             last_active=str(payload.get("last_active", "")),
             metadata=dict(metadata) if isinstance(metadata, Mapping) else {},
             document_ids=_string_list(payload.get("document_ids")),
+            display_label=label if isinstance(label, str) and label else "New session",
             raw=raw,
         )
 
@@ -558,6 +561,7 @@ class Session:
             "last_active": self.last_active,
             "metadata": dict(self.metadata),
             "document_ids": list(self.document_ids),
+            "display_label": self.display_label,
         }
 
 
