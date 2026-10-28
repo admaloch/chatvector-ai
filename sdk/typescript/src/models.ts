@@ -225,6 +225,11 @@ export type ChatStreamEvent =
       latencyMs: number;
       model: string;
       retrievalDebug?: RetrievalDebugMetadata;
+      /**
+       * Persisted assistant message id. Omitted when the server did not store
+       * the turn. Absence is not an error.
+       */
+      messageId?: string;
       _raw?: Record<string, unknown>;
     };
 
