@@ -557,4 +557,34 @@ describe("useChat", () => {
       ),
     ).toBe(true);
   });
+
+  it("restores a replaced document that status still reports as completed", async () => {
+    mockGetSession.mockResolvedValue(
+      sessionPayload("session-a", ["doc-previous", "doc-same"]),
+    );
+    mockGetDocumentStatus.mockResolvedValue({
+      status: "completed",
+      status_detail: "replacing",
+    });
+    mockGetUploadedDocument.mockImplementation((documentId: string) =>
+      documentId === "doc-same"
+        ? { documentId, fileName: "current.pdf", uploadedAt: 1 }
+        : undefined,
+    );
+
+    const { result } = renderHook(() =>
+      useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+    );
+
+    await waitFor(() => expect(result.current.attachment?.status).toBe("ready"));
+
+    expect(result.current.attachment).toMatchObject({
+      documentId: "doc-same",
+      fileName: "current.pdf",
+      status: "ready",
+    });
+    expect(result.current.sessionNotice).toBeNull();
+    expect(mockGetDocumentStatus).toHaveBeenCalledTimes(1);
+    expect(mockGetDocumentStatus).toHaveBeenCalledWith("/documents/doc-same/status");
+  });
 });
