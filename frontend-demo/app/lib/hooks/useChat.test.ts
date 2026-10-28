@@ -695,4 +695,107 @@ describe("useChat", () => {
     expect(mockGetDocumentStatus).toHaveBeenCalledWith("/documents/doc-a/status");
     expect(mockGetDocumentStatus).toHaveBeenCalledWith("/documents/doc-b/status");
   });
+
+  it("keeps stop and an in-flight session switch from showing a restore error", async () => {
+    mockSendMessageStream.mockImplementation(async function* (
+      _text: string,
+      _documentId: string,
+      options: { signal?: AbortSignal },
+    ) {
+      const signal = options?.signal;
+      await new Promise<void>((_resolve, reject) => {
+        const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
+        if (signal?.aborted) {
+          onAbort();
+          return;
+        }
+        signal?.addEventListener("abort", onAbort, { once: true });
+      });
+      yield { type: "token" as const, text: "partial" };
+    });
+
+    mockGetSessionHistory.mockImplementation(async (sessionId: string) => ({
+      messages:
+        sessionId === "session-b"
+          ? [{ id: "b", role: "assistant", content: "History for B" }]
+          : [],
+    }));
+    mockGetSession.mockImplementation(async (sessionId: string) =>
+      sessionPayload(sessionId, sessionId === "session-b" ? ["doc-b"] : ["doc-a"]),
+    );
+    mockGetDocumentStatus.mockResolvedValue({ status: "completed" });
+    mockGetUploadedDocument.mockImplementation((documentId: string) => ({
+      documentId,
+      fileName: documentId === "doc-b" ? "notes.pdf" : "report.pdf",
+      uploadedAt: 1,
+    }));
+
+    const { result, rerender } = renderHook(
+      ({ sessionId }) => useChat(sessionId, DEFAULT_RETRIEVAL_SETTINGS),
+      { initialProps: { sessionId: "session-a" } },
+    );
+
+    await waitFor(() =>
+      expect(result.current.attachment).toMatchObject({
+        documentId: "doc-a",
+        status: "ready",
+      }),
+    );
+
+    act(() => {
+      result.current.setInput("Question");
+    });
+    await act(async () => {
+      void result.current.handleSend();
+    });
+    await waitFor(() => expect(result.current.streaming).toBe(true));
+
+    await act(async () => {
+      result.current.stopStreaming();
+    });
+
+    await waitFor(() => expect(result.current.inflight).toBe(false));
+    expect(result.current.streaming).toBe(false);
+    expect(result.current.sessionNotice).toBeNull();
+    expect(
+      result.current.messages.some((message) =>
+        message.text.includes("Could not restore"),
+      ),
+    ).toBe(false);
+
+    act(() => {
+      result.current.setInput("Still here");
+    });
+    expect(result.current.sendDisabled).toBe(false);
+
+    await act(async () => {
+      void result.current.handleSend();
+    });
+    await waitFor(() => expect(result.current.streaming).toBe(true));
+
+    rerender({ sessionId: "session-b" });
+
+    await waitFor(() =>
+      expect(result.current.attachment).toMatchObject({
+        documentId: "doc-b",
+        fileName: "notes.pdf",
+        status: "ready",
+      }),
+    );
+    expect(result.current.messages.map((message) => message.text)).toEqual([
+      "History for B",
+    ]);
+    expect(result.current.sessionNotice).toBeNull();
+    expect(result.current.inflight).toBe(false);
+    expect(result.current.streaming).toBe(false);
+    expect(result.current.historyLoading).toBe(false);
+    expect(
+      result.current.messages.some((message) => message.text.includes("partial")),
+    ).toBe(false);
+
+    act(() => {
+      result.current.setInput("Ask B");
+    });
+    expect(result.current.sendDisabled).toBe(false);
+  });
 });
