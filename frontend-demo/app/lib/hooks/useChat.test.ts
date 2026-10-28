@@ -50,6 +50,10 @@ const WELCOME_TEXT =
   "Hello! I'm ChatVector. Upload a document and I'll help you find answers from it.";
 const DOCUMENT_GONE_NOTICE =
   "The document attached to this session is no longer available. You can upload another.";
+const DOCUMENT_UNAVAILABLE_NOTICE =
+  "The document attached to this session could not be checked. You can upload another.";
+const OPAQUE_RESTORE_NOTICE =
+  "Could not restore the session document. You can upload a new one.";
 
 function sessionPayload(sessionId: string, documentIds: string[] = []) {
   return {
@@ -474,4 +478,32 @@ describe("useChat", () => {
     expect(result.current.inflight).toBe(false);
     expect(mockGetDocumentStatus).toHaveBeenCalledWith("/documents/doc-missing/status");
   });
+
+  it.each([
+    ["non-404 status error", new Error("Status check failed: 500")],
+    ["network error", new TypeError("Failed to fetch")],
+  ])(
+    "restores an unfetchable document (%s) without the opaque restore sentence",
+    async (_label, error) => {
+      mockGetSessionHistory.mockResolvedValue({
+        messages: [{ id: "m-1", role: "user", content: "Earlier question" }],
+      });
+      mockGetSession.mockResolvedValue(sessionPayload("session-a", ["doc-down"]));
+      mockGetDocumentStatus.mockRejectedValue(error);
+
+      const { result } = renderHook(() =>
+        useChat("session-a", DEFAULT_RETRIEVAL_SETTINGS),
+      );
+
+      await waitFor(() => expect(result.current.historyLoading).toBe(false));
+
+      expect(result.current.attachment).toBeNull();
+      expect(result.current.sessionNotice).toBe(DOCUMENT_UNAVAILABLE_NOTICE);
+      expect(result.current.sessionNotice).not.toBe(OPAQUE_RESTORE_NOTICE);
+      expect(result.current.messages.map((message) => message.text)).toEqual([
+        "Earlier question",
+      ]);
+      expect(result.current.inflight).toBe(false);
+    },
+  );
 });

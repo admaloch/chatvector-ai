@@ -34,6 +34,8 @@ const welcomeMessages: Message[] = [
 
 const DOCUMENT_GONE_NOTICE =
   "The document attached to this session is no longer available. You can upload another.";
+const DOCUMENT_UNAVAILABLE_NOTICE =
+  "The document attached to this session could not be checked. You can upload another.";
 
 function mapHistoryToMessages(history: SessionHistoryMessage[]): Message[] {
   return history.map((entry, index) => ({
@@ -94,7 +96,7 @@ async function restoreSessionAttachment(
     }
     return {
       attachment: null,
-      notice: "Could not restore the session document. You can upload a new one.",
+      notice: DOCUMENT_UNAVAILABLE_NOTICE,
     };
   }
 }
