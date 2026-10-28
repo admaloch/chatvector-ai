@@ -270,6 +270,30 @@ async def _retrieve_chunks_for_documents(
     return merged_chunks
 
 
+def _chunk_global_order_key(chunk) -> tuple:
+    """Sort key: higher effective score first, then document_id, then chunk_index.
+
+    ``ChunkMatch.similarity`` is the comparable score for the current mode
+    (cosine in vector mode, within-document RRF in hybrid). Missing similarity
+    sorts last. Ties do not preserve request order.
+    """
+    similarity = getattr(chunk, "similarity", None)
+    document_id = getattr(chunk, "document_id", None)
+    chunk_index = getattr(chunk, "chunk_index", None)
+    return (
+        similarity is None,
+        0.0 if similarity is None else -float(similarity),
+        document_id is None,
+        "" if document_id is None else str(document_id),
+        chunk_index is None,
+        -1 if chunk_index is None else chunk_index,
+    )
+
+
+def _order_chunks_by_effective_score(chunks: list) -> list:
+    return sorted(chunks, key=_chunk_global_order_key)
+
+
 async def _finalize_retrieved_chunks(
     question: str,
     chunks: list,
@@ -455,6 +479,8 @@ async def retrieve_for_documents(
             allowed_document_ids=document_ids,
         )
 
+    all_chunks = _order_chunks_by_effective_score(all_chunks)
+
     rerank_started = time.perf_counter()
     matching_chunks, reranker_debug = await _finalize_retrieved_chunks(
         primary_query,
@@ -463,6 +489,8 @@ async def retrieve_for_documents(
         **_rerank_overrides(effective_retrieval_config),
     )
     rerank_ms = int((time.perf_counter() - rerank_started) * 1000)
+    if reranker_debug is None:
+        matching_chunks = matching_chunks[: effective_retrieval_config.match_count]
 
     context_started = time.perf_counter()
     context_kwargs = {}
