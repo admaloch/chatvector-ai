@@ -27,6 +27,12 @@ set-tenant-key-expiry
 set-tenant-key-external-user-id
     Assign or clear external_user_id on a key.
 
+load-eval-corpus
+    Load a fixed corpus into one tenant through the production extract,
+    chunk, embed, and store stages. Does not call the public upload route.
+    Writes a manifest from stable logical keys to the document ids created
+    for that run. A repeat run replaces only that tenant's documents.
+
 eval
     Run retrieval evaluation/benchmarking against a query fixture dataset.
     Computes recall@k, MRR, and nDCG@k; supports comparing multiple
@@ -295,6 +301,25 @@ async def cmd_eval(
         print(f"Exported full run artifact to {export_path}")
 
 
+async def cmd_load_eval_corpus(
+    corpus_dir: str,
+    declaration_path: str,
+    tenant_id: str,
+    manifest_path: str,
+) -> None:
+    from services.eval_corpus import load_eval_corpus
+
+    manifest = await load_eval_corpus(
+        corpus_dir,
+        declaration_path,
+        tenant_id,
+        manifest_path,
+    )
+    count = len(manifest["documents"])
+    print(f"Loaded {count} documents into tenant {tenant_id!r}.")
+    print(f"Manifest: {manifest_path}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="backend.cli",
@@ -424,6 +449,30 @@ def main() -> None:
         help="Allow the embedding cache during eval (default: forced off for reproducibility)",
     )
 
+    load_parser = subparsers.add_parser(
+        "load-eval-corpus",
+        help="Load a fixed evaluation corpus into one tenant",
+    )
+    load_parser.add_argument(
+        "--corpus-dir",
+        required=True,
+        metavar="PATH",
+        help="Directory of corpus files named by the declaration",
+    )
+    load_parser.add_argument(
+        "--declaration",
+        required=True,
+        metavar="PATH",
+        help="JSON file of logical keys, file names, metadata, and chunk settings",
+    )
+    load_parser.add_argument("--tenant-id", required=True, metavar="ID")
+    load_parser.add_argument(
+        "--manifest",
+        required=True,
+        metavar="PATH",
+        help="Where to write the logical-key to document-id manifest",
+    )
+
     args = parser.parse_args()
 
     if args.command == "create-tenant-key":
@@ -478,6 +527,21 @@ def main() -> None:
                 args.allow_cache,
             )
         )
+    elif args.command == "load-eval-corpus":
+        from services.eval_corpus import EvalCorpusError
+
+        try:
+            asyncio.run(
+                cmd_load_eval_corpus(
+                    args.corpus_dir,
+                    args.declaration,
+                    args.tenant_id,
+                    args.manifest,
+                )
+            )
+        except EvalCorpusError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
     else:
         parser.print_help()
         sys.exit(1)
