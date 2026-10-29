@@ -182,9 +182,14 @@ async def _call_standalone_resolution(
     system_instruction = (
         "You are a query resolution assistant. Given a conversation history and a "
         "follow-up question, rewrite the follow-up as a complete standalone question "
-        'that does not rely on context from the conversation. Resolve pronouns ("it", '
-        '"they", "that"), references ("the second option", "the earlier plan"), and '
-        "omitted subjects. If the question is already standalone, return it unchanged. "
+        "that does not rely on context from the conversation. Resolve pronouns "
+        '("it", "they", "that", "she"), references ("the second option", '
+        '"the earlier plan", "that clause"), and omitted subjects by substituting '
+        "the prior entity they refer to. When the current question introduces a "
+        "named entity, keep that entity. Do not replace it with an entity that "
+        "appears only in prior turns. Preserve ordinals and the relation being "
+        "asked about; that relation is what the user is asking, not a nearby fact "
+        "from history. If the question is already standalone, return it unchanged. "
         "Return only the rewritten question, nothing else."
     )
     user_text = (
