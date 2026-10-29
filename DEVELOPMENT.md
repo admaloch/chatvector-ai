@@ -663,6 +663,37 @@ Each query needs `relevant_chunks` (`[document_id, chunk_index]`) and/or `releva
 
 An arm file is a JSON object of retrieval overrides, for example `{"hybrid_enabled": true, "match_count": 8}`. There is no public HTTP retrieval endpoint.
 
+## Evaluation corpus loader
+
+`python -m backend.cli load-eval-corpus` loads a fixed directory into one tenant through the production extract, chunk, embed, and store stages. It does not call the public upload route, so `RATE_LIMIT_UPLOAD` does not apply. Before ingesting, it deletes that tenant's existing documents. Documents in other tenants stay. A second run leaves the tenant holding only the corpus just loaded.
+
+The declaration JSON names each file with a stable `logical_key` and optional `metadata`, and records the chunk settings the corpus was authored for. When `chunk_size`, `chunk_overlap`, or `chunking_strategy` differ from the process `CHUNK_SIZE`, `CHUNK_OVERLAP`, or `CHUNKING_STRATEGY`, the command exits with an error and does not write a manifest.
+
+```bash
+python -m backend.cli load-eval-corpus \
+  --corpus-dir path/to/corpus \
+  --declaration path/to/corpus.json \
+  --tenant-id eval-tenant \
+  --manifest path/to/manifest.json
+```
+
+```json
+{
+  "chunk_size": 1000,
+  "chunk_overlap": 200,
+  "chunking_strategy": "fixed",
+  "documents": [
+    {
+      "logical_key": "retention-policy",
+      "file_name": "retention.txt",
+      "metadata": {"department": "legal"}
+    }
+  ]
+}
+```
+
+Those chunk numbers have to match the running process. The manifest maps each logical key to the document id created for that run and records metadata plus the chunk settings actually used. Later evaluation artifacts that name a document copy both the logical key and the runtime id from that manifest. This command does not author the corpus files.
+
 ---
 
 ## Horizontal API scaling
