@@ -305,12 +305,13 @@ export default function AdvancedRetrievalDrawer({
                   </span>
                   <select
                     value={displayTransformStrategy}
+                    disabled={!displayTransformEnabled}
                     onChange={(e) =>
                       onQueryTransformationStrategyChange(
                         e.target.value as QueryTransformationStrategy
                       )
                     }
-                    className="w-full max-w-xs rounded-md border border-border bg-background px-2 py-1.5 text-foreground outline-none focus:border-accent"
+                    className="w-full max-w-xs rounded-md border border-border bg-background px-2 py-1.5 text-foreground outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {TRANSFORM_STRATEGIES.map(({ value: v, label }) => (
                       <option key={v} value={v}>

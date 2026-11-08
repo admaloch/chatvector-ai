@@ -52,6 +52,35 @@ describe("buildChatRequestBody", () => {
     expect(body.match_count).toBe(9);
   });
 
+  it("does not send query_transformation_strategy unless transformation is enabled", () => {
+    const body = buildChatRequestBody({
+      question: "q",
+      docId: "doc-1",
+      retrieval: {
+        explicit: { queryTransformationStrategy: "expand" },
+      },
+    });
+
+    expect(body).not.toHaveProperty("query_transformation_strategy");
+    expect(body).not.toHaveProperty("query_transformation_enabled");
+  });
+
+  it("sends query transformation fields when enabled and strategy are explicit", () => {
+    const body = buildChatRequestBody({
+      question: "q",
+      docId: "doc-1",
+      retrieval: {
+        explicit: {
+          queryTransformationEnabled: true,
+          queryTransformationStrategy: "expand",
+        },
+      },
+    });
+
+    expect(body.query_transformation_enabled).toBe(true);
+    expect(body.query_transformation_strategy).toBe("expand");
+  });
+
   it("adds debug_retrieval without implicit retrieval fields", () => {
     const body = buildChatRequestBody({
       question: "q",

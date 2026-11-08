@@ -65,4 +65,59 @@ describe("AdvancedRetrievalDrawer", () => {
     await userEvent.click(screen.getByRole("checkbox", { name: /hybrid search/i }));
     expect(onHybrid).toHaveBeenCalledWith(true);
   });
+
+  it("disables transform strategy until query transformation is enabled", () => {
+    render(<AdvancedRetrievalDrawer {...baseProps} open />);
+
+    expect(
+      screen.getByRole("combobox", { name: /transform strategy/i })
+    ).toBeDisabled();
+  });
+
+  it("does not persist transform strategy while transformation stays disabled", () => {
+    const onStrategy = vi.fn();
+    render(
+      <AdvancedRetrievalDrawer
+        {...baseProps}
+        open
+        onQueryTransformationStrategyChange={onStrategy}
+      />
+    );
+
+    const select = screen.getByRole("combobox", { name: /transform strategy/i });
+    expect(select).toBeDisabled();
+    expect(onStrategy).not.toHaveBeenCalled();
+  });
+
+  it("allows choosing a transform strategy after enabling query transformation", async () => {
+    const onStrategy = vi.fn();
+    const { rerender } = render(
+      <AdvancedRetrievalDrawer
+        {...baseProps}
+        open
+        state={{ explicit: { queryTransformationEnabled: true } }}
+        onQueryTransformationStrategyChange={onStrategy}
+      />
+    );
+
+    const select = screen.getByRole("combobox", { name: /transform strategy/i });
+    expect(select).not.toBeDisabled();
+    await userEvent.selectOptions(select, "expand");
+    expect(onStrategy).toHaveBeenCalledWith("expand");
+
+    rerender(
+      <AdvancedRetrievalDrawer
+        {...baseProps}
+        open
+        state={{
+          explicit: {
+            queryTransformationEnabled: true,
+            queryTransformationStrategy: "expand",
+          },
+        }}
+        onQueryTransformationStrategyChange={onStrategy}
+      />
+    );
+    expect(select).toHaveValue("expand");
+  });
 });

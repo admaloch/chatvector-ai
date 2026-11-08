@@ -44,7 +44,10 @@ export function buildChatRequestBody(
   if (ex.queryTransformationEnabled !== undefined) {
     body.query_transformation_enabled = ex.queryTransformationEnabled;
   }
-  if (ex.queryTransformationStrategy !== undefined) {
+  if (
+    ex.queryTransformationStrategy !== undefined &&
+    ex.queryTransformationEnabled === true
+  ) {
     body.query_transformation_strategy = ex.queryTransformationStrategy;
   }
 
